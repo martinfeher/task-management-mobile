@@ -1,0 +1,729 @@
+import { AppSymbol } from "@/components/app-symbol";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+import { AddTaskButton } from "@/components/add-task-button";
+import { CiCalendarIcon } from "@/components/ci-calendar-icon";
+import { CalendarTimeGridView } from "@/components/calendar-time-grid-view";
+import type { TaskScheduleUpdate } from "@/components/calendar-timed-task-block";
+import {
+  CalendarViewPickerSheet,
+  type CalendarViewMode,
+} from "@/components/calendar-view-picker-sheet";
+import { TaskContextMenu, type TaskContextMenuAnchor } from "@/components/task-context-menu";
+import { TaskDatePickerSheet } from "@/components/task-date-picker-sheet";
+import { TaskLabelPicker } from "@/components/task-label-picker";
+import { TaskListPicker } from "@/components/task-list-picker";
+import { TaskRow } from "@/components/task-row";
+import { ThemedText } from "@/components/themed-text";
+import { Spacing } from "@/constants/theme";
+import {
+  fetchLabels,
+  fetchTasks,
+  moveTaskToList,
+  toggleTaskImportant,
+  toggleTaskLabel,
+  updateTaskDueDate,
+  updateTaskSchedule,
+  updateTaskPinned,
+  updateTaskPriority,
+} from "@/lib/api";
+import { scheduleTaskReminder } from "@/lib/notifications";
+import { addDays, startOfDay, startOfWeek, toDateKey } from "@/lib/task-dates";
+import { useApp } from "@/contexts/app-context";
+import type { TaskItem, TaskLabel } from "@/types/todo";
+
+const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function isSameDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function getMonthGrid(year: number, month: number) {
+  const firstDay = new Date(year, month, 1);
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const gridStart = new Date(year, month, 1 - startOffset);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(gridStart);
+    day.setDate(gridStart.getDate() + index);
+    return startOfDay(day);
+  });
+}
+
+function formatPeriodLabel(viewMode: CalendarViewMode, selectedDate: Date, monthDate: Date) {
+  if (viewMode === "month") {
+    return monthDate.toLocaleDateString(undefined, {
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  if (viewMode === "day") {
+    return selectedDate.toLocaleDateString(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+
+  if (viewMode === "threeDay") {
+    const end = addDays(selectedDate, 2);
+    const sameMonth = selectedDate.getMonth() === end.getMonth();
+    const startLabel = selectedDate.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+    const endLabel = end.toLocaleDateString(undefined, {
+      month: sameMonth ? undefined : "short",
+      day: "numeric",
+      year:
+        selectedDate.getFullYear() === end.getFullYear() ? undefined : "numeric",
+    });
+    return `${startLabel} – ${endLabel}`;
+  }
+
+  const weekStart = startOfWeek(selectedDate);
+  const weekEnd = addDays(weekStart, 6);
+  const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
+  const startLabel = weekStart.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  const endLabel = weekEnd.toLocaleDateString(undefined, {
+    month: sameMonth ? undefined : "short",
+    day: "numeric",
+    year: weekStart.getFullYear() === weekEnd.getFullYear() ? undefined : "numeric",
+  });
+  return `${startLabel} – ${endLabel}`;
+}
+
+export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
+  const {
+    openTask,
+    startAddingTask,
+    deleteTask,
+    completeTask,
+    uncompleteTask,
+    sidebarData,
+    loadSidebar,
+  } = useApp();
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("threeDay");
+  const [viewPickerOpen, setViewPickerOpen] = useState(false);
+  const [monthDate, setMonthDate] = useState(() => startOfDay(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
+  const [contextMenu, setContextMenu] = useState<{
+    task: TaskItem;
+    anchor: TaskContextMenuAnchor;
+  } | null>(null);
+  const [rescheduleTask, setRescheduleTask] = useState<TaskItem | null>(null);
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [listPickerOpen, setListPickerOpen] = useState(false);
+  const [allLabels, setAllLabels] = useState<TaskLabel[]>([]);
+
+  const contextTask = contextMenu?.task ?? null;
+
+  const loadCalendarTasks = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    try {
+      const data = await fetchTasks({ type: "calendar" });
+      setTasks(data.tasks);
+    } catch {
+      setTasks([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCalendarTasks();
+  }, [loadCalendarTasks, refreshNonce]);
+
+  const tasksByDate = useMemo(() => {
+    const map = new Map<string, TaskItem[]>();
+    for (const task of tasks) {
+      if (!task.dueDate) continue;
+      const key = task.dueDate.slice(0, 10);
+      const existing = map.get(key) ?? [];
+      existing.push(task);
+      map.set(key, existing);
+    }
+    return map;
+  }, [tasks]);
+
+  const monthDays = useMemo(
+    () => getMonthGrid(monthDate.getFullYear(), monthDate.getMonth()),
+    [monthDate],
+  );
+
+  const gridDays = useMemo(() => {
+    if (viewMode === "day") {
+      return [startOfDay(selectedDate)];
+    }
+    if (viewMode === "threeDay") {
+      return Array.from({ length: 3 }, (_, index) =>
+        startOfDay(addDays(selectedDate, index)),
+      );
+    }
+    if (viewMode === "week") {
+      const weekStart = startOfWeek(selectedDate);
+      return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+    }
+    return [];
+  }, [selectedDate, viewMode]);
+
+  const selectedDateKey = toDateKey(selectedDate);
+  const selectedDayTasks = tasksByDate.get(selectedDateKey) ?? [];
+  const periodLabel = formatPeriodLabel(viewMode, selectedDate, monthDate);
+  const isTimeGridView = viewMode !== "month";
+
+  function handlePreviousPeriod() {
+    if (viewMode === "month") {
+      setMonthDate(
+        startOfDay(new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1)),
+      );
+      return;
+    }
+
+    const delta = viewMode === "week" ? -7 : -1;
+    setSelectedDate((current) => startOfDay(addDays(current, delta)));
+  }
+
+  function handleNextPeriod() {
+    if (viewMode === "month") {
+      setMonthDate(
+        startOfDay(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1)),
+      );
+      return;
+    }
+
+    const delta = viewMode === "week" ? 7 : 1;
+    setSelectedDate((current) => startOfDay(addDays(current, delta)));
+  }
+
+  function handleSelectViewMode(nextView: CalendarViewMode) {
+    setViewMode(nextView);
+    if (nextView === "month") {
+      setMonthDate(startOfDay(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)));
+    }
+  }
+
+  function handleAddTaskOnSelectedDay() {
+    startAddingTask({
+      stayOnPage: true,
+      draft: { dueDate: selectedDateKey },
+    });
+  }
+
+  const handleShiftDay = useCallback((delta: number) => {
+    setSelectedDate((current) => startOfDay(addDays(current, delta)));
+  }, []);
+
+  async function handleUpdateTaskSchedule(task: TaskItem, update: TaskScheduleUpdate) {
+    const previousTasks = tasks;
+    setTasks((current) =>
+      current.map((item) =>
+        item.id === task.id
+          ? {
+              ...item,
+              dueDate: update.dueDate,
+              dueTimeMinutes: update.dueTimeMinutes,
+              dueDurationMinutes: update.dueDurationMinutes,
+            }
+          : item,
+      ),
+    );
+
+    try {
+      const result = await updateTaskSchedule(task.id, update);
+      await scheduleTaskReminder({
+        taskId: task.id,
+        taskName: task.name,
+        dueDate: result.dueDate,
+        dueTimeMinutes: result.dueTimeMinutes,
+      });
+      setTasks((current) =>
+        current.map((item) =>
+          item.id === task.id
+            ? {
+                ...item,
+                dueDate: result.dueDate,
+                dueTimeMinutes: result.dueTimeMinutes,
+                dueDurationMinutes: result.dueDurationMinutes,
+              }
+            : item,
+        ),
+      );
+    } catch {
+      setTasks(previousTasks);
+      Alert.alert("Couldn't update task schedule");
+    }
+  }
+
+  async function handleReschedule(nextDueDate: string | null) {
+    if (!rescheduleTask) return;
+    try {
+      const result = await updateTaskDueDate(rescheduleTask.id, nextDueDate);
+      await scheduleTaskReminder({
+        taskId: rescheduleTask.id,
+        taskName: rescheduleTask.name,
+        dueDate: result.dueDate,
+        dueTimeMinutes: result.dueTimeMinutes,
+      });
+      await loadCalendarTasks(true);
+    } catch {
+      Alert.alert("Couldn't change date");
+    } finally {
+      setRescheduleTask(null);
+    }
+  }
+
+  function closeContextMenu() {
+    setContextMenu(null);
+    setLabelPickerOpen(false);
+    setListPickerOpen(false);
+  }
+
+  async function patchTaskLocally() {
+    await loadCalendarTasks(true);
+    void loadSidebar(true);
+  }
+
+  async function handleTogglePinned() {
+    if (!contextTask) return;
+    closeContextMenu();
+    try {
+      await updateTaskPinned(contextTask.id, !contextTask.pinned);
+      await patchTaskLocally();
+    } catch {
+      Alert.alert("Couldn't update pin");
+    }
+  }
+
+  async function handleToggleImportant() {
+    if (!contextTask) return;
+    closeContextMenu();
+    try {
+      await toggleTaskImportant(contextTask.id, !contextTask.important);
+      await patchTaskLocally();
+    } catch {
+      Alert.alert("Couldn't update important");
+    }
+  }
+
+  async function handleSetPriority(priority: number | null) {
+    if (!contextTask) return;
+    closeContextMenu();
+    try {
+      await updateTaskPriority(contextTask.id, priority);
+      await patchTaskLocally();
+    } catch {
+      Alert.alert("Couldn't update priority");
+    }
+  }
+
+  async function openLabelPicker() {
+    if (!contextTask) return;
+    try {
+      const labels = await fetchLabels();
+      setAllLabels(labels);
+      setLabelPickerOpen(true);
+    } catch {
+      Alert.alert("Couldn't load labels");
+    }
+  }
+
+  async function handleToggleLabel(labelId: string, assigned: boolean) {
+    if (!contextTask) return;
+    try {
+      await toggleTaskLabel(contextTask.id, labelId, assigned);
+      await patchTaskLocally();
+    } catch {
+      Alert.alert("Couldn't update label");
+    }
+  }
+
+  async function handleMoveToList(listId: string) {
+    if (!contextTask || listId === contextTask.listId) {
+      closeContextMenu();
+      return;
+    }
+    closeContextMenu();
+    try {
+      await moveTaskToList(contextTask.id, listId);
+      await patchTaskLocally();
+    } catch {
+      Alert.alert("Couldn't move task");
+    }
+  }
+
+  const assignedLabelIds = new Set(
+    (contextTask?.labels ?? []).map((label) => label.id),
+  );
+
+  return (
+    <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+        <View style={styles.header}>
+          <ThemedText style={styles.headerTitle}>Calendar</ThemedText>
+          <View style={styles.headerActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Change calendar view"
+              style={styles.headerIconButton}
+              onPress={() => setViewPickerOpen(true)}>
+              <CiCalendarIcon size={20} color="#374151" />
+            </Pressable>
+            <Pressable style={styles.addButton} onPress={handleAddTaskOnSelectedDay}>
+              <AppSymbol ios="plus" android="add" size={20} tintColor="#2563eb" />
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.periodHeader}>
+          <Pressable style={styles.periodNavButton} onPress={handlePreviousPeriod}>
+            <AppSymbol ios="chevron.left" android="chevron-left" size={20} tintColor="#374151" />
+          </Pressable>
+          <ThemedText style={styles.periodLabel} numberOfLines={1}>
+            {periodLabel}
+          </ThemedText>
+          <Pressable style={styles.periodNavButton} onPress={handleNextPeriod}>
+            <AppSymbol ios="chevron.right" android="chevron-right" size={20} tintColor="#374151" />
+          </Pressable>
+        </View>
+
+        {isTimeGridView ? (
+          <CalendarTimeGridView
+            days={gridDays}
+            tasksByDate={tasksByDate}
+            selectedDate={selectedDate}
+            loading={loading}
+            refreshing={refreshing}
+            onSelectDate={setSelectedDate}
+            onPressTask={openTask}
+            onScheduleChange={(task, update) => void handleUpdateTaskSchedule(task, update)}
+            onShiftDay={handleShiftDay}
+            onRefresh={() => void loadCalendarTasks(true)}
+          />
+        ) : null}
+
+        {viewMode === "month" ? (
+          <>
+            <View style={styles.weekdayRow}>
+              {WEEKDAY_LABELS.map((label) => (
+                <ThemedText key={label} style={styles.weekdayLabel}>
+                  {label}
+                </ThemedText>
+              ))}
+            </View>
+
+            <View style={styles.monthGrid}>
+              {monthDays.map((day) => {
+                const key = toDateKey(day);
+                const inMonth = day.getMonth() === monthDate.getMonth();
+                const selected = isSameDay(day, selectedDate);
+                const isToday = isSameDay(day, new Date());
+                const count = tasksByDate.get(key)?.length ?? 0;
+
+                return (
+                  <Pressable
+                    key={key}
+                    style={[styles.dayCell, selected && styles.dayCellSelected]}
+                    onPress={() => setSelectedDate(day)}>
+                    <ThemedText
+                      style={[
+                        styles.dayNumber,
+                        !inMonth && styles.dayNumberMuted,
+                        isToday && styles.dayNumberToday,
+                        selected && styles.dayNumberSelected,
+                      ]}>
+                      {day.getDate()}
+                    </ThemedText>
+                    {count > 0 ? <View style={styles.taskDot} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
+
+        {viewMode === "month" ? (
+          <ScrollView
+            style={styles.dayTasks}
+            contentContainerStyle={styles.dayTasksContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => void loadCalendarTasks(true)}
+              />
+            }>
+            <ThemedText style={styles.dayTasksTitle}>
+              {selectedDate.toLocaleDateString(undefined, {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+            </ThemedText>
+
+            {loading ? (
+              <ActivityIndicator color="#3c87f7" style={styles.loader} />
+            ) : selectedDayTasks.length === 0 ? (
+              <ThemedText themeColor="textSecondary" style={styles.emptyDay}>
+                No scheduled tasks
+              </ThemedText>
+            ) : (
+              selectedDayTasks.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  showListName
+                  onPress={openTask}
+                  onToggleComplete={(taskId, completed) => {
+                    if (completed) {
+                      void completeTask(taskId).then(() => loadCalendarTasks(true));
+                    } else {
+                      void uncompleteTask(taskId).then(() => loadCalendarTasks(true));
+                    }
+                  }}
+                  onOpenContextMenu={(nextTask, anchor) =>
+                    setContextMenu({ task: nextTask, anchor })
+                  }
+                />
+              ))
+            )}
+          </ScrollView>
+        ) : null}
+      </SafeAreaView>
+
+      {contextMenu && !labelPickerOpen && !listPickerOpen ? (
+        <TaskContextMenu
+          task={contextMenu.task}
+          top={contextMenu.anchor.y + contextMenu.anchor.height}
+          left={contextMenu.anchor.x}
+          onClose={closeContextMenu}
+          onRename={() => {
+            setContextMenu(null);
+            openTask(contextMenu.task);
+          }}
+          onTogglePinned={() => void handleTogglePinned()}
+          onToggleImportant={() => void handleToggleImportant()}
+          onSetPriority={(priority) => void handleSetPriority(priority)}
+          onMoveTo={() => setListPickerOpen(true)}
+          onAddLabel={() => void openLabelPicker()}
+          onChangeDate={() => {
+            setRescheduleTask(contextMenu.task);
+            setContextMenu(null);
+          }}
+          onDelete={() => {
+            const task = contextMenu.task;
+            setContextMenu(null);
+            Alert.alert("Delete task", `Delete "${task.name}"?`, [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Delete",
+                style: "destructive",
+                onPress: () => {
+                  void deleteTask(task.id).then(() => loadCalendarTasks(true));
+                },
+              },
+            ]);
+          }}
+        />
+      ) : null}
+
+      {labelPickerOpen && contextTask ? (
+        <TaskLabelPicker
+          labels={allLabels}
+          assignedLabelIds={assignedLabelIds}
+          onToggleLabel={(labelId, assigned) => void handleToggleLabel(labelId, assigned)}
+          onClose={closeContextMenu}
+        />
+      ) : null}
+
+      <TaskListPicker
+        visible={listPickerOpen}
+        lists={sidebarData?.lists ?? []}
+        currentListId={contextTask?.listId ?? null}
+        onSelectList={(list) => void handleMoveToList(list.id)}
+        onClose={closeContextMenu}
+      />
+
+      <TaskDatePickerSheet
+        visible={rescheduleTask != null}
+        value={rescheduleTask?.dueDate ?? null}
+        onSelect={(selection) => void handleReschedule(selection.dueDate)}
+        onClose={() => setRescheduleTask(null)}
+      />
+
+      <CalendarViewPickerSheet
+        visible={viewPickerOpen}
+        activeView={viewMode}
+        onSelectView={handleSelectViewMode}
+        onClose={() => setViewPickerOpen(false)}
+      />
+
+      <AddTaskButton onPress={handleAddTaskOnSelectedDay} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
+  safeArea: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.one,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "700",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  headerIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#f3f4f6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  periodHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.three,
+    marginBottom: Spacing.two,
+    gap: 8,
+  },
+  periodNavButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
+    backgroundColor: "#f3f4f6",
+    flexShrink: 0,
+  },
+  periodLabel: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  weekdayRow: {
+    flexDirection: "row",
+    paddingHorizontal: Spacing.two,
+    marginBottom: Spacing.one,
+  },
+  weekdayLabel: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#9ca3af",
+  },
+  monthGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: Spacing.two,
+    marginBottom: Spacing.two,
+  },
+  dayCell: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+  },
+  dayCellSelected: {
+    backgroundColor: "#dce8f5",
+  },
+  dayNumber: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#111827",
+  },
+  dayNumberMuted: {
+    color: "#d1d5db",
+  },
+  dayNumberToday: {
+    color: "#3c87f7",
+    fontWeight: "700",
+  },
+  dayNumberSelected: {
+    fontWeight: "700",
+  },
+  taskDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#3c87f7",
+    marginTop: 3,
+  },
+  dayTasks: {
+    flex: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e5e7eb",
+  },
+  dayTasksContent: {
+    paddingBottom: 96,
+  },
+  dayTasksTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    color: "#6b7280",
+  },
+  loader: {
+    marginTop: Spacing.three,
+  },
+  emptyDay: {
+    paddingHorizontal: Spacing.three,
+    fontSize: 15,
+  },
+});

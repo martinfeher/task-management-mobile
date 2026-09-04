@@ -1,9 +1,27 @@
-:root {
-  --font-display:
-    Spline Sans, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji,
-    Segoe UI Symbol, Noto Color Emoji;
-  --font-mono:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
-  --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
-  --font-serif: Georgia, 'Times New Roman', serif;
+@import "tailwindcss";
+@import "uniwind";
+@import "heroui-native/styles";
+
+/* Path relative to this CSS file (src/global.css → project node_modules) */
+@source "../node_modules/heroui-native/lib";
+
+@theme {
+  --color-lists-bg: #fafafa;
+  --color-lists-selected: #e9ebee;
+  --color-lists-accent-border: #dadfdf;
+  --color-lists-divider: #e4e4e7;
+  --color-lists-muted: #a1a1aa;
+  --color-lists-icon: #7c92a0;
+  --color-lists-icon-muted: #777777;
+  --color-lists-avatar: #4769c7;
+  --color-lists-accent: #4873c7;
+  --color-lists-error: #d14343;
+
+  --color-tasks-border: #e4e4e7;
+  --color-tasks-row-border: #f4f4f5;
+  --color-tasks-selected: #e9ebee;
+  --color-tasks-title: #3f3f46;
+  --color-tasks-meta: #a1a1aa;
+  --color-tasks-checkbox: #c7c7cc;
+  --color-tasks-checkbox-checked: #22c55e;
 }

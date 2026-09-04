@@ -1,56 +1,90 @@
-# Welcome to your Expo app 👋
+# TodoList Mobile (Expo SDK 57)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo SDK 57 mobile client for the [todolistWeb](../todolistWeb) backend.
 
-## Get started
+## Requirements
 
-1. Install dependencies
+- Node.js 22.13+ (Expo SDK 57)
+- npm
+- Expo CLI (`npx expo`)
+- Running [todolistWeb](../todolistWeb) server (Next.js API at port 3000)
 
-   ```bash
-   npm install
-   ```
+## Setup
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+1. Install dependencies:
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+2. Configure the API URL in `.env`:
 
-### Other setup steps
+```env
+EXPO_PUBLIC_API_URL=http://YOUR_LAN_IP:3000
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+- iOS Simulator can often use `http://localhost:3000`
+- Android Emulator typically uses `http://10.0.2.2:3000`
+- Physical devices need your machine's LAN IP (e.g. `http://192.168.0.2:3000`)
 
-## Learn more
+3. Start the web API (from `../todolistWeb`):
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+npm run dev
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+4. Start the mobile app (dev client required for native modules):
 
-## Join the community
+```bash
+npm run start:dev
+```
 
-Join our community of developers creating universal apps.
+Or for a fresh native build:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npm run ios
+npm run android
+```
+
+## Features
+
+- **Tasks**: create, edit, complete/uncomplete, delete, pin, priority, labels, notes, reorder
+- **Lists**: create, rename, delete, drag reorder
+- **Labels**: create inline, assign to tasks
+- **Calendar**: month view, 7-day agenda strip, add tasks on a day, reschedule, pull to refresh
+- **Search**: full-text task search
+- **Reminders**: local notifications when a due date is set (requires permission)
+
+## Native builds
+
+```bash
+npm run ios
+npm run android
+```
+
+## TestFlight / internal testing
+
+1. Configure EAS in Expo dashboard (project ID is in `app.json`)
+2. Build:
+
+```bash
+npx eas build --platform ios --profile preview
+npx eas build --platform android --profile preview
+```
+
+3. Submit to TestFlight / internal track from the Expo dashboard or:
+
+```bash
+npx eas submit --platform ios
+```
+
+## Project structure
+
+- `src/app/` — Expo Router screens
+- `src/components/` — UI components
+- `src/contexts/app-context.tsx` — global app state
+- `src/lib/api.ts` — REST client for the web API
+
+## License
+
+Copyright (c) 2026 Martin Feher. All rights reserved.
