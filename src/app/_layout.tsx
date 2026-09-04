@@ -1,10 +1,10 @@
 import { Stack } from "expo-router";
-import { HeroUINativeProvider } from "heroui-native";
-import { Inspector, InspectorDevMenu } from "react-native-dev-inspector";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as SplashScreen from "expo-splash-screen";
+import { HeroUINativeProvider } from "heroui-native";
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
+import { Inspector, InspectorDevMenu } from "react-native-dev-inspector";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AddTaskComposer } from "@/components/add-task-composer";
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
@@ -52,7 +52,10 @@ export default function RootLayout() {
                 <View style={styles.root}>
                   <AnimatedSplashOverlay />
                   <Stack>
-                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen
+                      name="(tabs)"
+                      options={{ headerShown: false }}
+                    />
                     <Stack.Screen
                       name="task/[id]"
                       options={{
