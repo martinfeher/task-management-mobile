@@ -8,7 +8,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import {
   ActivityIndicator,
@@ -23,15 +22,17 @@ import {
   TextInput,
   useWindowDimensions,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppSymbol } from "@/components/app-symbol";
-import { CiCalendarIcon } from "@/components/ci-calendar-icon";
 import {
   FormattedNotesInput,
   type NotesInputHandle,
 } from "@/components/formatted-notes-input";
+import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
 import {
   TaskDatePickerSheet,
   type TaskScheduleSelection,
@@ -1273,15 +1274,11 @@ export function TaskDetailScreen() {
     );
   }
 
-  function handleToolbarLink() {
-    keepNotesKeyboardFocus();
-    notesInputRef.current?.focus();
-    setNotesFocused(true);
-    handleLinkEditorOpenChange(true);
-  }
-
-  function handleToolbarSubtask() {
-    setSubtaskDraftOpen(true);
+  function handleAttachment() {
+    Alert.alert(
+      "Attachment",
+      "File attachments are not available in the mobile app yet.",
+    );
   }
 
   const resolvedListName = detail?.listName ?? listName ?? "Tasks";
@@ -1769,70 +1766,84 @@ export function TaskDetailScreen() {
         ) : null}
         <View style={styles.toolbarControls}>
           <View style={styles.iconRow}>
-            <ToolbarLabeledItem
-              label="Date"
-              onPress={() => setDatePickerOpen(true)}>
-              <CiCalendarIcon size={22} color={TOOLBAR_ICON_COLOR} />
-            </ToolbarLabeledItem>
-
-            <ToolbarLabeledItem
-              label="Priority"
-              onPress={() => setPriorityMenuOpen((open) => !open)}>
-              <View style={styles.flagAnchor}>
-                <AppSymbol
-                  ios={detail?.priority != null ? "flag.fill" : "flag"}
-                  android={detail?.priority != null ? "flag" : "outlined-flag"}
-                  size={22}
-                  tintColor={
-                    detail?.priority != null
-                      ? getTaskPriorityColor(detail?.priority ?? null)
-                      : TOOLBAR_ICON_COLOR
-                  }
+            <View style={styles.toolbarLabeledItem}>
+              <DetailToolbarIcon
+                accessibilityLabel="Date"
+                ios="calendar"
+                android="event"
+                tintColor={TOOLBAR_ICON_COLOR}
+                onPress={() => setDatePickerOpen(true)}
+              />
+              <ThemedText style={styles.toolbarCaption}>Date</ThemedText>
+            </View>
+            <View style={styles.flagAnchor}>
+              <DetailToolbarIcon
+                accessibilityLabel="Priority"
+                ios={detail?.priority != null ? "flag.fill" : "flag"}
+                android={detail?.priority != null ? "flag" : "outlined-flag"}
+                active={detail?.priority != null}
+                tintColor={
+                  detail?.priority != null
+                    ? getTaskPriorityColor(detail?.priority ?? null)
+                    : undefined
+                }
+                onPress={() => setPriorityMenuOpen((open) => !open)}
+              />
+              {priorityMenuOpen ? (
+                <TaskPriorityFlagPopup
+                  embedded
+                  selected={detail?.priority ?? null}
+                  onSelect={(priority) => void handleSetPriority(priority)}
+                  onClose={() => setPriorityMenuOpen(false)}
+                  style={styles.priorityPopupAboveToolbar}
                 />
-                {priorityMenuOpen ? (
-                  <TaskPriorityFlagPopup
-                    embedded
-                    selected={detail?.priority ?? null}
-                    onSelect={(priority) => void handleSetPriority(priority)}
-                    onClose={() => setPriorityMenuOpen(false)}
-                    style={styles.priorityPopupAboveToolbar}
-                  />
-                ) : null}
-              </View>
-            </ToolbarLabeledItem>
-
-            <ToolbarLabeledItem
-              label="Label"
-              onPress={() => setLabelPickerOpen(true)}>
-              <AppSymbol
+              ) : null}
+            </View>
+            <View style={styles.toolbarLabeledItem}>
+              <DetailToolbarIcon
+                accessibilityLabel="Labels"
                 ios="tag"
                 android="local-offer"
-                size={22}
                 tintColor={TOOLBAR_ICON_COLOR}
+                onPress={() => setLabelPickerOpen(true)}
               />
-            </ToolbarLabeledItem>
-
-            <ToolbarLabeledItem label="Link" onPress={handleToolbarLink}>
-              <AppSymbol
-                ios="link"
-                android="link"
-                size={22}
-                tintColor={TOOLBAR_ICON_COLOR}
-              />
-            </ToolbarLabeledItem>
-
-            <ToolbarLabeledItem label="Subtask" onPress={handleToolbarSubtask}>
-              <TbSubtaskIcon size={22} color={TOOLBAR_ICON_COLOR} />
-            </ToolbarLabeledItem>
-
-            <ToolbarLabeledItem label="Voice" onPress={handleVoiceNote}>
-              <AppSymbol
-                ios="mic"
-                android="mic"
-                size={22}
-                tintColor={TOOLBAR_ICON_COLOR}
-              />
-            </ToolbarLabeledItem>
+              <ThemedText style={styles.toolbarCaption}>Label</ThemedText>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Attachment"
+                hitSlop={8}
+                onPress={handleAttachment}
+                style={({ pressed }) => [
+                  detailToolbarStyles.toolbarIconSlot,
+                  detailToolbarStyles.toolbarInlineIconSlot,
+                  pressed && detailToolbarStyles.toolbarIconPressed,
+                ]}
+              >
+                <RiAttachment2Icon size={22} color={TOOLBAR_ICON_COLOR} />
+              </Pressable>
+            </View>
+            <View style={styles.toolbarLabeledItem}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Subtask"
+                hitSlop={8}
+                onPress={() => setSubtaskDraftOpen(true)}
+                style={({ pressed }) => [
+                  detailToolbarStyles.toolbarIconSlot,
+                  pressed && detailToolbarStyles.toolbarIconPressed,
+                ]}
+              >
+                <TbSubtaskIcon size={22} color={TOOLBAR_ICON_COLOR} />
+              </Pressable>
+              <ThemedText style={styles.toolbarCaption}>subtask</ThemedText>
+            </View>
+            <DetailToolbarIcon
+              accessibilityLabel="Voice note"
+              ios="mic"
+              android="mic"
+              onPress={handleVoiceNote}
+              slotStyle={styles.voiceIconSlot}
+            />
           </View>
         </View>
       </View>
@@ -1889,61 +1900,59 @@ export function TaskDetailScreen() {
 }
 
 const TOOLBAR_ICON_COLOR = "#5a6578";
+const TOOLBAR_ACTIVE_ICON_COLOR = "#4873c7";
 
-function ToolbarLabeledItem({
-  label,
-  children,
+function DetailToolbarIcon({
+  ios,
+  android,
+  accessibilityLabel,
+  active = false,
+  tintColor,
   onPress,
+  slotStyle,
 }: {
-  label: string;
-  children: ReactNode;
+  ios: string;
+  android: string;
+  accessibilityLabel: string;
+  active?: boolean;
+  tintColor?: string;
   onPress?: () => void;
+  slotStyle?: StyleProp<ViewStyle>;
 }) {
-  const content = (
-    <>
-      <View style={detailToolbarStyles.toolbarIconSlot}>{children}</View>
-      <ThemedText style={detailToolbarStyles.toolbarCaption}>{label}</ThemedText>
-    </>
-  );
-
-  if (onPress) {
-    return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        hitSlop={8}
-        onPress={onPress}
-        style={({ pressed }) => [
-          detailToolbarStyles.toolbarLabeledItem,
-          pressed && detailToolbarStyles.toolbarIconPressed,
-        ]}>
-        {content}
-      </Pressable>
-    );
-  }
-
   return (
-    <View style={detailToolbarStyles.toolbarLabeledItem}>{content}</View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [
+        detailToolbarStyles.toolbarIconSlot,
+        slotStyle,
+        pressed && detailToolbarStyles.toolbarIconPressed,
+      ]}
+    >
+      <AppSymbol
+        ios={ios}
+        android={android}
+        size={22}
+        tintColor={
+          tintColor ?? (active ? TOOLBAR_ACTIVE_ICON_COLOR : TOOLBAR_ICON_COLOR)
+        }
+      />
+    </Pressable>
   );
 }
 
 const detailToolbarStyles = StyleSheet.create({
-  toolbarLabeledItem: {
-    alignItems: "center",
-    gap: 2,
-    minWidth: 44,
-  },
   toolbarIconSlot: {
     height: 24,
     minWidth: 32,
     alignItems: "center",
     justifyContent: "center",
   },
-  toolbarCaption: {
-    fontSize: 9,
-    lineHeight: 11,
-    color: TOOLBAR_ICON_COLOR,
-    textAlign: "center",
+  toolbarInlineIconSlot: {
+    minWidth: 24,
+    marginLeft: 2,
   },
   toolbarIconPressed: {
     opacity: 0.55,
@@ -2156,9 +2165,23 @@ const styles = StyleSheet.create({
   },
   iconRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    width: "100%",
+    alignItems: "center",
+    gap: 16,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  toolbarLabeledItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  toolbarCaption: {
+    fontSize: 9,
+    lineHeight: 11,
+    color: "#9ca3af",
+  },
+  voiceIconSlot: {
+    marginLeft: 21,
   },
   subtaskBackdrop: {
     ...StyleSheet.absoluteFill,
