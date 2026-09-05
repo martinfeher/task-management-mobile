@@ -929,6 +929,30 @@ export function TextFormatToolbar({
   };
 
   useEffect(() => {
+    if (!linkEditorOpenProp || linkEditorOpen) return;
+
+    setActiveSubmenu(null);
+    setLinkText(selectionText ?? "");
+    setLinkUrl("");
+    setLinkEditorVisible(true);
+    scheduleKeepKeyboardFocus(onKeepKeyboardFocus);
+    setLinkAnchor({
+      x: Math.max(LINK_POPUP_HORIZONTAL_INSET, windowWidth / 2 - linkPopupWidth / 2),
+      y: Math.max(LINK_POPUP_HORIZONTAL_INSET, bottom + TEXT_FORMAT_TOOLBAR_HEIGHT + 12),
+      width: linkPopupWidth,
+      height: 44,
+    });
+  }, [
+    bottom,
+    linkEditorOpen,
+    linkEditorOpenProp,
+    linkPopupWidth,
+    onKeepKeyboardFocus,
+    selectionText,
+    windowWidth,
+  ]);
+
+  useEffect(() => {
     if (!linkEditorOpenProp && linkEditorOpen) {
       setLinkEditorOpen(false);
       setLinkText("");
