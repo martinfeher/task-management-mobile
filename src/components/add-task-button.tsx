@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FAB_RIGHT_INSET, getFabBottomOffset } from "@/constants/tab-bar";
 import { useApp } from "@/contexts/app-context";
 
-const FAB_SIZE = 62;
+const FAB_SIZE = 55;
 const FAB_RADIUS = FAB_SIZE / 2;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -60,7 +60,7 @@ export function AddTaskButton({
         onPress={handlePress}
         style={[
           styles.fab,
-          { bottom: fabBottom, right: FAB_RIGHT_INSET },
+          { bottom: fabBottom - 40, right: FAB_RIGHT_INSET },
           animatedStyle,
         ]}
       >
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: "#000000",
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.35,
         shadowRadius: 12,
         shadowOffset: { width: 0, height: 4 },
       },
@@ -140,8 +140,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#6c82dc",
-    // backgroundColor: "#3379e2",
-    // backgroundColor: "#70a6e0",
   },
   plus: {
     color: "#ffffff",

@@ -378,13 +378,13 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#111827",
+    backgroundColor: "#a3a3a3",
     marginLeft: -4,
   },
   nowBar: {
     flex: 1,
     height: 2,
-    backgroundColor: "#111827",
+    backgroundColor: "#a3a3a3",
   },
   loader: {
     marginTop: 24,

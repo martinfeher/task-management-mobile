@@ -26,6 +26,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FullWindowOverlay } from "react-native-screens";
 
 import { AppSymbol } from "@/components/app-symbol";
 import {
@@ -72,7 +73,7 @@ import {
   htmlNeedsFormattingMirror,
 } from "@/lib/html-to-text-runs";
 import { getLabelDotColor } from "@/lib/label-colors";
-import { scheduleTaskReminder } from "@/lib/notifications";
+import { applyTaskReminder } from "@/lib/notifications";
 import {
   parseTaskDetails,
   type ParsedDetailBlock,
@@ -164,6 +165,10 @@ const TASK_SHEET_MAX_HEIGHT_FRACTION = 0.8;
 const TASK_DETAIL_HANDLE_HEIGHT = 28;
 const TASK_DETAIL_TOOLBAR_BODY_HEIGHT = 52;
 const TOOLBAR_BOTTOM_SHIFT = 10;
+const SCHEDULE_UNDO_ABOVE_GAP = 10;
+const SCHEDULE_UNDO_RIGHT_INSET = 7;
+const SCHEDULE_UNDO_BUTTON_HEIGHT = 36;
+const SCHEDULE_UNDO_DURATION_MS = 6000;
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -228,6 +233,9 @@ export function TaskDetailScreen() {
     ),
   );
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [scheduleUndoSnapshot, setScheduleUndoSnapshot] =
+    useState<TaskScheduleSelection | null>(null);
+  const [sheetTopY, setSheetTopY] = useState<number | null>(null);
 
   const lastSavedNameRef = useRef(name ?? "");
   const lastSavedNotesRef = useRef("");
@@ -246,6 +254,10 @@ export function TaskDetailScreen() {
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savingCountRef = useRef(0);
   const taskIdRef = useRef(id);
+  const sheetContainerRef = useRef<View>(null);
+  const scheduleUndoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const historyRef = useRef(createEmptyTaskDetailHistory());
   const editSessionRef = useRef<{
     active: boolean;
@@ -1076,7 +1088,7 @@ export function TaskDetailScreen() {
   }, [detail]);
 
   const dueDateLabel = formatTaskDueDate(
-    detail?.dueDate ?? dueDate ?? null,
+    detail != null ? detail.dueDate : (dueDate ?? null),
     detail?.dueTimeMinutes,
   );
   const assignedLabelIds = useMemo(
@@ -1142,8 +1154,37 @@ export function TaskDetailScreen() {
     ]);
   };
 
-  const handleScheduleChange = async (selection: TaskScheduleSelection) => {
+  const handleScheduleChange = async (
+    selection: TaskScheduleSelection,
+    options?: { skipUndo?: boolean },
+  ) => {
     if (!detail) return;
+
+    const isClearingSchedule =
+      selection.dueDate === null &&
+      selection.dueTimeMinutes === null &&
+      selection.dueDurationMinutes === null;
+    const previousSchedule =
+      !options?.skipUndo && isClearingSchedule && detail.dueDate != null
+        ? {
+            dueDate: detail.dueDate,
+            dueTimeMinutes: detail.dueTimeMinutes,
+            dueDurationMinutes: detail.dueDurationMinutes,
+          }
+        : null;
+
+    if (previousSchedule) {
+      setDetail({
+        ...detail,
+        dueDate: null,
+        dueTimeMinutes: null,
+        dueDurationMinutes: null,
+      });
+      requestAnimationFrame(() => {
+        showScheduleUndo(previousSchedule);
+      });
+    }
+
     try {
       const result = await updateTaskSchedule(detail.id, selection);
       setDetail({
@@ -1153,17 +1194,99 @@ export function TaskDetailScreen() {
         dueDurationMinutes: result.dueDurationMinutes,
         dueTimeZone: result.dueTimeZone,
       });
-      await scheduleTaskReminder({
+      await applyTaskReminder({
         taskId: detail.id,
         taskName: detail.name,
         dueDate: result.dueDate,
         dueTimeMinutes: result.dueTimeMinutes,
+        reminderEnabled: selection.reminderEnabled,
+      });
+      handleTaskCompleted();
+    } catch {
+      if (previousSchedule) {
+        setDetail({
+          ...detail,
+          dueDate: previousSchedule.dueDate,
+          dueTimeMinutes: previousSchedule.dueTimeMinutes,
+          dueDurationMinutes: previousSchedule.dueDurationMinutes,
+        });
+        dismissScheduleUndo();
+      }
+      Alert.alert("Couldn't update due date");
+    }
+  };
+
+  const dismissScheduleUndo = useCallback(() => {
+    if (scheduleUndoTimerRef.current) {
+      clearTimeout(scheduleUndoTimerRef.current);
+      scheduleUndoTimerRef.current = null;
+    }
+    setScheduleUndoSnapshot(null);
+  }, []);
+
+  const measureSheetTop = useCallback(() => {
+    sheetContainerRef.current?.measureInWindow((_x, y) => {
+      setSheetTopY(y);
+    });
+  }, []);
+
+  const showScheduleUndo = useCallback(
+    (snapshot: TaskScheduleSelection) => {
+      if (scheduleUndoTimerRef.current) {
+        clearTimeout(scheduleUndoTimerRef.current);
+      }
+      setScheduleUndoSnapshot(snapshot);
+      requestAnimationFrame(() => {
+        measureSheetTop();
+      });
+      scheduleUndoTimerRef.current = setTimeout(() => {
+        setScheduleUndoSnapshot(null);
+        scheduleUndoTimerRef.current = null;
+      }, SCHEDULE_UNDO_DURATION_MS);
+    },
+    [measureSheetTop],
+  );
+
+  const handleScheduleUndo = useCallback(async () => {
+    const snapshot = scheduleUndoSnapshot;
+    const taskId = taskIdRef.current;
+    if (!snapshot || !taskId) return;
+
+    dismissScheduleUndo();
+
+    try {
+      const result = await updateTaskSchedule(taskId, snapshot);
+      setDetail((current) =>
+        current
+          ? {
+              ...current,
+              dueDate: result.dueDate,
+              dueTimeMinutes: result.dueTimeMinutes,
+              dueDurationMinutes: result.dueDurationMinutes,
+              dueTimeZone: result.dueTimeZone,
+            }
+          : current,
+      );
+      await applyTaskReminder({
+        taskId,
+        taskName: draftNameRef.current || "Task",
+        dueDate: result.dueDate,
+        dueTimeMinutes: result.dueTimeMinutes,
+        reminderEnabled: snapshot.reminderEnabled,
       });
       handleTaskCompleted();
     } catch {
       Alert.alert("Couldn't update due date");
     }
-  };
+  }, [dismissScheduleUndo, handleTaskCompleted, scheduleUndoSnapshot]);
+
+  useEffect(() => {
+    return () => {
+      if (scheduleUndoTimerRef.current) {
+        clearTimeout(scheduleUndoTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleSelectCalendarColor = useCallback(
     async (color: string) => {
@@ -1371,8 +1494,26 @@ export function TaskDetailScreen() {
   useEffect(() => {
     if (datePickerOpen) {
       setCalendarColorPickerOpen(false);
+      dismissScheduleUndo();
     }
-  }, [datePickerOpen]);
+  }, [datePickerOpen, dismissScheduleUndo]);
+
+  useEffect(() => {
+    if (!scheduleUndoSnapshot) return;
+    measureSheetTop();
+  }, [
+    expandedFullscreen,
+    keyboardHeight,
+    measureSheetTop,
+    scheduleUndoSnapshot,
+  ]);
+
+  useEffect(() => {
+    if (datePickerOpen || !scheduleUndoSnapshot) return;
+    measureSheetTop();
+    const timeoutId = setTimeout(measureSheetTop, 120);
+    return () => clearTimeout(timeoutId);
+  }, [datePickerOpen, measureSheetTop, scheduleUndoSnapshot]);
 
   const sheetMinHeight = windowHeight * TASK_SHEET_MAX_HEIGHT_FRACTION;
   const toolbarSafeAreaStyle =
@@ -1403,499 +1544,579 @@ export function TaskDetailScreen() {
   const expandedNotesHeight = Math.max(280, expandedScrollHeight - 170);
   const expandedTaskBodyHeight = expandedNotesHeight + 72;
 
-  return (
-    <KeyboardAvoidingView
-      style={[
-        styles.container,
-        expandedFullscreen && { minHeight: expandedContainerHeight },
-      ]}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={0}
-    >
-      {priorityMenuOpen ? (
+  const scheduleUndoTop =
+    sheetTopY != null
+      ? sheetTopY - SCHEDULE_UNDO_BUTTON_HEIGHT - SCHEDULE_UNDO_ABOVE_GAP
+      : windowHeight -
+        sheetMinHeight -
+        SCHEDULE_UNDO_BUTTON_HEIGHT -
+        SCHEDULE_UNDO_ABOVE_GAP;
+
+  const scheduleUndoOverlay = scheduleUndoSnapshot ? (
+    Platform.OS === "web" ? (
+      <View style={styles.scheduleUndoOverlay} pointerEvents="box-none">
         <Pressable
-          style={styles.priorityBackdrop}
-          onPress={() => setPriorityMenuOpen(false)}
+          style={[
+            styles.scheduleUndoButton,
+            { top: scheduleUndoTop, right: SCHEDULE_UNDO_RIGHT_INSET },
+          ]}
+          onPress={() => void handleScheduleUndo()}
           accessibilityRole="button"
-          accessibilityLabel="Dismiss priority menu"
-        />
-      ) : null}
-      <View style={styles.handleRow}>
-        <View style={styles.handle} />
+          accessibilityLabel="Undo clear date and time"
+        >
+          <AppSymbol
+            ios="arrow.uturn.backward"
+            android="undo"
+            size={14}
+            tintColor="#374151"
+          />
+          <ThemedText style={styles.scheduleUndoButtonText}>Undo</ThemedText>
+        </Pressable>
       </View>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="More options"
-        hitSlop={8}
-        onPress={openDetailMenu}
-        style={styles.headerMenuButton}
-      >
-        <AppSymbol
-          ios="ellipsis"
-          android="more-horiz"
-          size={16}
-          weight="semibold"
-          tintColor="#7a8494"
-        />
-      </Pressable>
-
-      <ScrollView
-        style={
-          expandedFullscreen
-            ? { minHeight: expandedScrollHeight }
-            : { maxHeight: maxScrollHeight }
-        }
-        contentContainerStyle={[
-          styles.contentContainer,
-          expandedFullscreen && {
-            minHeight: expandedScrollHeight,
-            flexGrow: 1,
-          },
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        nestedScrollEnabled
-        bounces
-      >
-        <View style={styles.listHeaderRow}>
+    ) : (
+      <FullWindowOverlay>
+        <View style={styles.scheduleUndoOverlay} pointerEvents="box-none">
           <Pressable
-            style={styles.listBadge}
-            onPress={() => void openListPicker()}
+            style={[
+              styles.scheduleUndoButton,
+              { top: scheduleUndoTop, right: SCHEDULE_UNDO_RIGHT_INSET },
+            ]}
+            onPress={() => void handleScheduleUndo()}
+            accessibilityRole="button"
+            accessibilityLabel="Undo clear date and time"
           >
-            <ThemedText style={styles.listPickerText}>
-              <ThemedText style={styles.listPickerPrefix}>In </ThemedText>
-              <ThemedText style={styles.listPickerBold}>
-                {resolvedListName}
-              </ThemedText>
-            </ThemedText>
             <AppSymbol
-              ios="chevron.down"
-              android="keyboard-arrow-down"
+              ios="arrow.uturn.backward"
+              android="undo"
               size={14}
-              tintColor="#8b95a5"
+              tintColor="#374151"
             />
+            <ThemedText style={styles.scheduleUndoButtonText}>Undo</ThemedText>
           </Pressable>
         </View>
+      </FullWindowOverlay>
+    )
+  ) : null;
 
-        <View style={styles.dateRow}>
+  return (
+    <>
+      <KeyboardAvoidingView
+        style={[
+          styles.container,
+          expandedFullscreen && { minHeight: expandedContainerHeight },
+        ]}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+      >
+        <View
+          ref={sheetContainerRef}
+          onLayout={measureSheetTop}
+          style={styles.sheetMeasureRoot}
+          collapsable={false}
+        >
+          {priorityMenuOpen ? (
+            <Pressable
+              style={styles.priorityBackdrop}
+              onPress={() => setPriorityMenuOpen(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss priority menu"
+            />
+          ) : null}
+          <View style={styles.handleRow}>
+            <View style={styles.handle} />
+          </View>
+
           <Pressable
-            style={styles.dateCheckboxHit}
-            onPress={handleDateCheckboxPress}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: detail?.completed ?? false }}
-            accessibilityLabel={
-              detail?.completed ? "Mark task incomplete" : "Mark task complete"
+            accessibilityRole="button"
+            accessibilityLabel="More options"
+            hitSlop={8}
+            onPress={openDetailMenu}
+            style={styles.headerMenuButton}
+          >
+            <AppSymbol
+              ios="ellipsis"
+              android="more-horiz"
+              size={16}
+              weight="semibold"
+              tintColor="#7a8494"
+            />
+          </Pressable>
+
+          <ScrollView
+            style={
+              expandedFullscreen
+                ? { minHeight: expandedScrollHeight }
+                : { maxHeight: maxScrollHeight }
             }
+            contentContainerStyle={[
+              styles.contentContainer,
+              expandedFullscreen && {
+                minHeight: expandedScrollHeight,
+                flexGrow: 1,
+              },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+            bounces
           >
-            <View
-              style={[
-                styles.dateCheckbox,
-                detail?.completed && styles.dateCheckboxDone,
-              ]}
-            >
-              {detail?.completed ? (
+            <View style={styles.listHeaderRow}>
+              <Pressable
+                style={styles.listBadge}
+                onPress={() => void openListPicker()}
+              >
+                <ThemedText style={styles.listPickerText}>
+                  <ThemedText style={styles.listPickerPrefix}>In </ThemedText>
+                  <ThemedText style={styles.listPickerBold}>
+                    {resolvedListName}
+                  </ThemedText>
+                </ThemedText>
                 <AppSymbol
-                  ios="checkmark"
-                  android="check"
-                  size={12}
-                  tintColor="#ffffff"
+                  ios="chevron.down"
+                  android="keyboard-arrow-down"
+                  size={14}
+                  tintColor="#8b95a5"
                 />
-              ) : null}
+              </Pressable>
             </View>
-          </Pressable>
-          <Pressable
-            style={styles.dateLabelPressable}
-            onPress={() => setDatePickerOpen(true)}
-          >
-            <ThemedText
-              style={[styles.dateLabel, dueDateLabel && styles.dateLabelSet]}
-            >
-              {dueDateLabel ?? "Date & Reminder"}
-            </ThemedText>
-          </Pressable>
-          {!loading && (detail?.labels ?? []).length > 0 ? (
-            <ScrollView
-              horizontal
-              style={styles.dateLabelsScroll}
-              contentContainerStyle={styles.dateLabelsScrollContent}
-              showsHorizontalScrollIndicator={false}
-              nestedScrollEnabled
-              keyboardShouldPersistTaps="handled"
-            >
-              {(detail?.labels ?? []).map((label) => (
-                <Pressable
-                  key={label.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Label ${label.label}, edit labels`}
-                  onPress={() => setLabelPickerOpen(true)}
-                  style={({ pressed }) => [
-                    styles.labelChip,
-                    { backgroundColor: getLabelDotColor(label) },
-                    pressed && styles.labelChipPressed,
+
+            <View style={styles.dateRow}>
+              <Pressable
+                style={styles.dateCheckboxHit}
+                onPress={handleDateCheckboxPress}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: detail?.completed ?? false }}
+                accessibilityLabel={
+                  detail?.completed
+                    ? "Mark task incomplete"
+                    : "Mark task complete"
+                }
+              >
+                <View
+                  style={[
+                    styles.dateCheckbox,
+                    detail?.completed && styles.dateCheckboxDone,
                   ]}
                 >
-                  <ThemedText style={styles.labelChipText}>
-                    {label.label}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </ScrollView>
-          ) : null}
-        </View>
-
-        {loading ? (
-          <ActivityIndicator style={styles.loader} color="#3c87f7" />
-        ) : (
-          <>
-            <View
-              style={[
-                styles.taskBody,
-                expandedFullscreen && {
-                  minHeight: expandedTaskBodyHeight,
-                  flexGrow: 1,
-                },
-              ]}
-            >
-              <View style={styles.titleRow}>
-                <TextInput
-                  value={draftName}
-                  onChangeText={(value) => {
-                    beginEditSession();
-                    setDraftName(value);
-                    scheduleNameSave(value);
-                  }}
-                  onFocus={() => {
-                    dismissLinkEditor();
-                    setNotesFocused(false);
-                  }}
-                  onBlur={() => {
-                    commitEditToHistory();
-                    void saveNameNow(draftNameRef.current);
-                  }}
-                  placeholder="Task name"
-                  placeholderTextColor="#9ca3af"
-                  style={styles.taskTitleInput}
-                  multiline
-                  blurOnSubmit
-                  returnKeyType="done"
-                />
-              </View>
-
-              {!loading ? (
-                <FormattedNotesInput
-                  inputRef={notesInputRef}
-                  remountKey={`${id ?? "task-notes"}-${notesLoadSeq}`}
-                  defaultHtml={notesHtml}
-                  value={draftNotes}
-                  displayHtml={notesHtml}
-                  selection={notesSelection}
-                  onChangeHtml={(html) => {
-                    if (suppressNativeHtmlChangeRef.current) return;
-                    if (!notesSaveEnabledRef.current) return;
-                    // While caret typing-bold is active, HTML is merged in onChangeText
-                    // so newly typed characters pick up <b> without touching existing text.
-                    if (caretTypingBoldRef.current) return;
-
-                    const sanitized = sanitizeTaskDetailsHtml(html);
-                    const savedHtml = detailsHtmlRef.current;
-                    const savedPlain = detailsHtmlToPlainText(savedHtml);
-                    const nextPlain = detailsHtmlToPlainText(sanitized);
-                    if (savedPlain === nextPlain) {
-                      if (
-                        htmlNeedsFormattingMirror(savedHtml) &&
-                        !htmlNeedsFormattingMirror(sanitized)
-                      ) {
-                        return;
-                      }
-                      if (
-                        htmlHasInlineFormatting(savedHtml) &&
-                        !htmlHasInlineFormatting(sanitized)
-                      ) {
-                        return;
-                      }
-                    }
-                    if (
-                      !shouldPersistTaskDetails(sanitized, savedHtml) &&
-                      sanitized !== savedHtml
-                    ) {
-                      return;
-                    }
-
-                    beginEditSession();
-                    detailsHtmlRef.current = sanitized;
-                    setNotesHtml(sanitized);
-                    scheduleNotesSave(draftNotesRef.current, sanitized);
-                  }}
-                  onChangeText={(value) => {
-                    if (!notesSaveEnabledRef.current) return;
-
-                    beginEditSession();
-                    const previousPlain = draftNotesRef.current;
-                    draftNotesRef.current = value;
-                    setDraftNotes(value);
-
-                    const nextHtml = mergePlainTextEditIntoHtml(
-                      detailsHtmlRef.current,
-                      previousPlain,
-                      value,
-                      caretTypingBoldRef.current ? { bold: true } : undefined,
-                    );
-                    detailsHtmlRef.current = nextHtml;
-                    setNotesHtml(nextHtml);
-                    scheduleNotesSave(value, nextHtml);
-                  }}
-                  onSelectionChange={(event) => {
-                    const selection = event.nativeEvent.selection;
-                    notesSelectionRef.current = selection;
-                    setNotesSelection(selection);
-                    if (
-                      selection.end <= selection.start &&
-                      linkEditorOpenRef.current
-                    ) {
-                      dismissLinkEditor();
-                    }
-                    if (selection.end > selection.start) {
-                      lastNotesSelectionRef.current = selection;
-                    } else if (selection.start !== lastCaretIndexRef.current) {
-                      const docBold = getSelectionBoldActive(
-                        detailsHtmlRef.current,
-                        selection,
-                      );
-                      caretTypingBoldRef.current = docBold;
-                      setCaretTypingBold(docBold);
-                      lastCaretIndexRef.current = selection.start;
-                    }
-                  }}
-                  onFocus={() => {
-                    if (linkEditorOpenRef.current) {
-                      dismissLinkEditor();
-                    }
-                    setNotesFocused(true);
-                    lastCaretIndexRef.current = notesSelectionRef.current.start;
-                  }}
-                  onBlur={() => {
-                    if (linkEditorOpenRef.current) return;
-                    setNotesFocused(false);
-                    setCaretTypingBold(false);
-                    caretTypingBoldRef.current = false;
-                    commitEditToHistory();
-                    void saveNotesNow(
-                      draftNotesRef.current,
-                      detailsHtmlRef.current,
-                    );
-                  }}
-                  placeholder="Add notes"
-                  placeholderTextColor="#9ca3af"
-                  style={styles.notesInput}
-                  notesMinHeight={
-                    expandedFullscreen ? expandedNotesHeight : undefined
-                  }
-                  notesMaxHeight={
-                    expandedFullscreen ? expandedNotesHeight : undefined
-                  }
-                  selectionColor="#2563eb"
-                  cursorColor="#2563eb"
-                />
+                  {detail?.completed ? (
+                    <AppSymbol
+                      ios="checkmark"
+                      android="check"
+                      size={12}
+                      tintColor="#ffffff"
+                    />
+                  ) : null}
+                </View>
+              </Pressable>
+              <Pressable
+                style={styles.dateLabelPressable}
+                onPress={() => setDatePickerOpen(true)}
+              >
+                <ThemedText
+                  style={[
+                    styles.dateLabel,
+                    dueDateLabel && styles.dateLabelSet,
+                  ]}
+                >
+                  {dueDateLabel ?? "Date & Reminder"}
+                </ThemedText>
+              </Pressable>
+              {!loading && (detail?.labels ?? []).length > 0 ? (
+                <ScrollView
+                  horizontal
+                  style={styles.dateLabelsScroll}
+                  contentContainerStyle={styles.dateLabelsScrollContent}
+                  showsHorizontalScrollIndicator={false}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {(detail?.labels ?? []).map((label) => (
+                    <Pressable
+                      key={label.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Label ${label.label}, edit labels`}
+                      onPress={() => setLabelPickerOpen(true)}
+                      style={({ pressed }) => [
+                        styles.labelChip,
+                        { backgroundColor: getLabelDotColor(label) },
+                        pressed && styles.labelChipPressed,
+                      ]}
+                    >
+                      <ThemedText style={styles.labelChipText}>
+                        {label.label}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </ScrollView>
               ) : null}
             </View>
 
-            {mediaBlocks.map((block, index) => {
-              if (block.type === "image") {
-                return (
-                  <Image
-                    key={`image-${index}`}
-                    source={{ uri: block.uri }}
-                    style={styles.detailImage}
-                    contentFit="cover"
-                  />
-                );
-              }
-
-              return (
-                <Pressable
-                  key={`link-${index}`}
-                  style={styles.linkRow}
-                  onPress={() => void WebBrowser.openBrowserAsync(block.href)}
+            {loading ? (
+              <ActivityIndicator style={styles.loader} color="#3c87f7" />
+            ) : (
+              <>
+                <View
+                  style={[
+                    styles.taskBody,
+                    expandedFullscreen && {
+                      minHeight: expandedTaskBodyHeight,
+                      flexGrow: 1,
+                    },
+                  ]}
                 >
-                  <ThemedText style={styles.detailLink}>
-                    {block.text}
-                  </ThemedText>
-                  <AppSymbol
-                    ios="link"
-                    android="link"
-                    size={14}
-                    tintColor="#2563eb"
-                  />
-                </Pressable>
-              );
-            })}
-          </>
-        )}
-      </ScrollView>
+                  <View style={styles.titleRow}>
+                    <TextInput
+                      value={draftName}
+                      onChangeText={(value) => {
+                        beginEditSession();
+                        setDraftName(value);
+                        scheduleNameSave(value);
+                      }}
+                      onFocus={() => {
+                        dismissLinkEditor();
+                        setNotesFocused(false);
+                      }}
+                      onBlur={() => {
+                        commitEditToHistory();
+                        void saveNameNow(draftNameRef.current);
+                      }}
+                      placeholder="Task name"
+                      placeholderTextColor="#9ca3af"
+                      style={styles.taskTitleInput}
+                      multiline
+                      blurOnSubmit
+                      returnKeyType="done"
+                    />
+                  </View>
 
-      {labelPickerOpen ? (
-        <TaskLabelPicker
-          labels={allLabels}
-          assignedLabelIds={assignedLabelIds}
-          onToggleLabel={(labelId, assigned) =>
-            void handleToggleLabel(labelId, assigned)
-          }
-          onClose={() => setLabelPickerOpen(false)}
-          bottomInset={toolbarTotalHeight}
-          sheetHeightRatio={0.45}
-        />
-      ) : null}
+                  {!loading ? (
+                    <FormattedNotesInput
+                      inputRef={notesInputRef}
+                      remountKey={`${id ?? "task-notes"}-${notesLoadSeq}`}
+                      defaultHtml={notesHtml}
+                      value={draftNotes}
+                      displayHtml={notesHtml}
+                      selection={notesSelection}
+                      onChangeHtml={(html) => {
+                        if (suppressNativeHtmlChangeRef.current) return;
+                        if (!notesSaveEnabledRef.current) return;
+                        // While caret typing-bold is active, HTML is merged in onChangeText
+                        // so newly typed characters pick up <b> without touching existing text.
+                        if (caretTypingBoldRef.current) return;
 
-      <View
-        style={[
-          styles.toolbar,
-          toolbarSafeAreaStyle,
-          labelPickerOpen && styles.toolbarAboveLabelPicker,
-        ]}
-      >
-        {saveStatusLabel ? (
-          <ThemedText
+                        const sanitized = sanitizeTaskDetailsHtml(html);
+                        const savedHtml = detailsHtmlRef.current;
+                        const savedPlain = detailsHtmlToPlainText(savedHtml);
+                        const nextPlain = detailsHtmlToPlainText(sanitized);
+                        if (savedPlain === nextPlain) {
+                          if (
+                            htmlNeedsFormattingMirror(savedHtml) &&
+                            !htmlNeedsFormattingMirror(sanitized)
+                          ) {
+                            return;
+                          }
+                          if (
+                            htmlHasInlineFormatting(savedHtml) &&
+                            !htmlHasInlineFormatting(sanitized)
+                          ) {
+                            return;
+                          }
+                        }
+                        if (
+                          !shouldPersistTaskDetails(sanitized, savedHtml) &&
+                          sanitized !== savedHtml
+                        ) {
+                          return;
+                        }
+
+                        beginEditSession();
+                        detailsHtmlRef.current = sanitized;
+                        setNotesHtml(sanitized);
+                        scheduleNotesSave(draftNotesRef.current, sanitized);
+                      }}
+                      onChangeText={(value) => {
+                        if (!notesSaveEnabledRef.current) return;
+
+                        beginEditSession();
+                        const previousPlain = draftNotesRef.current;
+                        draftNotesRef.current = value;
+                        setDraftNotes(value);
+
+                        const nextHtml = mergePlainTextEditIntoHtml(
+                          detailsHtmlRef.current,
+                          previousPlain,
+                          value,
+                          caretTypingBoldRef.current
+                            ? { bold: true }
+                            : undefined,
+                        );
+                        detailsHtmlRef.current = nextHtml;
+                        setNotesHtml(nextHtml);
+                        scheduleNotesSave(value, nextHtml);
+                      }}
+                      onSelectionChange={(event) => {
+                        const selection = event.nativeEvent.selection;
+                        notesSelectionRef.current = selection;
+                        setNotesSelection(selection);
+                        if (
+                          selection.end <= selection.start &&
+                          linkEditorOpenRef.current
+                        ) {
+                          dismissLinkEditor();
+                        }
+                        if (selection.end > selection.start) {
+                          lastNotesSelectionRef.current = selection;
+                        } else if (
+                          selection.start !== lastCaretIndexRef.current
+                        ) {
+                          const docBold = getSelectionBoldActive(
+                            detailsHtmlRef.current,
+                            selection,
+                          );
+                          caretTypingBoldRef.current = docBold;
+                          setCaretTypingBold(docBold);
+                          lastCaretIndexRef.current = selection.start;
+                        }
+                      }}
+                      onFocus={() => {
+                        if (linkEditorOpenRef.current) {
+                          dismissLinkEditor();
+                        }
+                        setNotesFocused(true);
+                        lastCaretIndexRef.current =
+                          notesSelectionRef.current.start;
+                      }}
+                      onBlur={() => {
+                        if (linkEditorOpenRef.current) return;
+                        setNotesFocused(false);
+                        setCaretTypingBold(false);
+                        caretTypingBoldRef.current = false;
+                        commitEditToHistory();
+                        void saveNotesNow(
+                          draftNotesRef.current,
+                          detailsHtmlRef.current,
+                        );
+                      }}
+                      placeholder="Add notes"
+                      placeholderTextColor="#9ca3af"
+                      style={styles.notesInput}
+                      notesMinHeight={
+                        expandedFullscreen ? expandedNotesHeight : undefined
+                      }
+                      notesMaxHeight={
+                        expandedFullscreen ? expandedNotesHeight : undefined
+                      }
+                      selectionColor="#2563eb"
+                      cursorColor="#2563eb"
+                    />
+                  ) : null}
+                </View>
+
+                {mediaBlocks.map((block, index) => {
+                  if (block.type === "image") {
+                    return (
+                      <Image
+                        key={`image-${index}`}
+                        source={{ uri: block.uri }}
+                        style={styles.detailImage}
+                        contentFit="cover"
+                      />
+                    );
+                  }
+
+                  return (
+                    <Pressable
+                      key={`link-${index}`}
+                      style={styles.linkRow}
+                      onPress={() =>
+                        void WebBrowser.openBrowserAsync(block.href)
+                      }
+                    >
+                      <ThemedText style={styles.detailLink}>
+                        {block.text}
+                      </ThemedText>
+                      <AppSymbol
+                        ios="link"
+                        android="link"
+                        size={14}
+                        tintColor="#2563eb"
+                      />
+                    </Pressable>
+                  );
+                })}
+              </>
+            )}
+          </ScrollView>
+
+          {labelPickerOpen ? (
+            <TaskLabelPicker
+              labels={allLabels}
+              assignedLabelIds={assignedLabelIds}
+              onToggleLabel={(labelId, assigned) =>
+                void handleToggleLabel(labelId, assigned)
+              }
+              onClose={() => setLabelPickerOpen(false)}
+              bottomInset={toolbarTotalHeight}
+              sheetHeightRatio={0.45}
+            />
+          ) : null}
+
+          <View
             style={[
-              styles.saveStatus,
-              saveStatus === "error" && styles.saveStatusError,
+              styles.toolbar,
+              toolbarSafeAreaStyle,
+              labelPickerOpen && styles.toolbarAboveLabelPicker,
             ]}
           >
-            {saveStatusLabel}
-          </ThemedText>
-        ) : null}
-        <View style={styles.toolbarControls}>
-          <View style={styles.iconRow}>
-            <View style={styles.toolbarLabeledItem}>
-              <DetailToolbarIcon
-                accessibilityLabel="Date"
-                ios="calendar"
-                android="event"
-                tintColor={TOOLBAR_ICON_COLOR}
-                onPress={() => setDatePickerOpen(true)}
-              />
-              <ThemedText style={styles.toolbarCaption}>Date</ThemedText>
-            </View>
-            <View style={styles.flagAnchor}>
-              <DetailToolbarIcon
-                accessibilityLabel="Priority"
-                ios={detail?.priority != null ? "flag.fill" : "flag"}
-                android={detail?.priority != null ? "flag" : "outlined-flag"}
-                active={detail?.priority != null}
-                tintColor={
-                  detail?.priority != null
-                    ? getTaskPriorityColor(detail?.priority ?? null)
-                    : undefined
-                }
-                onPress={() => setPriorityMenuOpen((open) => !open)}
-              />
-              {priorityMenuOpen ? (
-                <TaskPriorityFlagPopup
-                  embedded
-                  selected={detail?.priority ?? null}
-                  onSelect={(priority) => void handleSetPriority(priority)}
-                  onClose={() => setPriorityMenuOpen(false)}
-                  style={styles.priorityPopupAboveToolbar}
+            {saveStatusLabel ? (
+              <ThemedText
+                style={[
+                  styles.saveStatus,
+                  saveStatus === "error" && styles.saveStatusError,
+                ]}
+              >
+                {saveStatusLabel}
+              </ThemedText>
+            ) : null}
+            <View style={styles.toolbarControls}>
+              <View style={styles.iconRow}>
+                <View style={styles.toolbarLabeledItem}>
+                  <DetailToolbarIcon
+                    accessibilityLabel="Date"
+                    ios="calendar"
+                    android="event"
+                    tintColor={TOOLBAR_ICON_COLOR}
+                    onPress={() => setDatePickerOpen(true)}
+                  />
+                  <ThemedText style={styles.toolbarCaption}>Date</ThemedText>
+                </View>
+                <View style={styles.flagAnchor}>
+                  <DetailToolbarIcon
+                    accessibilityLabel="Priority"
+                    ios={detail?.priority != null ? "flag.fill" : "flag"}
+                    android={
+                      detail?.priority != null ? "flag" : "outlined-flag"
+                    }
+                    active={detail?.priority != null}
+                    tintColor={
+                      detail?.priority != null
+                        ? getTaskPriorityColor(detail?.priority ?? null)
+                        : undefined
+                    }
+                    onPress={() => setPriorityMenuOpen((open) => !open)}
+                  />
+                  {priorityMenuOpen ? (
+                    <TaskPriorityFlagPopup
+                      embedded
+                      selected={detail?.priority ?? null}
+                      onSelect={(priority) => void handleSetPriority(priority)}
+                      onClose={() => setPriorityMenuOpen(false)}
+                      style={styles.priorityPopupAboveToolbar}
+                    />
+                  ) : null}
+                </View>
+                <View style={styles.toolbarLabeledItem}>
+                  <DetailToolbarIcon
+                    accessibilityLabel="Labels"
+                    ios="tag"
+                    android="local-offer"
+                    tintColor={TOOLBAR_ICON_COLOR}
+                    onPress={() => setLabelPickerOpen(true)}
+                  />
+                  <ThemedText style={styles.toolbarCaption}>Label</ThemedText>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Attachment"
+                    hitSlop={8}
+                    onPress={handleAttachment}
+                    style={({ pressed }) => [
+                      detailToolbarStyles.toolbarIconSlot,
+                      detailToolbarStyles.toolbarInlineIconSlot,
+                      pressed && detailToolbarStyles.toolbarIconPressed,
+                    ]}
+                  >
+                    <RiAttachment2Icon size={22} color={TOOLBAR_ICON_COLOR} />
+                  </Pressable>
+                </View>
+                <View style={styles.toolbarLabeledItem}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Subtask"
+                    hitSlop={8}
+                    onPress={() => setSubtaskDraftOpen(true)}
+                    style={({ pressed }) => [
+                      detailToolbarStyles.toolbarIconSlot,
+                      pressed && detailToolbarStyles.toolbarIconPressed,
+                    ]}
+                  >
+                    <TbSubtaskIcon size={22} color={TOOLBAR_ICON_COLOR} />
+                  </Pressable>
+                  <ThemedText style={styles.toolbarCaption}>subtask</ThemedText>
+                </View>
+                <DetailToolbarIcon
+                  accessibilityLabel="Voice note"
+                  ios="mic"
+                  android="mic"
+                  onPress={handleVoiceNote}
+                  slotStyle={styles.voiceIconSlot}
                 />
-              ) : null}
+              </View>
             </View>
-            <View style={styles.toolbarLabeledItem}>
-              <DetailToolbarIcon
-                accessibilityLabel="Labels"
-                ios="tag"
-                android="local-offer"
-                tintColor={TOOLBAR_ICON_COLOR}
-                onPress={() => setLabelPickerOpen(true)}
-              />
-              <ThemedText style={styles.toolbarCaption}>Label</ThemedText>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Attachment"
-                hitSlop={8}
-                onPress={handleAttachment}
-                style={({ pressed }) => [
-                  detailToolbarStyles.toolbarIconSlot,
-                  detailToolbarStyles.toolbarInlineIconSlot,
-                  pressed && detailToolbarStyles.toolbarIconPressed,
-                ]}
-              >
-                <RiAttachment2Icon size={22} color={TOOLBAR_ICON_COLOR} />
-              </Pressable>
-            </View>
-            <View style={styles.toolbarLabeledItem}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Subtask"
-                hitSlop={8}
-                onPress={() => setSubtaskDraftOpen(true)}
-                style={({ pressed }) => [
-                  detailToolbarStyles.toolbarIconSlot,
-                  pressed && detailToolbarStyles.toolbarIconPressed,
-                ]}
-              >
-                <TbSubtaskIcon size={22} color={TOOLBAR_ICON_COLOR} />
-              </Pressable>
-              <ThemedText style={styles.toolbarCaption}>subtask</ThemedText>
-            </View>
-            <DetailToolbarIcon
-              accessibilityLabel="Voice note"
-              ios="mic"
-              android="mic"
-              onPress={handleVoiceNote}
-              slotStyle={styles.voiceIconSlot}
-            />
           </View>
-        </View>
-      </View>
 
-      <TaskDatePickerSheet
-        visible={datePickerOpen}
-        value={detail?.dueDate ?? null}
-        dueTimeMinutes={detail?.dueTimeMinutes ?? null}
-        dueDurationMinutes={detail?.dueDurationMinutes ?? null}
-        onSelect={(selection) => void handleScheduleChange(selection)}
-        onClose={() => setDatePickerOpen(false)}
-      />
-
-      <Modal
-        transparent
-        visible={subtaskDraftOpen}
-        animationType="fade"
-        onRequestClose={() => setSubtaskDraftOpen(false)}
-      >
-        <Pressable
-          style={styles.subtaskBackdrop}
-          onPress={() => setSubtaskDraftOpen(false)}
-        />
-        <View style={styles.subtaskCard}>
-          <ThemedText style={styles.subtaskTitle}>Add subtask</ThemedText>
-          <TextInput
-            value={subtaskName}
-            onChangeText={setSubtaskName}
-            placeholder="Subtask name"
-            autoFocus
-            style={styles.subtaskInput}
-            onSubmitEditing={() => void handleAddSubtask()}
+          <TaskDatePickerSheet
+            visible={datePickerOpen}
+            value={detail != null ? detail.dueDate : (dueDate ?? null)}
+            dueTimeMinutes={detail != null ? detail.dueTimeMinutes : null}
+            dueDurationMinutes={
+              detail != null ? detail.dueDurationMinutes : null
+            }
+            onSelect={(selection) => void handleScheduleChange(selection)}
+            onClose={() => setDatePickerOpen(false)}
           />
-          <View style={styles.subtaskActions}>
-            <Pressable onPress={() => setSubtaskDraftOpen(false)}>
-              <ThemedText>Cancel</ThemedText>
-            </Pressable>
-            <Pressable onPress={() => void handleAddSubtask()}>
-              <ThemedText style={styles.subtaskSave}>Add</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
 
-      <TaskListPicker
-        visible={listPickerOpen}
-        lists={sidebarData?.lists ?? []}
-        currentListId={resolvedListId}
-        onSelectList={(list) => void handleMoveToList(list)}
-        onClose={() => setListPickerOpen(false)}
-      />
-    </KeyboardAvoidingView>
+          <Modal
+            transparent
+            visible={subtaskDraftOpen}
+            animationType="fade"
+            onRequestClose={() => setSubtaskDraftOpen(false)}
+          >
+            <Pressable
+              style={styles.subtaskBackdrop}
+              onPress={() => setSubtaskDraftOpen(false)}
+            />
+            <View style={styles.subtaskCard}>
+              <ThemedText style={styles.subtaskTitle}>Add subtask</ThemedText>
+              <TextInput
+                value={subtaskName}
+                onChangeText={setSubtaskName}
+                placeholder="Subtask name"
+                autoFocus
+                style={styles.subtaskInput}
+                onSubmitEditing={() => void handleAddSubtask()}
+              />
+              <View style={styles.subtaskActions}>
+                <Pressable onPress={() => setSubtaskDraftOpen(false)}>
+                  <ThemedText>Cancel</ThemedText>
+                </Pressable>
+                <Pressable onPress={() => void handleAddSubtask()}>
+                  <ThemedText style={styles.subtaskSave}>Add</ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
+
+          <TaskListPicker
+            visible={listPickerOpen}
+            lists={sidebarData?.lists ?? []}
+            currentListId={resolvedListId}
+            onSelectList={(list) => void handleMoveToList(list)}
+            onClose={() => setListPickerOpen(false)}
+          />
+        </View>
+      </KeyboardAvoidingView>
+      {scheduleUndoOverlay}
+    </>
   );
 }
 
@@ -1964,6 +2185,34 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     position: "relative",
   },
+  sheetMeasureRoot: {
+    flex: 1,
+  },
+  scheduleUndoOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 100,
+    elevation: 100,
+  },
+  scheduleUndoButton: {
+    position: "absolute",
+    height: SCHEDULE_UNDO_BUTTON_HEIGHT,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    borderRadius: SCHEDULE_UNDO_BUTTON_HEIGHT / 2,
+    backgroundColor: "#f3f4f6",
+    shadowColor: "#000000",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  scheduleUndoButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+  },
   taskBody: {
     width: "100%",
   },
@@ -1982,7 +2231,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.two,
-    paddingTop: Spacing.one + 12,
+    paddingTop: Spacing.one,
     paddingBottom: Spacing.one,
     paddingRight: 40,
   },
@@ -2003,7 +2252,7 @@ const styles = StyleSheet.create({
   listPickerBold: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#4f4f4f",
+    color: "#424242",
   },
   headerMenuButton: {
     position: "absolute",
@@ -2053,12 +2302,13 @@ const styles = StyleSheet.create({
   },
   dateCheckboxHit: {
     padding: 2,
+    marginLeft: 4,
   },
   dateCheckbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-    borderWidth: 1.5,
+    width: 21,
+    height: 21,
+    borderRadius: 10,
+    borderWidth: 1.25,
     borderColor: "#d1d5db",
     backgroundColor: "#f9fafb",
     alignItems: "center",
@@ -2104,8 +2354,8 @@ const styles = StyleSheet.create({
   },
   taskTitleInput: {
     flex: 1,
-    fontSize: 30,
-    lineHeight: 38,
+    fontSize: 27,
+    lineHeight: 36,
     fontWeight: "700",
     color: "#111827",
     padding: 0,

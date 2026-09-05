@@ -106,6 +106,26 @@ export async function scheduleTaskReminder(input: {
   });
 }
 
+export async function applyTaskReminder(input: {
+  taskId: string;
+  taskName: string;
+  dueDate: string | null;
+  dueTimeMinutes?: number | null;
+  reminderEnabled?: boolean;
+}) {
+  if (input.reminderEnabled && input.dueDate) {
+    await scheduleTaskReminder({
+      taskId: input.taskId,
+      taskName: input.taskName,
+      dueDate: input.dueDate,
+      dueTimeMinutes: input.dueTimeMinutes,
+    });
+    return;
+  }
+
+  await cancelTaskReminder(input.taskId);
+}
+
 export async function cancelTaskReminder(taskId: string) {
   const Notifications = await getNotifications();
   if (!Notifications) return;

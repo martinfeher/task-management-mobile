@@ -14,7 +14,6 @@ import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
 import { withUniwind } from "uniwind";
 
 import { AppSymbol } from "@/components/app-symbol";
-import { AddTaskButton } from "@/components/add-task-button";
 import { ListsCreateButton } from "@/components/lists-create-button";
 import { SettingsModal } from "@/components/settings-modal";
 import { SidebarRow } from "@/components/sidebar-row";
@@ -146,7 +145,6 @@ export function ListsSidebarShell({
           onCreateLabel={onCreateLabel}
         />
       ) : null}
-      <AddTaskButton parentEndsAtTabBarTop />
       <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </View>
   );

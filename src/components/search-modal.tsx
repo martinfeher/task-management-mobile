@@ -2,23 +2,23 @@ import { Image } from "expo-image";
 import { type Href, router, useNavigation } from "expo-router";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
-  InteractionManager,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    FlatList,
+    InteractionManager,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -27,9 +27,9 @@ import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
 import {
-  fetchLastSearchQuery,
-  fetchSearchTasks,
-  saveLastSearchQuery,
+    fetchLastSearchQuery,
+    fetchSearchTasks,
+    saveLastSearchQuery,
 } from "@/lib/api";
 import { parseTaskDetails } from "@/lib/parse-task-details";
 import type { SearchTask } from "@/types/todo";
@@ -75,7 +75,12 @@ function firstDescriptionLine(details: string) {
     .trim();
 
   if (!text) return "";
-  return text.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+  return (
+    text
+      .split("\n")
+      .map((line) => line.trim())
+      .find(Boolean) ?? ""
+  );
 }
 
 function taskDetailsHasContent(details: string) {
@@ -186,7 +191,11 @@ function HighlightedText({
   }
 
   if (lastIndex < text.length) {
-    parts.push({ text: text.slice(lastIndex), match: false, key: `t-${key++}` });
+    parts.push({
+      text: text.slice(lastIndex),
+      match: false,
+      key: `t-${key++}`,
+    });
   }
 
   return (
@@ -240,7 +249,8 @@ function SearchResultPreview({ task }: { task: IndexedSearchTask }) {
 }
 
 export function SearchModal() {
-  const { completeTask, uncompleteTask, lastTabHref, suppressNextSearchOpen } = useApp();
+  const { completeTask, uncompleteTask, lastTabHref, suppressNextSearchOpen } =
+    useApp();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
@@ -363,7 +373,10 @@ export function SearchModal() {
   const trimmedQuery = query.trim();
   const highlightQuery = deferredQuery.trim();
   const hasResults =
-    trimmedQuery.length > 0 && results.length > 0 && !isFiltering && !loadingTasks;
+    trimmedQuery.length > 0 &&
+    results.length > 0 &&
+    !isFiltering &&
+    !loadingTasks;
   const compactSheetHeight = windowHeight * COMPACT_SHEET_HEIGHT_RATIO;
   const expandedSheetHeight = Math.max(
     compactSheetHeight,
@@ -436,245 +449,267 @@ export function SearchModal() {
       <Animated.View style={[styles.sheet, sheetAnimatedStyle]}>
         <KeyboardAvoidingView
           style={styles.root}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={styles.handleRow}>
             <View style={styles.handle} />
           </View>
 
           <View style={styles.header}>
-        <View style={styles.searchBar}>
-          <AppSymbol
-            ios="magnifyingglass"
-            android="search"
-            size={20}
-            tintColor="#a1a1aa"
-          />
-          <TextInput
-            ref={inputRef}
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search tasks and notes"
-            placeholderTextColor="#a1a1aa"
-            autoCorrect={false}
-            autoCapitalize="none"
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-            style={styles.input}
-          />
-          {loadingTasks ? (
-            <ActivityIndicator size="small" color="#a1a1aa" />
-          ) : null}
-        </View>
-        <Pressable
-          onPress={handleClose}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Close search">
-          <ThemedText style={styles.cancel}>Cancel</ThemedText>
-        </Pressable>
-      </View>
+            <View style={styles.searchBar}>
+              <AppSymbol
+                ios="magnifyingglass"
+                android="search"
+                size={20}
+                tintColor="#a1a1aa"
+              />
+              <TextInput
+                ref={inputRef}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search tasks and notes"
+                placeholderTextColor="#a1a1aa"
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+                style={styles.input}
+              />
+              {loadingTasks ? (
+                <ActivityIndicator size="small" color="#a1a1aa" />
+              ) : null}
+            </View>
+            <Pressable
+              onPress={handleClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close search"
+            >
+              <ThemedText style={styles.cancel}>Cancel</ThemedText>
+            </Pressable>
+          </View>
 
-        <View style={styles.scopeRow}>
-          {SEARCH_SCOPE_TABS.map((tab) => {
-            const selected = searchScope === tab.id;
-            return (
-              <Pressable
-                key={tab.id}
-                onPress={() => {
-                  setSearchScope(tab.id);
-                  focusSearchInput();
-                }}
-                style={[styles.scopeTab, selected && styles.scopeTabSelected]}
-                accessibilityRole="tab"
-                accessibilityState={{ selected }}>
-                <Text
-                  style={[
-                    styles.scopeTabText,
-                    selected && styles.scopeTabTextSelected,
-                  ]}>
-                  {tab.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+          <View style={styles.scopeRow}>
+            {SEARCH_SCOPE_TABS.map((tab) => {
+              const selected = searchScope === tab.id;
+              return (
+                <Pressable
+                  key={tab.id}
+                  onPress={() => {
+                    setSearchScope(tab.id);
+                    focusSearchInput();
+                  }}
+                  style={[styles.scopeTab, selected && styles.scopeTabSelected]}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected }}
+                >
+                  <Text
+                    style={[
+                      styles.scopeTabText,
+                      selected && styles.scopeTabTextSelected,
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
-        <View style={[styles.body, isFiltering && styles.bodyFiltering]}>
-          {!trimmedQuery ? (
-            <ThemedText themeColor="textSecondary" style={styles.emptyHint}>
-              {emptyStateMessage}
-            </ThemedText>
-          ) : results.length === 0 ? (
-            <ThemedText themeColor="textSecondary" style={styles.emptyHint}>
-              {loadingTasks ? "Searching…" : "No tasks found"}
-            </ThemedText>
-          ) : (
-            <>
-              <FlatList
-                style={styles.resultsList}
-                data={results}
-                keyExtractor={(item) => item.id}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={styles.listContent}
-                ListFooterComponent={
-                  results.length >= SEARCH_RESULT_LIMIT ? (
-                    <ThemedText themeColor="textSecondary" style={styles.limitHint}>
-                      Showing first {SEARCH_RESULT_LIMIT} matches
-                    </ThemedText>
-                  ) : null
-                }
-                renderItem={({ item, index }) => {
-                  const isFirstCompleted =
-                    item.completed &&
-                    (index === 0 || !results[index - 1]?.completed);
-                  const selected = item.id === activeId;
+          <View style={[styles.body, isFiltering && styles.bodyFiltering]}>
+            {!trimmedQuery ? (
+              <ThemedText themeColor="textSecondary" style={styles.emptyHint}>
+                {emptyStateMessage}
+              </ThemedText>
+            ) : results.length === 0 ? (
+              <ThemedText themeColor="textSecondary" style={styles.emptyHint}>
+                {loadingTasks ? "Searching…" : "No tasks found"}
+              </ThemedText>
+            ) : (
+              <>
+                <FlatList
+                  style={styles.resultsList}
+                  data={results}
+                  keyExtractor={(item) => item.id}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={styles.listContent}
+                  ListFooterComponent={
+                    results.length >= SEARCH_RESULT_LIMIT ? (
+                      <ThemedText
+                        themeColor="textSecondary"
+                        style={styles.limitHint}
+                      >
+                        Showing first {SEARCH_RESULT_LIMIT} matches
+                      </ThemedText>
+                    ) : null
+                  }
+                  renderItem={({ item, index }) => {
+                    const isFirstCompleted =
+                      item.completed &&
+                      (index === 0 || !results[index - 1]?.completed);
+                    const selected = item.id === activeId;
 
-                  return (
-                    <View>
-                      {isFirstCompleted ? (
-                        <Text style={styles.completedHeader}>Completed</Text>
-                      ) : null}
-                      <Pressable
-                        style={[
-                          styles.resultRow,
-                          selected && styles.resultRowSelected,
-                          item.completed && !selected && styles.resultBlurred,
-                        ]}
-                        onPress={() => handleSelectTask(item)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Open task ${item.name}`}>
+                    return (
+                      <View>
+                        {isFirstCompleted ? (
+                          <Text style={styles.completedHeader}>Completed</Text>
+                        ) : null}
                         <Pressable
-                          style={styles.checkboxHit}
-                          onPress={() =>
-                            handleToggleComplete(item, !item.completed)
-                          }
-                          hitSlop={8}
-                          accessibilityRole="checkbox"
-                          accessibilityState={{ checked: item.completed }}
-                          accessibilityLabel={`Complete ${item.name}`}>
-                          <View
-                            style={[
-                              styles.checkbox,
-                              item.completed && styles.checkboxChecked,
-                            ]}>
-                            {item.completed ? (
-                              <AppSymbol
-                                ios="checkmark"
-                                android="check"
-                                size={12}
-                                tintColor="#fff"
+                          style={[
+                            styles.resultRow,
+                            selected && styles.resultRowSelected,
+                            item.completed && !selected && styles.resultBlurred,
+                          ]}
+                          onPress={() => handleSelectTask(item)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open task ${item.name}`}
+                        >
+                          <Pressable
+                            style={styles.checkboxHit}
+                            onPress={() =>
+                              handleToggleComplete(item, !item.completed)
+                            }
+                            hitSlop={8}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: item.completed }}
+                            accessibilityLabel={`Complete ${item.name}`}
+                          >
+                            <View
+                              style={[
+                                styles.checkbox,
+                                item.completed && styles.checkboxChecked,
+                              ]}
+                            >
+                              {item.completed ? (
+                                <AppSymbol
+                                  ios="checkmark"
+                                  android="check"
+                                  size={12}
+                                  tintColor="#fff"
+                                />
+                              ) : null}
+                            </View>
+                          </Pressable>
+                          <View style={styles.resultText}>
+                            <HighlightedText
+                              text={item.name}
+                              query={highlightQuery}
+                              numberOfLines={1}
+                              style={[
+                                styles.resultTitle,
+                                item.completed && styles.completedTitle,
+                              ]}
+                            />
+                            {item.previewLine ? (
+                              <HighlightedText
+                                text={item.previewLine}
+                                query={
+                                  searchScope === "names" ? "" : highlightQuery
+                                }
+                                numberOfLines={1}
+                                style={styles.resultDescription}
                               />
                             ) : null}
+                            <Text style={styles.meta} numberOfLines={1}>
+                              {item.listName}
+                            </Text>
                           </View>
+                          <SearchResultPreview task={item} />
                         </Pressable>
-                        <View style={styles.resultText}>
-                          <HighlightedText
-                            text={item.name}
-                            query={highlightQuery}
-                            numberOfLines={1}
-                            style={[
-                              styles.resultTitle,
-                              item.completed && styles.completedTitle,
-                            ]}
-                          />
-                          {item.previewLine ? (
-                            <HighlightedText
-                              text={item.previewLine}
-                              query={
-                                searchScope === "names" ? "" : highlightQuery
-                              }
-                              numberOfLines={1}
-                              style={styles.resultDescription}
-                            />
-                          ) : null}
-                          <Text style={styles.meta} numberOfLines={1}>
-                            {item.listName}
-                          </Text>
-                        </View>
-                        <SearchResultPreview task={item} />
-                      </Pressable>
-                    </View>
-                  );
-                }}
-              />
+                      </View>
+                    );
+                  }}
+                />
 
-              <View
-                style={[
-                  styles.previewPanel,
-                  { paddingBottom: Math.max(insets.bottom, Spacing.three) },
-                ]}>
-                {activeTask ? (
-                  <>
-                    <Pressable
-                      style={styles.previewHeader}
-                      onPress={() => handleSelectTask(activeTask)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Open task ${activeTask.name}`}>
-                      <HighlightedText
-                        text={activeTask.name}
-                        query={highlightQuery}
-                        numberOfLines={2}
-                        style={[
-                          styles.previewTitle,
-                          activeTask.completed && styles.completedTitle,
-                        ]}
-                      />
-                      <Text style={styles.meta}>{activeTask.listName}</Text>
-                      <Text style={styles.openHint}>Tap to open</Text>
-                    </Pressable>
-                    <ScrollView
-                      style={styles.previewScroll}
-                      contentContainerStyle={styles.previewContent}
-                      keyboardShouldPersistTaps="handled">
-                      {searchScope === "names" ? (
-                        <Text style={styles.previewEmpty}>
-                          Switch to All or Task content to preview notes
-                        </Text>
-                      ) : previewBlocks.length === 0 ? (
-                        <Text style={styles.previewEmpty}>
-                          {taskDetailsHasContent(activeTask.details)
-                            ? "Loading content…"
-                            : "No content"}
-                        </Text>
-                      ) : (
-                        previewBlocks.map((block, index) => {
-                          if (block.type === "text") {
+                <View
+                  style={[
+                    styles.previewPanel,
+                    { paddingBottom: Math.max(insets.bottom, Spacing.three) },
+                  ]}
+                >
+                  {activeTask ? (
+                    <>
+                      <Pressable
+                        style={styles.previewHeader}
+                        onPress={() => handleSelectTask(activeTask)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open task ${activeTask.name}`}
+                      >
+                        <HighlightedText
+                          text={activeTask.name}
+                          query={highlightQuery}
+                          numberOfLines={2}
+                          style={[
+                            styles.previewTitle,
+                            activeTask.completed && styles.completedTitle,
+                          ]}
+                        />
+                        <Text style={styles.meta}>{activeTask.listName}</Text>
+                        <Text style={styles.openHint}>Tap to open</Text>
+                      </Pressable>
+                      <ScrollView
+                        style={styles.previewScroll}
+                        contentContainerStyle={styles.previewContent}
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        {searchScope === "names" ? (
+                          <Text style={styles.previewEmpty}>
+                            Switch to All or Task content to preview notes
+                          </Text>
+                        ) : previewBlocks.length === 0 ? (
+                          <Text style={styles.previewEmpty}>
+                            {taskDetailsHasContent(activeTask.details)
+                              ? "Loading content…"
+                              : "No content"}
+                          </Text>
+                        ) : (
+                          previewBlocks.map((block, index) => {
+                            if (block.type === "text") {
+                              return (
+                                <HighlightedText
+                                  key={`text-${index}`}
+                                  text={block.text}
+                                  query={
+                                    searchScope === "content" ||
+                                    searchScope === "all"
+                                      ? highlightQuery
+                                      : ""
+                                  }
+                                  style={styles.previewBody}
+                                />
+                              );
+                            }
+                            if (block.type === "link") {
+                              return (
+                                <Text
+                                  key={`link-${index}`}
+                                  style={styles.previewLink}
+                                >
+                                  {block.text}
+                                </Text>
+                              );
+                            }
                             return (
-                              <HighlightedText
-                                key={`text-${index}`}
-                                text={block.text}
-                                query={
-                                  searchScope === "content" || searchScope === "all"
-                                    ? highlightQuery
-                                    : ""
-                                }
-                                style={styles.previewBody}
-                              />
-                            );
-                          }
-                          if (block.type === "link") {
-                            return (
-                              <Text key={`link-${index}`} style={styles.previewLink}>
-                                {block.text}
+                              <Text
+                                key={`image-${index}`}
+                                style={styles.previewEmpty}
+                              >
+                                [Image]
                               </Text>
                             );
-                          }
-                          return (
-                            <Text key={`image-${index}`} style={styles.previewEmpty}>
-                              [Image]
-                            </Text>
-                          );
-                        })
-                      )}
-                    </ScrollView>
-                  </>
-                ) : (
-                  <Text style={styles.previewEmpty}>Select a task to preview</Text>
-                )}
-              </View>
-            </>
-          )}
-        </View>
+                          })
+                        )}
+                      </ScrollView>
+                    </>
+                  ) : (
+                    <Text style={styles.previewEmpty}>
+                      Select a task to preview
+                    </Text>
+                  )}
+                </View>
+              </>
+            )}
+          </View>
         </KeyboardAvoidingView>
       </Animated.View>
     </View>

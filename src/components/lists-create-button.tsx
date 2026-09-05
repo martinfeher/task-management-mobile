@@ -3,7 +3,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { IoAddOutlineIcon } from "@/components/io-add-outline-icon";
 
-const CREATE_COLOR = "#5f5f5f";
+const CREATE_COLOR = "#868be9";
 const CREATE_GAP_ABOVE_TAB_BAR = 6;
 const CREATE_LEFT_INSET = 16;
 const MENU_GAP_ABOVE_BUTTON = 8;
