@@ -1,7 +1,14 @@
 import { Image } from "expo-image";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,22 +28,27 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppSymbol } from "@/components/app-symbol";
-import { FormattedNotesInput, type NotesInputHandle } from "@/components/formatted-notes-input";
-import { htmlHasInlineFormatting, htmlNeedsFormattingMirror } from "@/lib/html-to-text-runs";
-import { isEnrichedNotesInputAvailable } from "@/lib/enriched-notes-support";
-import { TaskDatePickerSheet, type TaskScheduleSelection } from "@/components/task-date-picker-sheet";
+import {
+  FormattedNotesInput,
+  type NotesInputHandle,
+} from "@/components/formatted-notes-input";
+import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
+import {
+  TaskDatePickerSheet,
+  type TaskScheduleSelection,
+} from "@/components/task-date-picker-sheet";
 import { TaskLabelPicker } from "@/components/task-label-picker";
 import { TaskListPicker } from "@/components/task-list-picker";
-import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
-import { TbSubtaskIcon } from "@/components/tb-subtask-icon";
 import {
   getTaskPriorityColor,
   TaskPriorityFlagPopup,
 } from "@/components/task-priority-flag-popup";
-import { ThemedText } from "@/components/themed-text";
+import { TbSubtaskIcon } from "@/components/tb-subtask-icon";
 import { TEXT_FORMAT_TOOLBAR_HEIGHT } from "@/components/text-format-toolbar";
+import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
+import type { CalendarColorAction } from "@/contexts/history-actions-toolbar-context";
 import { useHistoryActionsRegistration } from "@/contexts/history-actions-toolbar-context";
 import { useTextFormatToolbarRegistration } from "@/contexts/text-format-toolbar-context";
 import {
@@ -46,20 +58,34 @@ import {
   moveTaskToList,
   toggleTaskCompleted,
   toggleTaskLabel,
+  updateTaskCalendarColor,
   updateTaskDetails,
-  updateTaskSchedule,
   updateTaskName,
   updateTaskPriority,
+  updateTaskSchedule,
 } from "@/lib/api";
-import { scheduleTaskReminder } from "@/lib/notifications";
+import { normalizeCalendarColor } from "@/lib/calendar-colors";
+import { isEnrichedNotesInputAvailable } from "@/lib/enriched-notes-support";
 import { formatTaskDueDate } from "@/lib/format-due-date";
+import {
+  htmlHasInlineFormatting,
+  htmlNeedsFormattingMirror,
+} from "@/lib/html-to-text-runs";
 import { getLabelDotColor } from "@/lib/label-colors";
-import { parseTaskDetails, type ParsedDetailBlock } from "@/lib/parse-task-details";
-import { extractMediaBlocksFromDoc, resolveTaskDoc, taskDocToPreviewText } from "@/lib/task-doc";
+import { scheduleTaskReminder } from "@/lib/notifications";
+import {
+  parseTaskDetails,
+  type ParsedDetailBlock,
+} from "@/lib/parse-task-details";
 import {
   detailsHtmlToPlainText,
   mergePlainTextEditIntoHtml,
 } from "@/lib/task-content";
+import {
+  createEmptyTaskDetailHistory,
+  snapshotsEqual,
+  type TaskDetailSnapshot,
+} from "@/lib/task-detail-history";
 import {
   resolveTaskDetailsForSave,
   resolveTaskDetailsHtml,
@@ -67,10 +93,10 @@ import {
   shouldPersistTaskDetails,
 } from "@/lib/task-details-content";
 import {
-  createEmptyTaskDetailHistory,
-  snapshotsEqual,
-  type TaskDetailSnapshot,
-} from "@/lib/task-detail-history";
+  extractMediaBlocksFromDoc,
+  resolveTaskDoc,
+  taskDocToPreviewText,
+} from "@/lib/task-doc";
 import {
   applyTextFormat,
   getEffectiveSelection,
@@ -78,10 +104,10 @@ import {
   getSelectionFontFamily,
   getSelectionFontSize,
   getSelectionHighlightColor,
+  getSelectionLineHeight,
   hasTextSelection,
   type TextBlockType,
   type TextFormatAction,
-  type TextFontSizeOption,
 } from "@/lib/text-format";
 import type { SidebarListItem, TaskDetail, TaskLabel } from "@/types/todo";
 
@@ -89,8 +115,35 @@ const VISUAL_SPAN_FORMAT_ACTIONS = new Set<TextFormatAction>([
   "highlight",
   "color",
   "fontSize",
+  "lineHeight",
   "fontFamily",
 ]);
+
+/** Span formats that collapse the selection to the caret after applying. */
+const COLLAPSE_SELECTION_AFTER_FORMAT = new Set<TextFormatAction>([
+  "highlight",
+  "color",
+]);
+
+function shouldSkipNativeContentUpdateOnFormat(
+  action: TextFormatAction,
+  plainTextUnchanged: boolean,
+) {
+  return (
+    plainTextUnchanged &&
+    (action === "fontFamily" ||
+      action === "fontSize" ||
+      action === "lineHeight")
+  );
+}
+
+function collapseSelectionAfterFormat(
+  action: TextFormatAction,
+  selection: { start: number; end: number },
+) {
+  if (!COLLAPSE_SELECTION_AFTER_FORMAT.has(action)) return selection;
+  return { start: selection.end, end: selection.end };
+}
 
 const NATIVE_INLINE_TOGGLE_ACTIONS = new Set<TextFormatAction>([
   "bold",
@@ -99,14 +152,6 @@ const NATIVE_INLINE_TOGGLE_ACTIONS = new Set<TextFormatAction>([
   "strikethrough",
   "code",
 ]);
-
-function collapseSelectionAfterFormat(
-  action: TextFormatAction,
-  selection: { start: number; end: number },
-) {
-  if (!VISUAL_SPAN_FORMAT_ACTIONS.has(action)) return selection;
-  return { start: selection.end, end: selection.end };
-}
 
 const NAME_SAVE_DEBOUNCE_MS = 500;
 const USE_NATIVE_RICH_NOTES = isEnrichedNotesInputAvailable();
@@ -123,20 +168,38 @@ const TOOLBAR_BOTTOM_SHIFT = 10;
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 export function TaskDetailScreen() {
-  const { id, name, listName, dueDate, listId, fromSearch } = useLocalSearchParams<{
+  const {
+    id,
+    name,
+    listName,
+    dueDate,
+    listId,
+    fromSearch,
+    fromCalendar,
+    calendarColor: calendarColorParam,
+  } = useLocalSearchParams<{
     id: string;
     name?: string;
     listName?: string;
     dueDate?: string;
     listId?: string;
     fromSearch?: string;
+    fromCalendar?: string;
+    calendarColor?: string;
   }>();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const navigation = useNavigation();
-  const { handleTaskCompleted, selectView, suppressNextSearchOpen, sidebarData, loadSidebar, deleteTask: removeTask } =
-    useApp();
+  const {
+    handleTaskCompleted,
+    selectView,
+    suppressNextSearchOpen,
+    sidebarData,
+    loadSidebar,
+    deleteTask: removeTask,
+  } = useApp();
   const closingRef = useRef(false);
+  const openedFromCalendar = fromCalendar === "1";
 
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -154,9 +217,16 @@ export function TaskDetailScreen() {
   const [notesLoadSeq, setNotesLoadSeq] = useState(0);
   const [notesSelection, setNotesSelection] = useState({ start: 0, end: 0 });
   const [notesFocused, setNotesFocused] = useState(false);
+  const [linkEditorOpen, setLinkEditorOpen] = useState(false);
   const [caretTypingBold, setCaretTypingBold] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [expandedFullscreen, setExpandedFullscreen] = useState(false);
+  const [calendarColorPickerOpen, setCalendarColorPickerOpen] = useState(false);
+  const [calendarColor, setCalendarColor] = useState(() =>
+    normalizeCalendarColor(
+      typeof calendarColorParam === "string" ? calendarColorParam : null,
+    ),
+  );
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   const lastSavedNameRef = useRef(name ?? "");
@@ -172,15 +242,21 @@ export function TaskDetailScreen() {
   const lastNotesSelectionRef = useRef({ start: 0, end: 0 });
   const caretTypingBoldRef = useRef(false);
   const lastCaretIndexRef = useRef(0);
+  const linkEditorOpenRef = useRef(false);
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savingCountRef = useRef(0);
   const taskIdRef = useRef(id);
   const historyRef = useRef(createEmptyTaskDetailHistory());
-  const editSessionRef = useRef<{ active: boolean; before: TaskDetailSnapshot | null }>({
+  const editSessionRef = useRef<{
+    active: boolean;
+    before: TaskDetailSnapshot | null;
+  }>({
     active: false,
     before: null,
   });
-  const historyCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const historyCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const isApplyingHistoryRef = useRef(false);
   const notesSaveEnabledRef = useRef(false);
   const suppressNativeHtmlChangeRef = useRef(false);
@@ -367,7 +443,8 @@ export function TaskDetailScreen() {
       editSessionRef.current.active = true;
     }
 
-    if (historyCommitTimerRef.current) clearTimeout(historyCommitTimerRef.current);
+    if (historyCommitTimerRef.current)
+      clearTimeout(historyCommitTimerRef.current);
     historyCommitTimerRef.current = setTimeout(() => {
       historyCommitTimerRef.current = null;
       commitEditToHistory();
@@ -428,9 +505,11 @@ export function TaskDetailScreen() {
       action: TextFormatAction,
       options?: {
         linkUrl?: string;
+        linkText?: string;
         color?: string;
         highlightColor?: string;
-        fontSize?: TextFontSizeOption;
+        fontSize?: number;
+        lineHeight?: number;
         blockType?: TextBlockType;
         fontFamily?: string;
       },
@@ -447,6 +526,7 @@ export function TaskDetailScreen() {
 
       const finishNativeFormat = (
         selectionOverride?: { start: number; end: number },
+        options?: { preserveMetrics?: boolean },
       ) => {
         const target = selectionOverride ?? selection;
         const refocus = () => {
@@ -456,6 +536,10 @@ export function TaskDetailScreen() {
         refocus();
         requestAnimationFrame(refocus);
         setTimeout(refocus, 0);
+        if (options?.preserveMetrics) {
+          setTimeout(refocus, 50);
+          setTimeout(refocus, 120);
+        }
       };
 
       if (collapsed && action === "bold") {
@@ -548,14 +632,21 @@ export function TaskDetailScreen() {
             selection.start,
             selection.end,
           );
-          input.setLink?.(
-            selection.start,
-            selection.end,
-            selectedText,
-            options?.linkUrl ?? "",
-          );
-          finishNativeFormat();
-          return;
+          const linkText = (options?.linkText ?? selectedText).trim();
+          const canUseNativeLink =
+            linkText === selectedText &&
+            !htmlNeedsFormattingMirror(detailsHtmlRef.current);
+
+          if (canUseNativeLink) {
+            input.setLink?.(
+              selection.start,
+              selection.end,
+              linkText,
+              options?.linkUrl ?? "",
+            );
+            finishNativeFormat();
+            return;
+          }
         }
 
         const syncedPlain = detailsHtmlToPlainText(detailsHtmlRef.current);
@@ -572,13 +663,23 @@ export function TaskDetailScreen() {
           return;
         }
 
-        const nextSelection = collapseSelectionAfterFormat(action, result.selection);
+        const nextSelection = collapseSelectionAfterFormat(
+          action,
+          result.selection,
+        );
+        const plainTextUnchanged = result.plainText === syncedPlain;
+        const preserveSelectionMetrics =
+          action === "fontFamily" ||
+          action === "fontSize" ||
+          action === "lineHeight";
 
         suppressNativeHtmlChangeRef.current = true;
         if (
-          action === "clearFormatting" ||
-          (VISUAL_SPAN_FORMAT_ACTIONS.has(action) &&
-            htmlNeedsFormattingMirror(result.html))
+          !shouldSkipNativeContentUpdateOnFormat(action, plainTextUnchanged) &&
+          (action === "link" ||
+            action === "clearFormatting" ||
+            (VISUAL_SPAN_FORMAT_ACTIONS.has(action) &&
+              htmlNeedsFormattingMirror(result.html)))
         ) {
           input?.setContent(result.html);
         }
@@ -594,7 +695,9 @@ export function TaskDetailScreen() {
         setTimeout(() => {
           suppressNativeHtmlChangeRef.current = false;
         }, 400);
-        finishNativeFormat(nextSelection);
+        finishNativeFormat(nextSelection, {
+          preserveMetrics: preserveSelectionMetrics,
+        });
         return;
       }
 
@@ -615,9 +718,19 @@ export function TaskDetailScreen() {
         return;
       }
 
-      const nextSelection = collapseSelectionAfterFormat(action, result.selection);
+      const nextSelection = collapseSelectionAfterFormat(
+        action,
+        result.selection,
+      );
+      const plainTextUnchanged = result.plainText === syncedPlain;
+      const preserveSelectionMetrics =
+        action === "fontFamily" ||
+        action === "fontSize" ||
+        action === "lineHeight";
 
-      input?.setContent(result.html);
+      if (!shouldSkipNativeContentUpdateOnFormat(action, plainTextUnchanged)) {
+        input?.setContent(result.html);
+      }
       detailsHtmlRef.current = result.html;
       setNotesHtml(result.html);
       draftNotesRef.current = result.plainText;
@@ -627,10 +740,15 @@ export function TaskDetailScreen() {
       setNotesSelection(nextSelection);
       scheduleNotesSave(result.plainText, result.html);
 
-      requestAnimationFrame(() => {
+      const refocusSelection = () => {
         input?.setSelection(nextSelection.start, nextSelection.end);
         input?.focus();
-      });
+      };
+      requestAnimationFrame(refocusSelection);
+      if (preserveSelectionMetrics) {
+        setTimeout(refocusSelection, 50);
+        setTimeout(refocusSelection, 120);
+      }
     },
     [beginEditSession, scheduleNotesSave],
   );
@@ -639,7 +757,21 @@ export function TaskDetailScreen() {
     notesInputRef.current?.focus();
   }, []);
 
-  const showFormatToolbar = notesFocused && keyboardHeight > 0;
+  const handleLinkEditorOpenChange = useCallback((open: boolean) => {
+    linkEditorOpenRef.current = open;
+    setLinkEditorOpen(open);
+  }, []);
+
+  const dismissLinkEditor = useCallback(() => {
+    if (!linkEditorOpenRef.current) return;
+    linkEditorOpenRef.current = false;
+    setLinkEditorOpen(false);
+  }, []);
+
+  const hasNotesTextSelection = notesSelection.end > notesSelection.start;
+  const showFormatToolbar =
+    ((notesFocused && hasNotesTextSelection) || linkEditorOpen) &&
+    !datePickerOpen;
 
   const selectionBoldActive = useMemo(() => {
     const selection = notesSelection;
@@ -666,6 +798,14 @@ export function TaskDetailScreen() {
     return getSelectionFontSize(notesHtml, selection);
   }, [notesHtml, notesSelection]);
 
+  const selectionLineHeight = useMemo(() => {
+    const selection = getEffectiveSelection(
+      notesSelection,
+      lastNotesSelectionRef.current,
+    );
+    return getSelectionLineHeight(notesHtml, selection);
+  }, [notesHtml, notesSelection]);
+
   const selectionFontFamily = useMemo(() => {
     const selection = getEffectiveSelection(
       notesSelection,
@@ -673,6 +813,25 @@ export function TaskDetailScreen() {
     );
     return getSelectionFontFamily(notesHtml, selection);
   }, [notesHtml, notesSelection]);
+
+  const selectionText = useMemo(() => {
+    const selection = getEffectiveSelection(
+      notesSelection,
+      lastNotesSelectionRef.current,
+    );
+    if (selection.end <= selection.start) return null;
+    return draftNotes.slice(selection.start, selection.end).trim() || null;
+  }, [notesSelection, draftNotes]);
+
+  const canAdjustFontSize = useMemo(() => {
+    const selection = getEffectiveSelection(
+      notesSelection,
+      lastNotesSelectionRef.current,
+    );
+    return hasTextSelection(selection);
+  }, [notesSelection]);
+
+  const canAdjustLineHeight = canAdjustFontSize;
 
   const clearNotesSelection = useCallback(() => {
     const cleared = { start: 0, end: 0 };
@@ -686,7 +845,10 @@ export function TaskDetailScreen() {
     keyboardHeight > 0
       ? Spacing.two
       : insets.bottom > 0
-        ? Math.max(insets.bottom - TOOLBAR_BOTTOM_SHIFT + Spacing.two, Spacing.two)
+        ? Math.max(
+            insets.bottom - TOOLBAR_BOTTOM_SHIFT + Spacing.two,
+            Spacing.two,
+          )
         : Spacing.two;
   const toolbarBottomOffset =
     keyboardHeight > 0
@@ -700,16 +862,24 @@ export function TaskDetailScreen() {
       onFormat: handleNotesFormat,
       onDismiss: clearNotesSelection,
       onKeepKeyboardFocus: keepNotesKeyboardFocus,
+      onLinkEditorOpenChange: handleLinkEditorOpenChange,
     },
     selectionHighlightColor,
     selectionFontSize,
+    selectionLineHeight,
     selectionBoldActive,
     selectionFontFamily,
+    selectionText,
+    linkEditorOpen,
+    canAdjustFontSize,
+    canAdjustLineHeight,
   );
 
   useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const changeEvent =
       Platform.OS === "ios" ? "keyboardWillChangeFrame" : "keyboardDidShow";
 
@@ -717,20 +887,34 @@ export function TaskDetailScreen() {
       setKeyboardHeight(height);
     };
 
-    const showSub = Keyboard.addListener(showEvent, (event) => {
-      applyKeyboardHeight(event.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      applyKeyboardHeight(0);
-    });
-    const changeSub = Keyboard.addListener(changeEvent, (event) => {
-      applyKeyboardHeight(event.endCoordinates.height);
-    });
+    const subscriptions = [
+      Keyboard.addListener(showEvent, (event) => {
+        applyKeyboardHeight(event.endCoordinates.height);
+      }),
+      Keyboard.addListener(hideEvent, () => {
+        applyKeyboardHeight(0);
+      }),
+      Keyboard.addListener(changeEvent, (event) => {
+        applyKeyboardHeight(event.endCoordinates.height);
+      }),
+    ];
+
+    // iOS Simulator (hardware keyboard) sometimes skips "will" events.
+    if (Platform.OS === "ios") {
+      subscriptions.push(
+        Keyboard.addListener("keyboardDidShow", (event) => {
+          applyKeyboardHeight(event.endCoordinates.height);
+        }),
+        Keyboard.addListener("keyboardDidHide", () => {
+          applyKeyboardHeight(0);
+        }),
+      );
+    }
 
     return () => {
-      showSub.remove();
-      hideSub.remove();
-      changeSub.remove();
+      for (const subscription of subscriptions) {
+        subscription.remove();
+      }
     };
   }, []);
 
@@ -798,6 +982,7 @@ export function TaskDetailScreen() {
     setDetail(null);
     setPriorityMenuOpen(false);
     setLabelPickerOpen(false);
+    setCalendarColorPickerOpen(false);
     clearNotesSelection();
     closingRef.current = false;
     setSaveStatus("idle");
@@ -813,6 +998,7 @@ export function TaskDetailScreen() {
     void fetchTaskDetail(id)
       .then((loaded) => {
         setDetail(loaded);
+        setCalendarColor(normalizeCalendarColor(loaded.calendarColor));
         setDraftName(loaded.name);
         const html = resolveTaskDetailsHtml(loaded);
         const plain =
@@ -882,7 +1068,9 @@ export function TaskDetailScreen() {
     }
 
     return parseTaskDetails(detail?.details ?? "").filter(
-      (block): block is Extract<ParsedDetailBlock, { type: "image" | "link" }> =>
+      (
+        block,
+      ): block is Extract<ParsedDetailBlock, { type: "image" | "link" }> =>
         block.type === "image" || block.type === "link",
     );
   }, [detail]);
@@ -977,6 +1165,47 @@ export function TaskDetailScreen() {
     }
   };
 
+  const handleSelectCalendarColor = useCallback(
+    async (color: string) => {
+      const taskId = taskIdRef.current;
+      if (!taskId) return;
+
+      const nextColor = normalizeCalendarColor(color);
+      setCalendarColor(nextColor);
+      setCalendarColorPickerOpen(false);
+      setDetail((current) =>
+        current ? { ...current, calendarColor: nextColor } : current,
+      );
+
+      try {
+        await updateTaskCalendarColor(taskId, nextColor);
+        handleTaskCompleted();
+      } catch {
+        Alert.alert("Couldn't update calendar color");
+      }
+    },
+    [handleTaskCompleted],
+  );
+
+  const calendarColorAction = useMemo<CalendarColorAction | undefined>(() => {
+    if (!openedFromCalendar) return undefined;
+
+    return {
+      color: calendarColor,
+      pickerOpen: calendarColorPickerOpen,
+      onTogglePicker: () => setCalendarColorPickerOpen((open) => !open),
+      onSelectColor: (color) => {
+        void handleSelectCalendarColor(color);
+      },
+      onClosePicker: () => setCalendarColorPickerOpen(false),
+    };
+  }, [
+    calendarColor,
+    calendarColorPickerOpen,
+    handleSelectCalendarColor,
+    openedFromCalendar,
+  ]);
+
   const handleAddSubtask = async () => {
     if (!detail) return;
     const trimmed = subtaskName.trim();
@@ -1058,11 +1287,10 @@ export function TaskDetailScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      sheetAllowedDetents: expandedFullscreen ? [1] : "fitToContents",
-      sheetInitialDetentIndex: 0,
+      sheetAllowedDetents: "fitToContents",
+      sheetExpandsWhenScrolledToEdge: !expandedFullscreen,
       contentStyle: {
         backgroundColor: "#ffffff",
-        ...(expandedFullscreen ? { flex: 1 } : null),
       },
     });
   }, [expandedFullscreen, navigation]);
@@ -1130,14 +1358,21 @@ export function TaskDetailScreen() {
     : toolbarBottomOffset + 4;
 
   useHistoryActionsRegistration(
-    !loading,
+    !loading && !datePickerOpen,
     historyActionsBottomOffset,
     canUndo,
     canRedo,
     undoEdit,
     redoEdit,
     keepNotesKeyboardFocus,
+    calendarColorAction,
   );
+
+  useEffect(() => {
+    if (datePickerOpen) {
+      setCalendarColorPickerOpen(false);
+    }
+  }, [datePickerOpen]);
 
   const sheetMinHeight = windowHeight * TASK_SHEET_MAX_HEIGHT_FRACTION;
   const toolbarSafeAreaStyle =
@@ -1153,26 +1388,30 @@ export function TaskDetailScreen() {
     TASK_DETAIL_TOOLBAR_BODY_HEIGHT +
     toolbarFooterInset +
     (saveStatusLabel ? 22 : 0);
+  const expandedContainerHeight = Math.max(
+    sheetMinHeight,
+    windowHeight - insets.top,
+  );
   const expandedScrollHeight = Math.max(
     240,
-    windowHeight - toolbarTotalHeight - TASK_DETAIL_HANDLE_HEIGHT - insets.top,
+    expandedContainerHeight - toolbarTotalHeight - TASK_DETAIL_HANDLE_HEIGHT,
   );
-  const maxScrollHeight = expandedFullscreen
-    ? expandedScrollHeight
-    : Math.max(
-        160,
-        sheetMinHeight - toolbarTotalHeight - TASK_DETAIL_HANDLE_HEIGHT,
-      );
+  const maxScrollHeight = Math.max(
+    160,
+    sheetMinHeight - toolbarTotalHeight - TASK_DETAIL_HANDLE_HEIGHT,
+  );
   const expandedNotesHeight = Math.max(280, expandedScrollHeight - 170);
+  const expandedTaskBodyHeight = expandedNotesHeight + 72;
 
   return (
     <KeyboardAvoidingView
       style={[
         styles.container,
-        expandedFullscreen && { flex: 1, minHeight: windowHeight },
+        expandedFullscreen && { minHeight: expandedContainerHeight },
       ]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={0}>
+      keyboardVerticalOffset={0}
+    >
       {priorityMenuOpen ? (
         <Pressable
           style={styles.priorityBackdrop}
@@ -1190,7 +1429,8 @@ export function TaskDetailScreen() {
         accessibilityLabel="More options"
         hitSlop={8}
         onPress={openDetailMenu}
-        style={styles.headerMenuButton}>
+        style={styles.headerMenuButton}
+      >
         <AppSymbol
           ios="ellipsis"
           android="more-horiz"
@@ -1202,21 +1442,32 @@ export function TaskDetailScreen() {
 
       <ScrollView
         style={
-          expandedFullscreen ? styles.expandedScroll : { maxHeight: maxScrollHeight }
+          expandedFullscreen
+            ? { minHeight: expandedScrollHeight }
+            : { maxHeight: maxScrollHeight }
         }
         contentContainerStyle={[
           styles.contentContainer,
-          expandedFullscreen && styles.expandedScrollContent,
+          expandedFullscreen && {
+            minHeight: expandedScrollHeight,
+            flexGrow: 1,
+          },
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
-        bounces>
+        bounces
+      >
         <View style={styles.listHeaderRow}>
-          <Pressable style={styles.listBadge} onPress={() => void openListPicker()}>
+          <Pressable
+            style={styles.listBadge}
+            onPress={() => void openListPicker()}
+          >
             <ThemedText style={styles.listPickerText}>
               <ThemedText style={styles.listPickerPrefix}>In </ThemedText>
-              <ThemedText style={styles.listPickerBold}>{resolvedListName}</ThemedText>
+              <ThemedText style={styles.listPickerBold}>
+                {resolvedListName}
+              </ThemedText>
             </ThemedText>
             <AppSymbol
               ios="chevron.down"
@@ -1235,21 +1486,31 @@ export function TaskDetailScreen() {
             accessibilityState={{ checked: detail?.completed ?? false }}
             accessibilityLabel={
               detail?.completed ? "Mark task incomplete" : "Mark task complete"
-            }>
+            }
+          >
             <View
               style={[
                 styles.dateCheckbox,
                 detail?.completed && styles.dateCheckboxDone,
-              ]}>
+              ]}
+            >
               {detail?.completed ? (
-                <AppSymbol ios="checkmark" android="check" size={12} tintColor="#ffffff" />
+                <AppSymbol
+                  ios="checkmark"
+                  android="check"
+                  size={12}
+                  tintColor="#ffffff"
+                />
               ) : null}
             </View>
           </Pressable>
           <Pressable
             style={styles.dateLabelPressable}
-            onPress={() => setDatePickerOpen(true)}>
-            <ThemedText style={[styles.dateLabel, dueDateLabel && styles.dateLabelSet]}>
+            onPress={() => setDatePickerOpen(true)}
+          >
+            <ThemedText
+              style={[styles.dateLabel, dueDateLabel && styles.dateLabelSet]}
+            >
               {dueDateLabel ?? "Date & Reminder"}
             </ThemedText>
           </Pressable>
@@ -1260,7 +1521,8 @@ export function TaskDetailScreen() {
               contentContainerStyle={styles.dateLabelsScrollContent}
               showsHorizontalScrollIndicator={false}
               nestedScrollEnabled
-              keyboardShouldPersistTaps="handled">
+              keyboardShouldPersistTaps="handled"
+            >
               {(detail?.labels ?? []).map((label) => (
                 <Pressable
                   key={label.id}
@@ -1271,8 +1533,11 @@ export function TaskDetailScreen() {
                     styles.labelChip,
                     { backgroundColor: getLabelDotColor(label) },
                     pressed && styles.labelChipPressed,
-                  ]}>
-                  <ThemedText style={styles.labelChipText}>{label.label}</ThemedText>
+                  ]}
+                >
+                  <ThemedText style={styles.labelChipText}>
+                    {label.label}
+                  </ThemedText>
                 </Pressable>
               ))}
             </ScrollView>
@@ -1283,128 +1548,157 @@ export function TaskDetailScreen() {
           <ActivityIndicator style={styles.loader} color="#3c87f7" />
         ) : (
           <>
-            <View style={styles.titleRow}>
-              <TextInput
-                value={draftName}
-                onChangeText={(value) => {
-                  beginEditSession();
-                  setDraftName(value);
-                  scheduleNameSave(value);
-                }}
-                onBlur={() => {
-                  commitEditToHistory();
-                  void saveNameNow(draftNameRef.current);
-                }}
-                placeholder="Task name"
-                placeholderTextColor="#9ca3af"
-                style={styles.taskTitleInput}
-                multiline
-                blurOnSubmit
-                returnKeyType="done"
-              />
+            <View
+              style={[
+                styles.taskBody,
+                expandedFullscreen && {
+                  minHeight: expandedTaskBodyHeight,
+                  flexGrow: 1,
+                },
+              ]}
+            >
+              <View style={styles.titleRow}>
+                <TextInput
+                  value={draftName}
+                  onChangeText={(value) => {
+                    beginEditSession();
+                    setDraftName(value);
+                    scheduleNameSave(value);
+                  }}
+                  onFocus={() => {
+                    dismissLinkEditor();
+                    setNotesFocused(false);
+                  }}
+                  onBlur={() => {
+                    commitEditToHistory();
+                    void saveNameNow(draftNameRef.current);
+                  }}
+                  placeholder="Task name"
+                  placeholderTextColor="#9ca3af"
+                  style={styles.taskTitleInput}
+                  multiline
+                  blurOnSubmit
+                  returnKeyType="done"
+                />
+              </View>
+
+              {!loading ? (
+                <FormattedNotesInput
+                  inputRef={notesInputRef}
+                  remountKey={`${id ?? "task-notes"}-${notesLoadSeq}`}
+                  defaultHtml={notesHtml}
+                  value={draftNotes}
+                  displayHtml={notesHtml}
+                  selection={notesSelection}
+                  onChangeHtml={(html) => {
+                    if (suppressNativeHtmlChangeRef.current) return;
+                    if (!notesSaveEnabledRef.current) return;
+                    // While caret typing-bold is active, HTML is merged in onChangeText
+                    // so newly typed characters pick up <b> without touching existing text.
+                    if (caretTypingBoldRef.current) return;
+
+                    const sanitized = sanitizeTaskDetailsHtml(html);
+                    const savedHtml = detailsHtmlRef.current;
+                    const savedPlain = detailsHtmlToPlainText(savedHtml);
+                    const nextPlain = detailsHtmlToPlainText(sanitized);
+                    if (savedPlain === nextPlain) {
+                      if (
+                        htmlNeedsFormattingMirror(savedHtml) &&
+                        !htmlNeedsFormattingMirror(sanitized)
+                      ) {
+                        return;
+                      }
+                      if (
+                        htmlHasInlineFormatting(savedHtml) &&
+                        !htmlHasInlineFormatting(sanitized)
+                      ) {
+                        return;
+                      }
+                    }
+                    if (
+                      !shouldPersistTaskDetails(sanitized, savedHtml) &&
+                      sanitized !== savedHtml
+                    ) {
+                      return;
+                    }
+
+                    beginEditSession();
+                    detailsHtmlRef.current = sanitized;
+                    setNotesHtml(sanitized);
+                    scheduleNotesSave(draftNotesRef.current, sanitized);
+                  }}
+                  onChangeText={(value) => {
+                    if (!notesSaveEnabledRef.current) return;
+
+                    beginEditSession();
+                    const previousPlain = draftNotesRef.current;
+                    draftNotesRef.current = value;
+                    setDraftNotes(value);
+
+                    const nextHtml = mergePlainTextEditIntoHtml(
+                      detailsHtmlRef.current,
+                      previousPlain,
+                      value,
+                      caretTypingBoldRef.current ? { bold: true } : undefined,
+                    );
+                    detailsHtmlRef.current = nextHtml;
+                    setNotesHtml(nextHtml);
+                    scheduleNotesSave(value, nextHtml);
+                  }}
+                  onSelectionChange={(event) => {
+                    const selection = event.nativeEvent.selection;
+                    notesSelectionRef.current = selection;
+                    setNotesSelection(selection);
+                    if (
+                      selection.end <= selection.start &&
+                      linkEditorOpenRef.current
+                    ) {
+                      dismissLinkEditor();
+                    }
+                    if (selection.end > selection.start) {
+                      lastNotesSelectionRef.current = selection;
+                    } else if (selection.start !== lastCaretIndexRef.current) {
+                      const docBold = getSelectionBoldActive(
+                        detailsHtmlRef.current,
+                        selection,
+                      );
+                      caretTypingBoldRef.current = docBold;
+                      setCaretTypingBold(docBold);
+                      lastCaretIndexRef.current = selection.start;
+                    }
+                  }}
+                  onFocus={() => {
+                    if (linkEditorOpenRef.current) {
+                      dismissLinkEditor();
+                    }
+                    setNotesFocused(true);
+                    lastCaretIndexRef.current = notesSelectionRef.current.start;
+                  }}
+                  onBlur={() => {
+                    if (linkEditorOpenRef.current) return;
+                    setNotesFocused(false);
+                    setCaretTypingBold(false);
+                    caretTypingBoldRef.current = false;
+                    commitEditToHistory();
+                    void saveNotesNow(
+                      draftNotesRef.current,
+                      detailsHtmlRef.current,
+                    );
+                  }}
+                  placeholder="Add notes"
+                  placeholderTextColor="#9ca3af"
+                  style={styles.notesInput}
+                  notesMinHeight={
+                    expandedFullscreen ? expandedNotesHeight : undefined
+                  }
+                  notesMaxHeight={
+                    expandedFullscreen ? expandedNotesHeight : undefined
+                  }
+                  selectionColor="#2563eb"
+                  cursorColor="#2563eb"
+                />
+              ) : null}
             </View>
-
-            {!loading ? (
-            <FormattedNotesInput
-              inputRef={notesInputRef}
-              remountKey={`${id ?? "task-notes"}-${notesLoadSeq}`}
-              defaultHtml={notesHtml}
-              value={draftNotes}
-              displayHtml={notesHtml}
-              onChangeHtml={(html) => {
-                if (suppressNativeHtmlChangeRef.current) return;
-                if (!notesSaveEnabledRef.current) return;
-                // While caret typing-bold is active, HTML is merged in onChangeText
-                // so newly typed characters pick up <b> without touching existing text.
-                if (caretTypingBoldRef.current) return;
-
-                const sanitized = sanitizeTaskDetailsHtml(html);
-                const savedHtml = detailsHtmlRef.current;
-                const savedPlain = detailsHtmlToPlainText(savedHtml);
-                const nextPlain = detailsHtmlToPlainText(sanitized);
-                if (savedPlain === nextPlain) {
-                  if (
-                    htmlNeedsFormattingMirror(savedHtml) &&
-                    !htmlNeedsFormattingMirror(sanitized)
-                  ) {
-                    return;
-                  }
-                  if (
-                    htmlHasInlineFormatting(savedHtml) &&
-                    !htmlHasInlineFormatting(sanitized)
-                  ) {
-                    return;
-                  }
-                }
-                if (
-                  !shouldPersistTaskDetails(sanitized, savedHtml) &&
-                  sanitized !== savedHtml
-                ) {
-                  return;
-                }
-
-                beginEditSession();
-                detailsHtmlRef.current = sanitized;
-                setNotesHtml(sanitized);
-                scheduleNotesSave(draftNotesRef.current, sanitized);
-              }}
-              onChangeText={(value) => {
-                if (!notesSaveEnabledRef.current) return;
-
-                beginEditSession();
-                const previousPlain = draftNotesRef.current;
-                draftNotesRef.current = value;
-                setDraftNotes(value);
-
-                const nextHtml = mergePlainTextEditIntoHtml(
-                  detailsHtmlRef.current,
-                  previousPlain,
-                  value,
-                  caretTypingBoldRef.current ? { bold: true } : undefined,
-                );
-                detailsHtmlRef.current = nextHtml;
-                setNotesHtml(nextHtml);
-                scheduleNotesSave(value, nextHtml);
-              }}
-              onSelectionChange={(event) => {
-                const selection = event.nativeEvent.selection;
-                notesSelectionRef.current = selection;
-                setNotesSelection(selection);
-                if (selection.end > selection.start) {
-                  lastNotesSelectionRef.current = selection;
-                } else if (selection.start !== lastCaretIndexRef.current) {
-                  const docBold = getSelectionBoldActive(
-                    detailsHtmlRef.current,
-                    selection,
-                  );
-                  caretTypingBoldRef.current = docBold;
-                  setCaretTypingBold(docBold);
-                  lastCaretIndexRef.current = selection.start;
-                }
-              }}
-              onFocus={() => {
-                setNotesFocused(true);
-                lastCaretIndexRef.current = notesSelectionRef.current.start;
-              }}
-              onBlur={() => {
-                setNotesFocused(false);
-                setCaretTypingBold(false);
-                caretTypingBoldRef.current = false;
-                commitEditToHistory();
-                void saveNotesNow(
-                  draftNotesRef.current,
-                  detailsHtmlRef.current,
-                );
-              }}
-              placeholder="Add notes"
-              placeholderTextColor="#9ca3af"
-              style={styles.notesInput}
-              notesMinHeight={expandedFullscreen ? expandedNotesHeight : undefined}
-              notesMaxHeight={expandedFullscreen ? expandedNotesHeight : undefined}
-              selectionColor="#2563eb"
-              cursorColor="#2563eb"
-            />
-            ) : null}
 
             {mediaBlocks.map((block, index) => {
               if (block.type === "image") {
@@ -1422,13 +1716,20 @@ export function TaskDetailScreen() {
                 <Pressable
                   key={`link-${index}`}
                   style={styles.linkRow}
-                  onPress={() => void WebBrowser.openBrowserAsync(block.href)}>
-                  <ThemedText style={styles.detailLink}>{block.text}</ThemedText>
-                  <AppSymbol ios="link" android="link" size={14} tintColor="#2563eb" />
+                  onPress={() => void WebBrowser.openBrowserAsync(block.href)}
+                >
+                  <ThemedText style={styles.detailLink}>
+                    {block.text}
+                  </ThemedText>
+                  <AppSymbol
+                    ios="link"
+                    android="link"
+                    size={14}
+                    tintColor="#2563eb"
+                  />
                 </Pressable>
               );
             })}
-
           </>
         )}
       </ScrollView>
@@ -1437,7 +1738,9 @@ export function TaskDetailScreen() {
         <TaskLabelPicker
           labels={allLabels}
           assignedLabelIds={assignedLabelIds}
-          onToggleLabel={(labelId, assigned) => void handleToggleLabel(labelId, assigned)}
+          onToggleLabel={(labelId, assigned) =>
+            void handleToggleLabel(labelId, assigned)
+          }
           onClose={() => setLabelPickerOpen(false)}
           bottomInset={toolbarTotalHeight}
           sheetHeightRatio={0.45}
@@ -1449,13 +1752,15 @@ export function TaskDetailScreen() {
           styles.toolbar,
           toolbarSafeAreaStyle,
           labelPickerOpen && styles.toolbarAboveLabelPicker,
-        ]}>
+        ]}
+      >
         {saveStatusLabel ? (
           <ThemedText
             style={[
               styles.saveStatus,
               saveStatus === "error" && styles.saveStatusError,
-            ]}>
+            ]}
+          >
             {saveStatusLabel}
           </ThemedText>
         ) : null}
@@ -1512,7 +1817,8 @@ export function TaskDetailScreen() {
                   detailToolbarStyles.toolbarIconSlot,
                   detailToolbarStyles.toolbarInlineIconSlot,
                   pressed && detailToolbarStyles.toolbarIconPressed,
-                ]}>
+                ]}
+              >
                 <RiAttachment2Icon size={22} color={TOOLBAR_ICON_COLOR} />
               </Pressable>
             </View>
@@ -1525,7 +1831,8 @@ export function TaskDetailScreen() {
                 style={({ pressed }) => [
                   detailToolbarStyles.toolbarIconSlot,
                   pressed && detailToolbarStyles.toolbarIconPressed,
-                ]}>
+                ]}
+              >
                 <TbSubtaskIcon size={22} color={TOOLBAR_ICON_COLOR} />
               </Pressable>
               <ThemedText style={styles.toolbarCaption}>subtask</ThemedText>
@@ -1554,7 +1861,8 @@ export function TaskDetailScreen() {
         transparent
         visible={subtaskDraftOpen}
         animationType="fade"
-        onRequestClose={() => setSubtaskDraftOpen(false)}>
+        onRequestClose={() => setSubtaskDraftOpen(false)}
+      >
         <Pressable
           style={styles.subtaskBackdrop}
           onPress={() => setSubtaskDraftOpen(false)}
@@ -1621,12 +1929,15 @@ function DetailToolbarIcon({
         detailToolbarStyles.toolbarIconSlot,
         slotStyle,
         pressed && detailToolbarStyles.toolbarIconPressed,
-      ]}>
+      ]}
+    >
       <AppSymbol
         ios={ios}
         android={android}
         size={22}
-        tintColor={tintColor ?? (active ? TOOLBAR_ACTIVE_ICON_COLOR : TOOLBAR_ICON_COLOR)}
+        tintColor={
+          tintColor ?? (active ? TOOLBAR_ACTIVE_ICON_COLOR : TOOLBAR_ICON_COLOR)
+        }
       />
     </Pressable>
   );
@@ -1653,11 +1964,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     position: "relative",
   },
-  expandedScroll: {
-    flex: 1,
-  },
-  expandedScrollContent: {
-    flexGrow: 1,
+  taskBody: {
+    width: "100%",
   },
   handleRow: {
     alignItems: "center",
@@ -1733,7 +2041,8 @@ const styles = StyleSheet.create({
     zIndex: 30,
   },
   contentContainer: {
-    paddingHorizontal: Spacing.three,
+    paddingLeft: Spacing.three,
+    paddingRight: Spacing.three - 2,
     paddingBottom: Spacing.two,
   },
   dateRow: {
@@ -1789,8 +2098,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: Spacing.two,
-    marginBottom: Spacing.three,
-    paddingTop: Spacing.one + 1,
+    marginTop: -9,
+    marginBottom: 3,
+    paddingTop: 1,
   },
   taskTitleInput: {
     flex: 1,

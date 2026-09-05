@@ -215,6 +215,26 @@ export async function updateTaskPriority(
   }
 }
 
+export async function updateTaskCalendarColor(
+  taskId: string,
+  calendarColor: string,
+) {
+  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ calendarColor }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update calendar color (${response.status})`);
+  }
+
+  return response.json() as Promise<{ id: string; calendarColor: string | null }>;
+}
+
 export async function toggleTaskLabel(
   taskId: string,
   labelId: string,

@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
-  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 
+import { AiOutlineLineHeightIcon } from "@/components/ai-outline-line-height-icon";
 import { AppSymbol } from "@/components/app-symbol";
 import { FluentClearFormattingIcon } from "@/components/fluent-clear-formatting-icon";
 import { LiquidGlassSurface } from "@/components/liquid-glass-surface";
@@ -15,11 +17,18 @@ import { PiHighlighterLightIcon } from "@/components/pi-highlighter-light-icon";
 import { ThemedText } from "@/components/themed-text";
 import { pickToolbarPreviewFontFamily } from "@/lib/detail-fonts-mobile";
 import {
+  DEFAULT_LINE_HEIGHT,
+  TEXT_LINE_HEIGHT_MAX,
+  TEXT_LINE_HEIGHT_MIN,
+  TEXT_LINE_HEIGHT_STEP,
   TEXT_BLOCK_OPTIONS,
   TEXT_COLOR_OPTIONS,
+  TEXT_FONT_SIZE_MAX,
+  TEXT_FONT_SIZE_MIN,
   TEXT_FONT_SIZE_OPTIONS,
   TEXT_HIGHLIGHT_OPTIONS,
   getTextFormatFontFamilyOptions,
+  roundLineHeight,
   type TextBlockType,
   type TextFontSizeOption,
   type TextFormatAction,
@@ -31,6 +40,10 @@ import {
 // without needing to measure it at runtime.
 export const TEXT_FORMAT_TOOLBAR_HEIGHT = 49;
 
+const MAIN_TOOLBAR_ICON_SIZE = 23;
+const MAIN_TOOLBAR_CHECKLIST_ICON_SIZE = MAIN_TOOLBAR_ICON_SIZE + 2;
+const MAIN_TOOLBAR_LETTER_SIZE = 22;
+
 type TextFormatToolbarProps = {
   visible: boolean;
   layout?: "floating" | "accessory";
@@ -40,19 +53,27 @@ type TextFormatToolbarProps = {
     action: TextFormatAction,
     options?: {
       linkUrl?: string;
+      linkText?: string;
       color?: string;
       highlightColor?: string;
-      fontSize?: TextFontSizeOption;
+      fontSize?: number;
+      lineHeight?: number;
       blockType?: TextBlockType;
       fontFamily?: string;
     },
   ) => void;
   onDismiss: () => void;
   onKeepKeyboardFocus?: () => void;
+  onLinkEditorOpenChange?: (open: boolean) => void;
   selectionHighlightColor?: string | null;
   selectionFontSize?: number | null;
+  selectionLineHeight?: number | null;
   selectionBoldActive?: boolean;
   selectionFontFamily?: string | null;
+  selectionText?: string | null;
+  linkEditorOpen?: boolean;
+  canAdjustFontSize?: boolean;
+  canAdjustLineHeight?: boolean;
 };
 
 function keepKeyboardFocusHandlers(onKeepKeyboardFocus?: () => void) {
@@ -84,6 +105,7 @@ type SubmenuKind =
   | "color"
   | "highlight"
   | "fontSize"
+  | "lineHeight"
   | "blockType"
   | "fontFamily"
   | "overflow"
@@ -92,6 +114,114 @@ type SubmenuKind =
 const FONT_FAMILY_OPTIONS = getTextFormatFontFamilyOptions();
 const DEFAULT_FONT_FAMILY_ID = FONT_FAMILY_OPTIONS[0]?.id ?? "inter";
 const DEFAULT_FONT_SIZE_DISPLAY = 17;
+const DEFAULT_LINE_HEIGHT_DISPLAY = DEFAULT_LINE_HEIGHT;
+const LINK_POPUP_HORIZONTAL_INSET = 16;
+const LINK_POPUP_MAX_WIDTH = 340;
+const LINK_POPUP_GAP = 10;
+
+type LinkAnchor = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+function computeLinkPopupLayout(
+  anchor: LinkAnchor,
+  windowWidth: number,
+  popupWidth: number,
+  popupHeight: number,
+) {
+  const centeredLeft = anchor.x + anchor.width / 2 - popupWidth / 2;
+  const left = Math.max(
+    LINK_POPUP_HORIZONTAL_INSET,
+    Math.min(centeredLeft, windowWidth - popupWidth - LINK_POPUP_HORIZONTAL_INSET),
+  );
+  const top = Math.max(LINK_POPUP_HORIZONTAL_INSET, anchor.y - popupHeight - LINK_POPUP_GAP);
+  return { left, top, width: popupWidth };
+}
+
+function LinkEditorPopup({
+  linkText,
+  linkUrl,
+  onChangeLinkText,
+  onChangeLinkUrl,
+  onApply,
+  onKeepKeyboardFocus,
+  autoFocusUrl = false,
+  onLayout,
+}: {
+  linkText: string;
+  linkUrl: string;
+  onChangeLinkText: (value: string) => void;
+  onChangeLinkUrl: (value: string) => void;
+  onApply: () => void;
+  onKeepKeyboardFocus?: () => void;
+  autoFocusUrl?: boolean;
+  onLayout?: (height: number) => void;
+}) {
+  const urlInputRef = useRef<TextInput>(null);
+  const canApply = linkText.trim().length > 0 && linkUrl.trim().length > 0;
+  const applyKeepFocus = keepKeyboardFocusHandlers(onKeepKeyboardFocus);
+
+  useEffect(() => {
+    if (!autoFocusUrl) return;
+    scheduleKeepKeyboardFocus(onKeepKeyboardFocus);
+    const id = setTimeout(() => {
+      urlInputRef.current?.focus();
+    }, 80);
+    return () => clearTimeout(id);
+  }, [autoFocusUrl, onKeepKeyboardFocus]);
+
+  return (
+    <View
+      style={styles.linkPopupCard}
+      onLayout={(event) => onLayout?.(event.nativeEvent.layout.height)}>
+      <TextInput
+        value={linkText}
+        onChangeText={onChangeLinkText}
+        placeholder="Add text"
+        placeholderTextColor="#9ca3af"
+        autoCorrect={false}
+        style={styles.linkFieldInput}
+        returnKeyType="next"
+        onSubmitEditing={() => urlInputRef.current?.focus()}
+      />
+
+      <TextInput
+        ref={urlInputRef}
+        value={linkUrl}
+        onChangeText={onChangeLinkUrl}
+        placeholder="Paste or type a link"
+        placeholderTextColor="#9ca3af"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        style={styles.linkFieldInput}
+        returnKeyType="done"
+        onSubmitEditing={canApply ? onApply : undefined}
+      />
+
+      <View style={styles.linkPopupFooter}>
+        <ThemedText style={styles.linkHintText}>
+          {Platform.OS === "web" ? "Cmd/Ctrl+click to open" : "Tap link to open"}
+        </ThemedText>
+        <Pressable
+          style={[
+            styles.linkApplyButton,
+            !canApply && styles.linkApplyButtonDisabled,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Apply link"
+          disabled={!canApply}
+          onPress={onApply}
+          {...applyKeepFocus}>
+          <ThemedText style={styles.linkApplyText}>Apply</ThemedText>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
 function FormatButton({
   label,
@@ -172,18 +302,33 @@ function BlockTypeMenuIcon({ type }: { type: TextBlockType }) {
   );
 }
 
+function SuperscriptMenuIcon() {
+  return <ThemedText style={styles.scriptMenuIcon}>x²</ThemedText>;
+}
+
+function SubscriptMenuIcon() {
+  return <ThemedText style={styles.scriptMenuIcon}>x₂</ThemedText>;
+}
+
 function FormatSubmenu({
   kind,
   variant,
   onSelectColor,
   onSelectHighlight,
   onSelectFontSize,
+  onAdjustFontSize,
+  onAdjustLineHeight,
   onSelectBlockType,
   onSelectFontFamily,
   onOverflowAction,
+  onNavigateSubmenu,
   onClose,
   onKeepKeyboardFocus,
   selectedFontFamily = null,
+  selectedFontSize = null,
+  selectedLineHeight = null,
+  canAdjustFontSize = false,
+  canAdjustLineHeight = false,
   fontFamilyScrollRef,
 }: {
   kind: SubmenuKind;
@@ -191,17 +336,41 @@ function FormatSubmenu({
   onSelectColor: (color: string) => void;
   onSelectHighlight: (color: string) => void;
   onSelectFontSize: (size: TextFontSizeOption) => void;
+  onAdjustFontSize: (delta: -1 | 1) => void;
+  onAdjustLineHeight: (delta: -1 | 1) => void;
   onSelectBlockType: (blockType: TextBlockType) => void;
   onSelectFontFamily: (fontFamily: string) => void;
-  onOverflowAction: (action: Extract<TextFormatAction, "italic" | "strikethrough" | "code">) => void;
+  onOverflowAction: (
+    action: Extract<
+      TextFormatAction,
+      "italic" | "strikethrough" | "code" | "superscript" | "subscript"
+    >,
+  ) => void;
+  onNavigateSubmenu: (kind: SubmenuKind) => void;
   onClose: () => void;
   onKeepKeyboardFocus?: () => void;
   selectedFontFamily?: string | null;
+  selectedFontSize?: number | null;
+  selectedLineHeight?: number | null;
+  canAdjustFontSize?: boolean;
+  canAdjustLineHeight?: boolean;
   fontFamilyScrollRef?: React.RefObject<ScrollView | null>;
 }) {
   if (!kind) return null;
 
   const keepFocus = keepKeyboardFocusHandlers(onKeepKeyboardFocus);
+  const currentFontSize = selectedFontSize ?? DEFAULT_FONT_SIZE_DISPLAY;
+  const canDecreaseFontSize =
+    canAdjustFontSize && currentFontSize > TEXT_FONT_SIZE_MIN;
+  const canIncreaseFontSize =
+    canAdjustFontSize && currentFontSize < TEXT_FONT_SIZE_MAX;
+  const currentLineHeight = selectedLineHeight ?? DEFAULT_LINE_HEIGHT_DISPLAY;
+  const canDecreaseLineHeight =
+    canAdjustLineHeight &&
+    roundLineHeight(currentLineHeight - TEXT_LINE_HEIGHT_STEP) >= TEXT_LINE_HEIGHT_MIN;
+  const canIncreaseLineHeight =
+    canAdjustLineHeight &&
+    roundLineHeight(currentLineHeight + TEXT_LINE_HEIGHT_STEP) <= TEXT_LINE_HEIGHT_MAX;
 
   if (kind === "fontFamily") {
     const fontFamilyScroll = (
@@ -273,7 +442,9 @@ function FormatSubmenu({
         ? "Highlight"
         : kind === "fontSize"
           ? "Font size"
-          : kind === "blockType"
+          : kind === "lineHeight"
+            ? "Line height"
+            : kind === "blockType"
             ? "Text style"
             : "More options";
 
@@ -328,25 +499,111 @@ function FormatSubmenu({
           ))}
         </View>
       ) : kind === "fontSize" ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.fontSizeRow}
-          keyboardShouldPersistTaps="always">
-          {TEXT_FONT_SIZE_OPTIONS.map((size) => (
+        <View style={styles.fontSizePanel}>
+          <View style={styles.fontSizeStepper}>
             <Pressable
-              key={size}
-              style={styles.fontSizeChip}
+              style={[
+                styles.fontSizeStepButton,
+                !canDecreaseFontSize && styles.fontSizeStepButtonDisabled,
+              ]}
               accessibilityRole="button"
-              accessibilityLabel={`Font size ${size}`}
-              onPress={() => onSelectFontSize(size)}
+              accessibilityLabel="Decrease font size by 1"
+              disabled={!canDecreaseFontSize}
+              onPress={() => onAdjustFontSize(-1)}
               {...keepFocus}>
-              <ThemedText style={[styles.fontSizeChipText, { fontSize: Math.min(size, 18) }]}>
-                {size}
-              </ThemedText>
+              <AppSymbol
+                ios="chevron.left"
+                android="chevron-left"
+                size={16}
+                tintColor="#374151"
+              />
             </Pressable>
-          ))}
-        </ScrollView>
+            <ThemedText style={styles.fontSizeValue}>{currentFontSize}</ThemedText>
+            <Pressable
+              style={[
+                styles.fontSizeStepButton,
+                !canIncreaseFontSize && styles.fontSizeStepButtonDisabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Increase font size by 1"
+              disabled={!canIncreaseFontSize}
+              onPress={() => onAdjustFontSize(1)}
+              {...keepFocus}>
+              <AppSymbol
+                ios="chevron.right"
+                android="chevron-right"
+                size={16}
+                tintColor="#374151"
+              />
+            </Pressable>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.fontSizeScroll}
+            contentContainerStyle={styles.fontSizeRow}
+            keyboardShouldPersistTaps="always">
+            {TEXT_FONT_SIZE_OPTIONS.map((size) => (
+              <Pressable
+                key={size}
+                style={[
+                  styles.fontSizeChip,
+                  selectedFontSize === size && styles.fontSizeChipActive,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Font size ${size}`}
+                onPress={() => onSelectFontSize(size)}
+                {...keepFocus}>
+                <ThemedText
+                  style={[styles.fontSizeChipText, { fontSize: Math.min(size, 18) }]}>
+                  {size}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : kind === "lineHeight" ? (
+        <View style={styles.fontSizePanel}>
+          <View style={styles.fontSizeStepper}>
+            <Pressable
+              style={[
+                styles.fontSizeStepButton,
+                !canDecreaseLineHeight && styles.fontSizeStepButtonDisabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Decrease line height by 0.1"
+              disabled={!canDecreaseLineHeight}
+              onPress={() => onAdjustLineHeight(-1)}
+              {...keepFocus}>
+              <AppSymbol
+                ios="chevron.left"
+                android="chevron-left"
+                size={16}
+                tintColor="#374151"
+              />
+            </Pressable>
+            <ThemedText style={styles.fontSizeValue}>
+              {currentLineHeight.toFixed(1)}
+            </ThemedText>
+            <Pressable
+              style={[
+                styles.fontSizeStepButton,
+                !canIncreaseLineHeight && styles.fontSizeStepButtonDisabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Increase line height by 0.1"
+              disabled={!canIncreaseLineHeight}
+              onPress={() => onAdjustLineHeight(1)}
+              {...keepFocus}>
+              <AppSymbol
+                ios="chevron.right"
+                android="chevron-right"
+                size={16}
+                tintColor="#374151"
+              />
+            </Pressable>
+          </View>
+        </View>
       ) : kind === "blockType" ? (
         <View style={styles.blockTypeList}>
           {TEXT_BLOCK_OPTIONS.map((option) => (
@@ -391,6 +648,33 @@ function FormatSubmenu({
             <ThemedText style={styles.codeLetters}>&lt; &gt;</ThemedText>
             <ThemedText style={styles.overflowLabel}>Code</ThemedText>
           </Pressable>
+          <Pressable
+            style={styles.overflowRow}
+            accessibilityRole="button"
+            accessibilityLabel="Superscript"
+            onPress={() => onOverflowAction("superscript")}
+            {...keepFocus}>
+            <SuperscriptMenuIcon />
+            <ThemedText style={styles.overflowLabel}>Superscript</ThemedText>
+          </Pressable>
+          <Pressable
+            style={styles.overflowRow}
+            accessibilityRole="button"
+            accessibilityLabel="Subscript"
+            onPress={() => onOverflowAction("subscript")}
+            {...keepFocus}>
+            <SubscriptMenuIcon />
+            <ThemedText style={styles.overflowLabel}>Subscript</ThemedText>
+          </Pressable>
+          <Pressable
+            style={styles.overflowRow}
+            accessibilityRole="button"
+            accessibilityLabel="Line height"
+            onPress={() => onNavigateSubmenu("lineHeight")}
+            {...keepFocus}>
+            <AiOutlineLineHeightIcon size={18} color="#374151" />
+            <ThemedText style={styles.overflowLabel}>Line height</ThemedText>
+          </Pressable>
         </View>
       )}
     </>
@@ -413,6 +697,8 @@ function FormatToolbarButtons({
   onOpenSubmenu,
   activeSubmenu,
   scrollRef,
+  linkButtonRef,
+  linkEditorOpen,
   variant,
   onKeepKeyboardFocus,
   selectionFontSize,
@@ -423,6 +709,8 @@ function FormatToolbarButtons({
   onOpenSubmenu: (kind: SubmenuKind) => void;
   activeSubmenu: SubmenuKind;
   scrollRef: React.RefObject<ScrollView | null>;
+  linkButtonRef: RefObject<View | null>;
+  linkEditorOpen: boolean;
   variant: "solid" | "glass";
   onKeepKeyboardFocus?: () => void;
   selectionFontSize?: number | null;
@@ -447,7 +735,11 @@ function FormatToolbarButtons({
         onKeepKeyboardFocus={onKeepKeyboardFocus}>
         <FormatLetter
           letter="B"
-          style={[styles.boldLetter, selectionBoldActive && styles.formatLetterActive]}
+          style={[
+            styles.boldLetter,
+            styles.mainToolbarLetter,
+            selectionBoldActive && styles.formatLetterActive,
+          ]}
         />
       </FormatButton>
 
@@ -464,22 +756,22 @@ function FormatToolbarButtons({
 
       <FormatButton
         variant={variant}
+        label="Text color"
+        active={activeSubmenu === "color"}
+        onKeepKeyboardFocus={onKeepKeyboardFocus}
+        onPress={() => onOpenSubmenu(activeSubmenu === "color" ? null : "color")}>
+        <ColorTrigger color="#374151" />
+      </FormatButton>
+
+      <FormatButton
+        variant={variant}
         label="Highlight"
         active={activeSubmenu === "highlight"}
         onKeepKeyboardFocus={onKeepKeyboardFocus}
         onPress={() =>
           onOpenSubmenu(activeSubmenu === "highlight" ? null : "highlight")
         }>
-        <PiHighlighterLightIcon size={21} color="#374151" />
-      </FormatButton>
-
-      <FormatButton
-        variant={variant}
-        label="Text color"
-        active={activeSubmenu === "color"}
-        onKeepKeyboardFocus={onKeepKeyboardFocus}
-        onPress={() => onOpenSubmenu(activeSubmenu === "color" ? null : "color")}>
-        <ColorTrigger color="#374151" />
+        <PiHighlighterLightIcon size={MAIN_TOOLBAR_ICON_SIZE} color="#374151" />
       </FormatButton>
 
       <FormatButton
@@ -490,18 +782,26 @@ function FormatToolbarButtons({
         <AppSymbol
           ios="checkmark.circle"
           android="check-circle-outline"
-          size={21}
+          size={MAIN_TOOLBAR_CHECKLIST_ICON_SIZE}
           tintColor="#374151"
         />
       </FormatButton>
 
-      <FormatButton
-        variant={variant}
-        label="Add link"
-        onKeepKeyboardFocus={onKeepKeyboardFocus}
-        onPress={onOpenLinkEditor}>
-        <AppSymbol ios="link" android="link" size={21} tintColor="#374151" />
-      </FormatButton>
+      <View ref={linkButtonRef} collapsable={false}>
+        <FormatButton
+          variant={variant}
+          label="Add link"
+          active={linkEditorOpen}
+          onKeepKeyboardFocus={onKeepKeyboardFocus}
+          onPress={onOpenLinkEditor}>
+          <AppSymbol
+            ios="link"
+            android="link"
+            size={MAIN_TOOLBAR_ICON_SIZE}
+            tintColor="#374151"
+          />
+        </FormatButton>
+      </View>
 
       <FormatButton
         variant={variant}
@@ -537,7 +837,7 @@ function FormatToolbarButtons({
         <AppSymbol
           ios="list.bullet"
           android="format-list-bulleted"
-          size={21}
+          size={MAIN_TOOLBAR_ICON_SIZE}
           tintColor="#374151"
         />
       </FormatButton>
@@ -550,7 +850,7 @@ function FormatToolbarButtons({
         <AppSymbol
           ios="list.number"
           android="format-list-numbered"
-          size={21}
+          size={MAIN_TOOLBAR_ICON_SIZE}
           tintColor="#374151"
         />
       </FormatButton>
@@ -560,7 +860,7 @@ function FormatToolbarButtons({
         label="Clear formatting"
         onKeepKeyboardFocus={onKeepKeyboardFocus}
         onPress={() => onFormat("clearFormatting")}>
-        <FluentClearFormattingIcon size={21} color="#374151" />
+        <FluentClearFormattingIcon size={MAIN_TOOLBAR_ICON_SIZE} color="#374151" />
       </FormatButton>
 
       <FormatButton
@@ -568,7 +868,10 @@ function FormatToolbarButtons({
         label="Underline"
         onKeepKeyboardFocus={onKeepKeyboardFocus}
         onPress={() => onFormat("underline")}>
-        <FormatLetter letter="U" style={styles.underlineLetter} />
+        <FormatLetter
+          letter="U"
+          style={[styles.underlineLetter, styles.mainToolbarLetter]}
+        />
       </FormatButton>
 
       <FormatButton
@@ -593,22 +896,65 @@ export function TextFormatToolbar({
   onFormat,
   onDismiss,
   onKeepKeyboardFocus,
+  onLinkEditorOpenChange,
   selectionHighlightColor = null,
   selectionFontSize = null,
+  selectionLineHeight = null,
   selectionBoldActive = false,
   selectionFontFamily = null,
+  selectionText = null,
+  linkEditorOpen: linkEditorOpenProp = false,
+  canAdjustFontSize = false,
+  canAdjustLineHeight = false,
 }: TextFormatToolbarProps) {
+  const { width: windowWidth } = useWindowDimensions();
   const [linkEditorOpen, setLinkEditorOpen] = useState(false);
+  const [linkText, setLinkText] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
+  const [linkAnchor, setLinkAnchor] = useState<LinkAnchor | null>(null);
+  const [linkPopupHeight, setLinkPopupHeight] = useState(180);
   const [activeSubmenu, setActiveSubmenu] = useState<SubmenuKind>(null);
   const scrollRef = useRef<ScrollView>(null);
   const fontFamilyScrollRef = useRef<ScrollView>(null);
+  const linkButtonRef = useRef<View>(null);
+
+  const linkPopupWidth = Math.min(
+    windowWidth - LINK_POPUP_HORIZONTAL_INSET * 2,
+    LINK_POPUP_MAX_WIDTH,
+  );
+
+  const setLinkEditorVisible = (open: boolean) => {
+    setLinkEditorOpen(open);
+    onLinkEditorOpenChange?.(open);
+  };
+
+  useEffect(() => {
+    if (!linkEditorOpenProp && linkEditorOpen) {
+      setLinkEditorOpen(false);
+      setLinkText("");
+      setLinkUrl("");
+      setLinkAnchor(null);
+    }
+  }, [linkEditorOpenProp, linkEditorOpen]);
 
   useEffect(() => {
     if (!visible) {
       setActiveSubmenu(null);
+      if (linkEditorOpen) {
+        setLinkEditorOpen(false);
+        onLinkEditorOpenChange?.(false);
+      }
+      setLinkText("");
+      setLinkUrl("");
+      setLinkAnchor(null);
     }
-  }, [visible]);
+  }, [visible, linkEditorOpen, onLinkEditorOpenChange]);
+
+  useEffect(() => {
+    if (!canAdjustFontSize) {
+      setActiveSubmenu(null);
+    }
+  }, [canAdjustFontSize]);
 
   useEffect(() => {
     if (activeSubmenu !== "fontFamily") return;
@@ -618,51 +964,103 @@ export function TextFormatToolbar({
   }, [activeSubmenu]);
 
   const closeLinkEditor = () => {
-    setLinkEditorOpen(false);
+    setLinkEditorVisible(false);
+    setLinkText("");
     setLinkUrl("");
+    setLinkAnchor(null);
+    scheduleKeepKeyboardFocus(onKeepKeyboardFocus);
   };
 
   const handleLinkApply = () => {
-    onFormat("link", { linkUrl });
+    const trimmedText = linkText.trim();
+    const trimmedUrl = linkUrl.trim();
+    if (!trimmedText || !trimmedUrl) return;
+
+    onFormat("link", { linkText: trimmedText, linkUrl: trimmedUrl });
     closeLinkEditor();
   };
 
+  const handleOpenLinkEditor = () => {
+    if (linkEditorOpen) {
+      closeLinkEditor();
+      return;
+    }
+
+    setActiveSubmenu(null);
+    setLinkText(selectionText ?? "");
+    setLinkUrl("");
+    setLinkEditorVisible(true);
+    scheduleKeepKeyboardFocus(onKeepKeyboardFocus);
+    requestAnimationFrame(() => {
+      linkButtonRef.current?.measureInWindow((x, y, width, height) => {
+        setLinkAnchor({ x, y, width, height });
+      });
+    });
+  };
+
   const handleOpenSubmenu = (kind: SubmenuKind) => {
+    closeLinkEditor();
     setActiveSubmenu(kind);
-    if (kind === "fontSize" || kind === "fontFamily" || kind === "overflow") {
+    scheduleKeepKeyboardFocus(onKeepKeyboardFocus);
+    if (kind === "fontSize" || kind === "fontFamily" || kind === "overflow" || kind === "lineHeight") {
       requestAnimationFrame(() => {
         scrollRef.current?.scrollToEnd({ animated: true });
       });
     }
   };
 
-  const linkEditorBody = (
-    <>
-      <ThemedText style={styles.linkTitle}>Add link</ThemedText>
-      <TextInput
-        value={linkUrl}
-        onChangeText={setLinkUrl}
-        placeholder="Paste or type a link"
-        placeholderTextColor="#9ca3af"
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="url"
-        style={[
-          styles.linkInput,
-          variant === "glass" && styles.linkInputGlass,
-        ]}
-        autoFocus
+  const linkPopupLayout =
+    linkEditorOpen && linkAnchor
+      ? computeLinkPopupLayout(linkAnchor, windowWidth, linkPopupWidth, linkPopupHeight)
+      : null;
+
+  const linkPopup = linkPopupLayout ? (
+    <View
+      style={[
+        styles.linkPopupFloating,
+        {
+          top: linkPopupLayout.top,
+          left: linkPopupLayout.left,
+          width: linkPopupLayout.width,
+        },
+      ]}
+      pointerEvents="box-none">
+      <LinkEditorPopup
+        linkText={linkText}
+        linkUrl={linkUrl}
+        onChangeLinkText={setLinkText}
+        onChangeLinkUrl={setLinkUrl}
+        onApply={handleLinkApply}
+        onKeepKeyboardFocus={onKeepKeyboardFocus}
+        autoFocusUrl
+        onLayout={setLinkPopupHeight}
       />
-      <View style={styles.linkActions}>
-        <Pressable style={styles.linkCancel} onPress={closeLinkEditor}>
-          <ThemedText style={styles.linkCancelText}>Cancel</ThemedText>
-        </Pressable>
-        <Pressable style={styles.linkApply} onPress={handleLinkApply}>
-          <ThemedText style={styles.linkApplyText}>Apply</ThemedText>
-        </Pressable>
-      </View>
-    </>
-  );
+    </View>
+  ) : null;
+
+  const handleAdjustFontSize = (delta: -1 | 1) => {
+    const base = selectionFontSize ?? DEFAULT_FONT_SIZE_DISPLAY;
+    const next = Math.min(
+      TEXT_FONT_SIZE_MAX,
+      Math.max(TEXT_FONT_SIZE_MIN, base + delta),
+    );
+    if (next === base) return;
+    onFormat("fontSize", { fontSize: next });
+    scheduleKeepKeyboardFocus(onKeepKeyboardFocus);
+  };
+
+  const handleAdjustLineHeight = (delta: -1 | 1) => {
+    const base = selectionLineHeight ?? DEFAULT_LINE_HEIGHT_DISPLAY;
+    const next = roundLineHeight(
+      Math.min(
+        TEXT_LINE_HEIGHT_MAX,
+        Math.max(TEXT_LINE_HEIGHT_MIN, base + delta * TEXT_LINE_HEIGHT_STEP),
+      ),
+    );
+    if (next === base) return;
+    onFormat("lineHeight", { lineHeight: next });
+    scheduleKeepKeyboardFocus(onKeepKeyboardFocus);
+  };
 
   const toolbar = (
     <View style={styles.toolbarStack}>
@@ -678,6 +1076,10 @@ export function TextFormatToolbar({
               kind={activeSubmenu}
               variant={variant}
               selectedFontFamily={selectionFontFamily}
+              selectedFontSize={selectionFontSize}
+              selectedLineHeight={selectionLineHeight}
+              canAdjustFontSize={canAdjustFontSize}
+              canAdjustLineHeight={canAdjustLineHeight}
               fontFamilyScrollRef={fontFamilyScrollRef}
               onSelectColor={(color) => {
                 onFormat("color", { color });
@@ -691,6 +1093,8 @@ export function TextFormatToolbar({
                 onFormat("fontSize", { fontSize });
                 setActiveSubmenu(null);
               }}
+              onAdjustFontSize={handleAdjustFontSize}
+              onAdjustLineHeight={handleAdjustLineHeight}
               onSelectBlockType={(blockType) => {
                 onFormat("blockType", { blockType });
                 setActiveSubmenu(null);
@@ -704,6 +1108,10 @@ export function TextFormatToolbar({
                 onFormat(action);
                 setActiveSubmenu(null);
               }}
+              onNavigateSubmenu={(nextKind) => {
+                setActiveSubmenu(nextKind);
+                scheduleKeepKeyboardFocus(onKeepKeyboardFocus);
+              }}
               onClose={() => setActiveSubmenu(null)}
               onKeepKeyboardFocus={onKeepKeyboardFocus}
             />
@@ -716,10 +1124,12 @@ export function TextFormatToolbar({
             <FormatToolbarButtons
               variant={variant}
               onFormat={onFormat}
-              onOpenLinkEditor={() => setLinkEditorOpen(true)}
+              onOpenLinkEditor={handleOpenLinkEditor}
               onOpenSubmenu={handleOpenSubmenu}
               activeSubmenu={activeSubmenu}
               scrollRef={scrollRef}
+              linkButtonRef={linkButtonRef}
+              linkEditorOpen={linkEditorOpen}
               onKeepKeyboardFocus={onKeepKeyboardFocus}
               selectionFontSize={selectionFontSize}
               selectionBoldActive={selectionBoldActive}
@@ -738,10 +1148,12 @@ export function TextFormatToolbar({
             <FormatToolbarButtons
               variant={variant}
               onFormat={onFormat}
-              onOpenLinkEditor={() => setLinkEditorOpen(true)}
+              onOpenLinkEditor={handleOpenLinkEditor}
               onOpenSubmenu={handleOpenSubmenu}
               activeSubmenu={activeSubmenu}
               scrollRef={scrollRef}
+              linkButtonRef={linkButtonRef}
+              linkEditorOpen={linkEditorOpen}
               onKeepKeyboardFocus={onKeepKeyboardFocus}
               selectionFontSize={selectionFontSize}
               selectionBoldActive={selectionBoldActive}
@@ -762,6 +1174,7 @@ export function TextFormatToolbar({
 
   return (
     <>
+      {visible && linkPopup}
       {layout === "accessory" ? (
         visible ? (
           <View
@@ -781,24 +1194,6 @@ export function TextFormatToolbar({
           {toolbar}
         </View>
       ) : null}
-
-      <Modal
-        visible={linkEditorOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={closeLinkEditor}>
-        <Pressable style={styles.linkBackdrop} onPress={closeLinkEditor}>
-          <Pressable onPress={() => undefined}>
-            {variant === "glass" ? (
-              <LiquidGlassSurface style={styles.linkCardGlass} borderRadius={16}>
-                <View style={styles.linkCardGlassContent}>{linkEditorBody}</View>
-              </LiquidGlassSurface>
-            ) : (
-              <View style={styles.linkCard}>{linkEditorBody}</View>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
     </>
   );
 }
@@ -907,6 +1302,9 @@ const styles = StyleSheet.create({
   boldLetter: {
     fontWeight: "700",
   },
+  mainToolbarLetter: {
+    fontSize: MAIN_TOOLBAR_LETTER_SIZE,
+  },
   formatLetterActive: {
     color: "#2563eb",
   },
@@ -924,16 +1322,22 @@ const styles = StyleSheet.create({
     color: "#374151",
     fontWeight: "600",
   },
+  scriptMenuIcon: {
+    minWidth: 24,
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#374151",
+  },
   colorTrigger: {
     alignItems: "center",
     justifyContent: "center",
     minWidth: 18,
   },
   colorTriggerLetter: {
-    fontSize: 19,
+    fontSize: 21,
     fontWeight: "700",
     color: "#374151",
-    lineHeight: 21,
+    lineHeight: 23,
   },
   colorTriggerBar: {
     width: 16,
@@ -942,12 +1346,12 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   fontSizeTrigger: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "600",
     color: "#374151",
   },
   blockTypeTrigger: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "600",
     color: "#374151",
   },
@@ -964,13 +1368,13 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   fontFamilyTrigger: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "500",
     color: "#374151",
     maxWidth: 72,
   },
   overflowTrigger: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "600",
     color: "#63636b",
     letterSpacing: 1,
@@ -1090,11 +1494,45 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#d1d5db",
   },
+  fontSizePanel: {
+    gap: 4,
+    paddingBottom: 2,
+  },
+  fontSizeStepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+  },
+  fontSizeValue: {
+    minWidth: 40,
+    textAlign: "center",
+    fontSize: 18,
+    lineHeight: 20,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  fontSizeStepButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.35)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.45)",
+  },
+  fontSizeStepButtonDisabled: {
+    opacity: 0.35,
+  },
+  fontSizeScroll: {
+    flexGrow: 0,
+    height: 32,
+  },
   fontSizeRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingBottom: 2,
   },
   fontSizeChip: {
     minWidth: 36,
@@ -1107,34 +1545,34 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.45)",
   },
+  fontSizeChipActive: {
+    backgroundColor: "rgba(37,99,235,0.12)",
+    borderColor: "rgba(37,99,235,0.35)",
+  },
   fontSizeChipText: {
     color: "#374151",
     fontWeight: "600",
   },
-  linkBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "center",
-    paddingHorizontal: 24,
+  linkPopupFloating: {
+    position: "absolute",
+    zIndex: 60,
+    elevation: 60,
   },
-  linkCard: {
+  linkPopupCard: {
     backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 16,
-    gap: 12,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e5e7eb",
+    padding: 12,
+    gap: 10,
+    width: "100%",
+    shadowColor: "#000000",
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
   },
-  linkCardGlass: {
-    padding: 16,
-  },
-  linkCardGlassContent: {
-    gap: 12,
-  },
-  linkTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#111827",
-  },
-  linkInput: {
+  linkFieldInput: {
     borderWidth: 1,
     borderColor: "#e5e7eb",
     borderRadius: 10,
@@ -1142,29 +1580,27 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
     color: "#111827",
+    backgroundColor: "#ffffff",
   },
-  linkInputGlass: {
-    backgroundColor: "rgba(255,255,255,0.45)",
-    borderColor: "rgba(255,255,255,0.55)",
-  },
-  linkActions: {
+  linkPopupFooter: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 8,
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
-  linkCancel: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  linkCancelText: {
-    fontSize: 15,
+  linkHintText: {
+    flex: 1,
+    fontSize: 13,
     color: "#6b7280",
   },
-  linkApply: {
+  linkApplyButton: {
     backgroundColor: "#2563eb",
     borderRadius: 8,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 8,
+  },
+  linkApplyButtonDisabled: {
+    opacity: 0.45,
   },
   linkApplyText: {
     fontSize: 15,

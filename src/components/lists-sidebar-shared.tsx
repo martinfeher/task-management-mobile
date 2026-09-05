@@ -15,6 +15,7 @@ import { withUniwind } from "uniwind";
 
 import { AppSymbol } from "@/components/app-symbol";
 import { AddTaskButton } from "@/components/add-task-button";
+import { ListsCreateButton } from "@/components/lists-create-button";
 import { SettingsModal } from "@/components/settings-modal";
 import { SidebarRow } from "@/components/sidebar-row";
 import { TodayCalendarIcon } from "@/components/today-calendar-icon";
@@ -38,6 +39,7 @@ export type ListsSidebarProps = {
   onRetry: () => void;
   onReorderLists?: (lists: SidebarListItem[]) => void;
   onCreateList?: () => void;
+  onCreateLabel?: () => void;
   onRenameList?: (list: SidebarListItem) => void;
   onDeleteList?: (list: SidebarListItem) => void;
   onRenameLabel?: (label: SidebarLabelItem) => void;
@@ -58,6 +60,8 @@ export function ListsSidebarShell({
   refreshing,
   onRefresh,
   onRetry,
+  onCreateList,
+  onCreateLabel,
   children,
 }: {
   loading: boolean;
@@ -66,6 +70,8 @@ export function ListsSidebarShell({
   refreshing: boolean;
   onRefresh: () => void;
   onRetry: () => void;
+  onCreateList?: () => void;
+  onCreateLabel?: () => void;
   children: (refreshControl: ReactNode) => ReactNode;
 }) {
   const theme = useTheme();
@@ -134,6 +140,12 @@ export function ListsSidebarShell({
           )}
         </SafeAreaView>
       </GestureHandlerRootView>
+      {onCreateList && onCreateLabel ? (
+        <ListsCreateButton
+          onCreateList={onCreateList}
+          onCreateLabel={onCreateLabel}
+        />
+      ) : null}
       <AddTaskButton parentEndsAtTabBarTop />
       <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </View>

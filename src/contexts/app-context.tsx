@@ -56,7 +56,7 @@ type AppContextValue = {
   loadSidebar: (isRefresh?: boolean) => Promise<void>;
   selectView: (view: SelectedView, options?: { goToTasks?: boolean }) => void;
   loadTasksForView: (view: SelectedView, isRefresh?: boolean) => Promise<void>;
-  openTask: (task: TaskItem) => void;
+  openTask: (task: TaskItem, options?: { fromCalendar?: boolean }) => void;
   handleTaskCompleted: (taskId?: string) => void;
   completeTask: (taskId: string) => Promise<void>;
   uncompleteTask: (taskId: string) => Promise<void>;
@@ -186,7 +186,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const openTask = useCallback((task: TaskItem) => {
+  const openTask = useCallback((task: TaskItem, options?: { fromCalendar?: boolean }) => {
     router.push({
       pathname: "/task/[id]",
       params: {
@@ -194,6 +194,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         name: task.name,
         listName: task.listName ?? "",
         dueDate: task.dueDate ?? "",
+        ...(options?.fromCalendar
+          ? {
+              fromCalendar: "1",
+              calendarColor: task.calendarColor ?? "",
+            }
+          : null),
       },
     });
   }, []);

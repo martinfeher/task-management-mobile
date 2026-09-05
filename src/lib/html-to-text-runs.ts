@@ -11,9 +11,12 @@ export type TextRunStyle = {
   underline?: boolean;
   strikethrough?: boolean;
   code?: boolean;
+  superscript?: boolean;
+  subscript?: boolean;
   color?: string;
   highlightColor?: string;
   fontSize?: number;
+  lineHeight?: number;
   fontFamilyId?: TextFontFamilyId;
 };
 
@@ -34,6 +37,8 @@ const TAG_STYLE: Record<string, Partial<ActiveStyle>> = {
   strike: { strikethrough: true },
   del: { strikethrough: true },
   code: { code: true },
+  sup: { superscript: true },
+  sub: { subscript: true },
 };
 
 function decodeEntity(value: string) {
@@ -57,10 +62,12 @@ function parseSpanStyle(attr: string): Partial<ActiveStyle> {
   const colorMatch = styleContent.match(/(?:^|;|\s)color:\s*([^;"']+)/i);
   const backgroundMatch = styleContent.match(/background-color:\s*([^;"']+)/i);
   const sizeMatch = styleContent.match(/font-size:\s*(\d+(?:\.\d+)?)px/i);
+  const lineHeightMatch = styleContent.match(/line-height:\s*(\d+(?:\.\d+)?)/i);
   const fontFamilyMatch = styleContent.match(/font-family:\s*([^;]+)/i);
   if (colorMatch?.[1]) style.color = colorMatch[1].trim();
   if (backgroundMatch?.[1]) style.highlightColor = backgroundMatch[1].trim();
   if (sizeMatch?.[1]) style.fontSize = Number(sizeMatch[1]);
+  if (lineHeightMatch?.[1]) style.lineHeight = Number(lineHeightMatch[1]);
   if (fontFamilyMatch?.[1]) {
     const fontFamilyId = cssFontFamilyToMobileId(fontFamilyMatch[1].trim());
     if (fontFamilyId) style.fontFamilyId = fontFamilyId;
@@ -138,9 +145,19 @@ export function runToTextStyle(
   });
   const useSystemTypography = !fontFamily || !usesCustomFontFamily(fontFamily);
 
+  let fontSize = runStyle.fontSize ?? base?.fontSize ?? 17;
+  let lineHeight = base?.lineHeight ?? 26;
+  if (runStyle.lineHeight) {
+    lineHeight = Math.round(fontSize * runStyle.lineHeight);
+  }
+  if (runStyle.superscript || runStyle.subscript) {
+    fontSize = Math.round(fontSize * 0.75);
+    lineHeight = Math.round(lineHeight * 0.85);
+  }
+
   const style = {
-    fontSize: runStyle.fontSize ?? base?.fontSize ?? 17,
-    lineHeight: base?.lineHeight ?? 26,
+    fontSize,
+    lineHeight,
     color: runStyle.color ?? base?.color ?? "#374151",
     fontWeight: useSystemTypography
       ? runStyle.bold
@@ -191,8 +208,11 @@ export function runToEditingMirrorStyle(
   runStyle: TextRunStyle,
   base?: { fontSize?: number; lineHeight?: number; color?: string },
 ) {
-  const fontSize = base?.fontSize ?? 17;
-  const lineHeight = base?.lineHeight ?? 26;
+  const fontSize = runStyle.fontSize ?? base?.fontSize ?? 17;
+  let lineHeight = base?.lineHeight ?? 26;
+  if (runStyle.lineHeight) {
+    lineHeight = Math.round(fontSize * runStyle.lineHeight);
+  }
 
   return {
     fontSize,
@@ -216,7 +236,77 @@ export function runToEditingMirrorStyle(
 }
 
 export function htmlHasInlineFormatting(html: string) {
-  return /<(b|strong|i|em|u|s|strike|del|code|span)\b/i.test(html);
+  return /<(b|strong|i|em|u|s|strike|del|code|sup|sub|span)\b/i.test(html);
+}
+
+export type TextSelectionRange = { start: number; end: number };
+
+export type MirrorRunSegment = {
+  key: string;
+  text: string;
+  style: TextRunStyle;
+  selected: boolean;
+};
+
+/** Split mirror runs at selection boundaries so highlights use each run's font metrics. */
+export function splitMirrorRunsForSelection(
+  runs: TextRun[],
+  selection: TextSelectionRange | undefined,
+): MirrorRunSegment[] {
+  if (!selection || selection.start >= selection.end) {
+    return runs.map((run, index) => ({
+      key: `${index}`,
+      text: run.text,
+      style: run.style,
+      selected: false,
+    }));
+  }
+
+  const { start: selStart, end: selEnd } = selection;
+  const segments: MirrorRunSegment[] = [];
+  let offset = 0;
+
+  runs.forEach((run, runIndex) => {
+    const runStart = offset;
+    const runEnd = offset + run.text.length;
+    offset = runEnd;
+
+    if (runEnd <= selStart || runStart >= selEnd) {
+      segments.push({
+        key: `${runIndex}`,
+        text: run.text,
+        style: run.style,
+        selected: false,
+      });
+      return;
+    }
+
+    const localStart = Math.max(0, selStart - runStart);
+    const localEnd = Math.min(run.text.length, selEnd - runStart);
+    const parts = [
+      { text: run.text.slice(0, localStart), selected: false },
+      { text: run.text.slice(localStart, localEnd), selected: true },
+      { text: run.text.slice(localEnd), selected: false },
+    ].filter((part) => part.text.length > 0);
+
+    parts.forEach((part, partIndex) => {
+      segments.push({
+        key: `${runIndex}-${partIndex}`,
+        text: part.text,
+        style: run.style,
+        selected: part.selected,
+      });
+    });
+  });
+
+  return segments;
+}
+
+/** True when span styling changes text metrics and needs a mirror-aligned selection overlay. */
+export function htmlHasMetricSpanFormatting(html: string) {
+  return htmlToTextRuns(html).some(
+    (run) => Boolean(run.style.fontSize) || Boolean(run.style.fontFamilyId) || Boolean(run.style.lineHeight),
+  );
 }
 
 /** True when HTML has span-based styling native enriched cannot render (color, highlight, fonts). */

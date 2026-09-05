@@ -6,6 +6,7 @@ import { ListsSidebar } from "@/components/lists-sidebar";
 import { ThemedText } from "@/components/themed-text";
 import { useApp } from "@/contexts/app-context";
 import {
+  createLabel,
   createList,
   deleteLabelApi,
   deleteList,
@@ -17,6 +18,7 @@ import type { SelectedView, SidebarLabelItem, SidebarListItem } from "@/types/to
 
 type NamePromptState =
   | { mode: "create-list" }
+  | { mode: "create-label" }
   | { mode: "rename-list"; list: SidebarListItem }
   | { mode: "rename-label"; label: SidebarLabelItem };
 
@@ -58,6 +60,11 @@ export function ListsDrawerContent() {
     setNamePrompt({ mode: "rename-label", label });
   }
 
+  function openCreateLabelPrompt() {
+    setNameDraft("");
+    setNamePrompt({ mode: "create-label" });
+  }
+
   async function submitNamePrompt() {
     if (!namePrompt) return;
     const trimmed = nameDraft.trim();
@@ -66,6 +73,8 @@ export function ListsDrawerContent() {
     try {
       if (namePrompt.mode === "create-list") {
         await createList(trimmed);
+      } else if (namePrompt.mode === "create-label") {
+        await createLabel(trimmed);
       } else if (namePrompt.mode === "rename-list") {
         await renameList(namePrompt.list.id, trimmed);
       } else {
@@ -77,6 +86,8 @@ export function ListsDrawerContent() {
       Alert.alert(
         namePrompt.mode === "create-list"
           ? "Couldn't create list"
+          : namePrompt.mode === "create-label"
+            ? "Couldn't create label"
           : namePrompt.mode === "rename-list"
             ? "Couldn't rename list"
             : "Couldn't rename label",
@@ -126,6 +137,37 @@ export function ListsDrawerContent() {
     if (list) {
       openRenameListPrompt(list);
     }
+  }
+
+  function promptForLabelCreate() {
+    if (Platform.OS === "ios") {
+      Alert.prompt(
+        "New label",
+        undefined,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Save",
+            onPress: (value?: string) => {
+              const trimmed = value?.trim();
+              if (!trimmed) return;
+              void (async () => {
+                try {
+                  await createLabel(trimmed);
+                  await loadSidebar(true);
+                } catch {
+                  Alert.alert("Couldn't create label");
+                }
+              })();
+            },
+          },
+        ],
+        "plain-text",
+      );
+      return;
+    }
+
+    openCreateLabelPrompt();
   }
 
   function promptForLabelName(label: SidebarLabelItem) {
@@ -232,6 +274,7 @@ export function ListsDrawerContent() {
         onRetry={() => void loadSidebar()}
         onReorderLists={reorderLists}
         onCreateList={() => promptForListName("create")}
+        onCreateLabel={promptForLabelCreate}
         onRenameList={(list) => promptForListName("rename", list)}
         onDeleteList={(list) => void handleDeleteList(list)}
         onRenameLabel={promptForLabelName}
@@ -253,6 +296,8 @@ export function ListsDrawerContent() {
             <ThemedText style={styles.title}>
               {namePrompt.mode === "create-list"
                 ? "New list"
+                : namePrompt.mode === "create-label"
+                  ? "New label"
                 : namePrompt.mode === "rename-list"
                   ? "Rename list"
                   : "Edit title"}

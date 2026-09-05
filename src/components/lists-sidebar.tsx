@@ -19,6 +19,7 @@ export function ListsSidebar({
   onRefresh,
   onRetry,
   onCreateList,
+  onCreateLabel,
   onRenameList,
   onDeleteList,
   onRenameLabel,
@@ -35,7 +36,9 @@ export function ListsSidebar({
       error={error}
       refreshing={refreshing}
       onRefresh={onRefresh}
-      onRetry={onRetry}>
+      onRetry={onRetry}
+      onCreateList={onCreateList}
+      onCreateLabel={onCreateLabel}>
       {(refreshControl) => (
         <ScrollView
           className="flex-1"

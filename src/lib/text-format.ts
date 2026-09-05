@@ -18,6 +18,8 @@ export type TextFormatAction =
   | "underline"
   | "strikethrough"
   | "code"
+  | "superscript"
+  | "subscript"
   | "link"
   | "checklist"
   | "bullet"
@@ -25,6 +27,7 @@ export type TextFormatAction =
   | "color"
   | "highlight"
   | "fontSize"
+  | "lineHeight"
   | "blockType"
   | "fontFamily"
   | "clearFormatting";
@@ -93,6 +96,18 @@ export const TEXT_FONT_SIZE_OPTIONS = [12, 14, 16, 17, 18, 20, 24] as const;
 
 export type TextFontSizeOption = (typeof TEXT_FONT_SIZE_OPTIONS)[number];
 
+export const TEXT_FONT_SIZE_MIN = 8;
+export const TEXT_FONT_SIZE_MAX = 96;
+
+export const TEXT_LINE_HEIGHT_MIN = 1;
+export const TEXT_LINE_HEIGHT_MAX = 2.5;
+export const TEXT_LINE_HEIGHT_STEP = 0.1;
+export const DEFAULT_LINE_HEIGHT = 1.5;
+
+export function roundLineHeight(value: number) {
+  return Math.round(value / TEXT_LINE_HEIGHT_STEP) * TEXT_LINE_HEIGHT_STEP;
+}
+
 type TextRange = { start: number; end: number };
 
 const HTML_INLINE_FORMAT = {
@@ -111,6 +126,8 @@ const HTML_INLINE_FORMAT = {
     { open: "<del>", close: "</del>" },
   ],
   code: [{ open: "<code>", close: "</code>" }],
+  superscript: [{ open: "<sup>", close: "</sup>" }],
+  subscript: [{ open: "<sub>", close: "</sub>" }],
 } as const;
 
 type HtmlInlineAction = keyof typeof HTML_INLINE_FORMAT;
@@ -121,6 +138,8 @@ const HTML_INLINE_WRAP_TAG = {
   underline: { open: "<u>", close: "</u>" },
   strikethrough: { open: "<s>", close: "</s>" },
   code: { open: "<code>", close: "</code>" },
+  superscript: { open: "<sup>", close: "</sup>" },
+  subscript: { open: "<sub>", close: "</sub>" },
 } as const;
 
 import { plainRangeToHtmlRange } from "@/lib/html-plain-mapping";
@@ -140,9 +159,22 @@ function wrapHtmlRange(
   );
 }
 
-function wrapLink(html: string, range: TextRange, url: string) {
+function applyLink(
+  html: string,
+  plainText: string,
+  range: TextRange,
+  url: string,
+  linkText?: string,
+) {
   const trimmedUrl = url.trim();
-  if (!trimmedUrl) return html;
+  if (!trimmedUrl) return { html, plainText, selection: range };
+
+  const selectedPlain = plainText.slice(range.start, range.end);
+  const displayText = (linkText ?? selectedPlain).trim();
+  if (!displayText) return { html, plainText, selection: range };
+
+  const htmlRange = plainRangeToHtmlRange(html, range.start, range.end);
+  if (!htmlRange) return { html, plainText, selection: range };
 
   const safeUrl = trimmedUrl
     .replace(/&/g, "&amp;")
@@ -150,10 +182,19 @@ function wrapLink(html: string, range: TextRange, url: string) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
-  return wrapHtmlRange(html, range, {
-    open: `<a href="${safeUrl}">`,
-    close: "</a>",
-  });
+  const linkedHtml = `<a href="${safeUrl}">${escapeHtml(displayText)}</a>`;
+  const nextHtml =
+    html.slice(0, htmlRange.start) + linkedHtml + html.slice(htmlRange.end);
+  const nextPlainText = detailsHtmlToPlainText(nextHtml);
+
+  return {
+    html: nextHtml,
+    plainText: nextPlainText,
+    selection: {
+      start: range.start,
+      end: range.start + displayText.length,
+    },
+  };
 }
 
 function wrapStyledSpan(
@@ -197,6 +238,8 @@ const INLINE_FORMATTING_TAGS = new Set([
   "strike",
   "del",
   "code",
+  "sup",
+  "sub",
   "a",
 ]);
 
@@ -457,9 +500,11 @@ export function applyTextFormat(
   action: TextFormatAction,
   options?: {
     linkUrl?: string;
+    linkText?: string;
     color?: string;
     highlightColor?: string;
-    fontSize?: TextFontSizeOption;
+    fontSize?: number;
+    lineHeight?: number;
     blockType?: TextBlockType;
     fontFamily?: string;
   },
@@ -498,12 +543,13 @@ export function applyTextFormat(
   }
 
   if (action === "link") {
-    const nextHtml = wrapLink(html, htmlRange, options?.linkUrl ?? "");
-    return {
-      html: nextHtml,
-      plainText: detailsHtmlToPlainText(nextHtml),
+    return applyLink(
+      html,
+      plainText,
       selection,
-    };
+      options?.linkUrl ?? "",
+      options?.linkText,
+    );
   }
 
   if (action === "color") {
@@ -531,6 +577,18 @@ export function applyTextFormat(
     const fontSize = options?.fontSize ?? 17;
     const nextHtml = wrapStyledSpan(html, htmlRange, {
       "font-size": `${fontSize}px`,
+    });
+    return {
+      html: nextHtml,
+      plainText: detailsHtmlToPlainText(nextHtml),
+      selection,
+    };
+  }
+
+  if (action === "lineHeight") {
+    const lineHeight = roundLineHeight(options?.lineHeight ?? DEFAULT_LINE_HEIGHT);
+    const nextHtml = wrapStyledSpan(html, htmlRange, {
+      "line-height": String(lineHeight),
     });
     return {
       html: nextHtml,
@@ -641,6 +699,27 @@ export function getSelectionFontSize(
 
   if (sizes.size !== 1) return null;
   return [...sizes][0] ?? null;
+}
+
+/** Returns the line-height multiplier when the full selection shares one value. */
+export function getSelectionLineHeight(
+  html: string,
+  selection: TextRange,
+): number | null {
+  if (!hasTextSelection(selection)) return null;
+
+  const segments = getPlainTextStyleSegments(html);
+  const overlapping = segments.filter(
+    (segment) => segment.end > selection.start && segment.start < selection.end,
+  );
+  if (overlapping.length === 0) return null;
+
+  const lineHeights = new Set(
+    overlapping.map((segment) => segment.style.lineHeight ?? DEFAULT_LINE_HEIGHT),
+  );
+
+  if (lineHeights.size !== 1) return null;
+  return [...lineHeights][0] ?? null;
 }
 
 function fontFamilyIdToCssValue(

@@ -25,11 +25,17 @@ export function TextFormatToolbarHost({ registration }: TextFormatToolbarHostPro
         bottom={registration.bottom}
         selectionHighlightColor={registration.selectionHighlightColor ?? null}
         selectionFontSize={registration.selectionFontSize ?? null}
+        selectionLineHeight={registration.selectionLineHeight ?? null}
         selectionBoldActive={registration.selectionBoldActive ?? false}
         selectionFontFamily={registration.selectionFontFamily ?? null}
+        selectionText={registration.selectionText ?? null}
+        linkEditorOpen={registration.linkEditorOpen ?? false}
+        canAdjustFontSize={registration.canAdjustFontSize ?? false}
+        canAdjustLineHeight={registration.canAdjustLineHeight ?? false}
         onFormat={registration.onFormat}
         onDismiss={registration.onDismiss}
         onKeepKeyboardFocus={registration.onKeepKeyboardFocus}
+        onLinkEditorOpenChange={registration.onLinkEditorOpenChange}
       />
     </View>
   );

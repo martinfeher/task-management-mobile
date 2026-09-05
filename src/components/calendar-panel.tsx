@@ -122,6 +122,10 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
     sidebarData,
     loadSidebar,
   } = useApp();
+  const openCalendarTask = useCallback(
+    (task: TaskItem) => openTask(task, { fromCalendar: true }),
+    [openTask],
+  );
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -422,7 +426,7 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
             loading={loading}
             refreshing={refreshing}
             onSelectDate={setSelectedDate}
-            onPressTask={openTask}
+            onPressTask={openCalendarTask}
             onScheduleChange={(task, update) => void handleUpdateTaskSchedule(task, update)}
             onShiftDay={handleShiftDay}
             onRefresh={() => void loadCalendarTasks(true)}
@@ -499,7 +503,7 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
                   key={task.id}
                   task={task}
                   showListName
-                  onPress={openTask}
+                  onPress={openCalendarTask}
                   onToggleComplete={(taskId, completed) => {
                     if (completed) {
                       void completeTask(taskId).then(() => loadCalendarTasks(true));
@@ -525,7 +529,7 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
           onClose={closeContextMenu}
           onRename={() => {
             setContextMenu(null);
-            openTask(contextMenu.task);
+            openCalendarTask(contextMenu.task);
           }}
           onTogglePinned={() => void handleTogglePinned()}
           onToggleImportant={() => void handleToggleImportant()}

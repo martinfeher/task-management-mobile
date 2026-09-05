@@ -11,7 +11,6 @@ import {
 import { TextFormatToolbarHost } from "@/components/text-format-toolbar-host";
 import type {
   TextBlockType,
-  TextFontSizeOption,
   TextFormatAction,
 } from "@/lib/text-format";
 
@@ -20,9 +19,11 @@ export type TextFormatToolbarHandlers = {
     action: TextFormatAction,
     options?: {
       linkUrl?: string;
+      linkText?: string;
       color?: string;
       highlightColor?: string;
-      fontSize?: TextFontSizeOption;
+      fontSize?: number;
+      lineHeight?: number;
       blockType?: TextBlockType;
       fontFamily?: string;
     },
@@ -30,14 +31,21 @@ export type TextFormatToolbarHandlers = {
   onDismiss: () => void;
   /** Re-focus the notes field on toolbar touch so the keyboard stays visible. */
   onKeepKeyboardFocus?: () => void;
+  /** Called when the link editor popup opens or closes. */
+  onLinkEditorOpenChange?: (open: boolean) => void;
 };
 
 export type TextFormatToolbarRegistration = TextFormatToolbarHandlers & {
   bottom: number;
   selectionHighlightColor?: string | null;
   selectionFontSize?: number | null;
+  selectionLineHeight?: number | null;
   selectionBoldActive?: boolean;
   selectionFontFamily?: string | null;
+  selectionText?: string | null;
+  linkEditorOpen?: boolean;
+  canAdjustFontSize?: boolean;
+  canAdjustLineHeight?: boolean;
 };
 
 type TextFormatToolbarContextValue = {
@@ -73,8 +81,13 @@ export function useTextFormatToolbarRegistration(
   handlers: TextFormatToolbarHandlers,
   selectionHighlightColor: string | null = null,
   selectionFontSize: number | null = null,
+  selectionLineHeight: number | null = null,
   selectionBoldActive = false,
   selectionFontFamily: string | null = null,
+  selectionText: string | null = null,
+  linkEditorOpen = false,
+  canAdjustFontSize = false,
+  canAdjustLineHeight = false,
 ) {
   const context = useContext(TextFormatToolbarContext);
   const handlersRef = useRef(handlers);
@@ -98,11 +111,18 @@ export function useTextFormatToolbarRegistration(
       bottom,
       selectionHighlightColor,
       selectionFontSize,
+      selectionLineHeight,
       selectionBoldActive,
       selectionFontFamily,
+      selectionText,
+      linkEditorOpen,
+      canAdjustFontSize,
+      canAdjustLineHeight,
       onFormat: (action, options) => handlersRef.current.onFormat(action, options),
       onDismiss: () => handlersRef.current.onDismiss(),
       onKeepKeyboardFocus: () => handlersRef.current.onKeepKeyboardFocus?.(),
+      onLinkEditorOpenChange: (open) =>
+        handlersRef.current.onLinkEditorOpenChange?.(open),
     });
 
     return () => {
@@ -113,8 +133,13 @@ export function useTextFormatToolbarRegistration(
     bottom,
     selectionHighlightColor,
     selectionFontSize,
+    selectionLineHeight,
     selectionBoldActive,
     selectionFontFamily,
+    selectionText,
+    linkEditorOpen,
+    canAdjustFontSize,
+    canAdjustLineHeight,
     setRegistration,
   ]);
 }

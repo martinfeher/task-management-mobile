@@ -15,8 +15,12 @@ import type { EnrichedTextInputInstance } from "react-native-enriched";
 
 import {
   htmlHasInlineFormatting,
+  htmlHasMetricSpanFormatting,
   htmlToTextRuns,
   runToMirrorTextStyle,
+  splitMirrorRunsForSelection,
+  type TextRun,
+  type TextSelectionRange,
 } from "@/lib/html-to-text-runs";
 import { isEnrichedNotesInputAvailable } from "@/lib/enriched-notes-support";
 import {
@@ -71,9 +75,83 @@ export type FormattedNotesInputProps = SharedNotesInputProps & {
   value: string;
   displayHtml: string;
   onChangeHtml: (html: string) => void;
+  selection?: TextSelectionRange;
   notesMinHeight?: number;
   notesMaxHeight?: number;
 };
+
+const MIRROR_SELECTION_FILL = "rgba(37, 99, 235, 0.35)";
+
+function usesMirrorSelectionOverlay(
+  displayHtml: string,
+  showMirror: boolean,
+  selection?: TextSelectionRange,
+) {
+  return (
+    showMirror &&
+    htmlHasMetricSpanFormatting(displayHtml) &&
+    Boolean(selection && selection.end > selection.start)
+  );
+}
+
+function MirrorFormattedText({
+  runs,
+  selection,
+  typography,
+  placeholder,
+  placeholderTextColor,
+  useCustomSelection,
+}: {
+  runs: TextRun[];
+  selection?: TextSelectionRange;
+  typography: ReturnType<typeof mergeTypography>;
+  placeholder?: string;
+  placeholderTextColor: string;
+  useCustomSelection: boolean;
+}) {
+  const segments = useMemo(
+    () =>
+      useCustomSelection
+        ? splitMirrorRunsForSelection(runs, selection)
+        : runs.map((run, index) => ({
+            key: `${index}`,
+            text: run.text,
+            style: run.style,
+            selected: false,
+          })),
+    [runs, selection, useCustomSelection],
+  );
+
+  return (
+    <Text
+      pointerEvents="none"
+      style={[styles.mirrorText, typography]}
+      allowFontScaling={false}>
+      {segments.length === 0 && placeholder ? (
+        <Text style={{ color: placeholderTextColor }}>{placeholder}</Text>
+      ) : (
+        segments.map((segment) => {
+          const textStyle = runToMirrorTextStyle(segment.style, BASE_TEXT);
+          if (!segment.selected) {
+            return (
+              <Text key={segment.key} style={textStyle}>
+                {segment.text}
+              </Text>
+            );
+          }
+
+          return (
+            <Text
+              key={segment.key}
+              style={[textStyle, { backgroundColor: MIRROR_SELECTION_FILL }]}>
+              {segment.text}
+            </Text>
+          );
+        })
+      )}
+    </Text>
+  );
+}
 
 const BASE_TEXT = {
   fontSize: 17,
@@ -129,6 +207,7 @@ function NativeRichNotesInput({
   placeholderTextColor = "#9ca3af",
   style,
   inputRef,
+  selection,
   selectionColor = "#2563eb",
   cursorColor = "#2563eb",
   notesMinHeight,
@@ -148,6 +227,14 @@ function NativeRichNotesInput({
   // native text and made color/highlight/bold look like they disappeared.
   const showFormattedMirror = htmlHasInlineFormatting(displayHtml);
   const mirrorRuns = useMemo(() => htmlToTextRuns(displayHtml), [displayHtml]);
+  const useCustomSelection = usesMirrorSelectionOverlay(
+    displayHtml,
+    showFormattedMirror,
+    selection,
+  );
+  const resolvedSelectionColor = useCustomSelection
+    ? "transparent"
+    : selectionColor;
 
   useImperativeHandle(inputRef, () => ({
     focus: () => enrichedRef.current?.focus(),
@@ -179,22 +266,14 @@ function NativeRichNotesInput({
   return (
     <View style={[styles.mirrorContainer, notesHeights]}>
       {showFormattedMirror ? (
-        <Text
-          pointerEvents="none"
-          style={[styles.mirrorText, typography]}
-          allowFontScaling={false}>
-          {mirrorRuns.length === 0 && placeholder ? (
-            <Text style={{ color: placeholderTextColor }}>{placeholder}</Text>
-          ) : (
-            mirrorRuns.map((run, index) => (
-              <Text
-                key={`${index}-${run.text.slice(0, 8)}`}
-                style={runToMirrorTextStyle(run.style, BASE_TEXT)}>
-                {run.text}
-              </Text>
-            ))
-          )}
-        </Text>
+        <MirrorFormattedText
+          runs={mirrorRuns}
+          selection={selection}
+          typography={typography}
+          placeholder={placeholder}
+          placeholderTextColor={placeholderTextColor}
+          useCustomSelection={useCustomSelection}
+        />
       ) : null}
       <EnrichedTextInput
         key={remountKey}
@@ -224,7 +303,7 @@ function NativeRichNotesInput({
           ...(showFormattedMirror ? styles.mirrorInput : null),
           marginBottom: 0,
         }}
-        selectionColor={selectionColor}
+        selectionColor={resolvedSelectionColor}
         cursorColor={cursorColor}
         androidExperimentalSynchronousEvents={Platform.OS === "android"}
         useHtmlNormalizer
@@ -352,6 +431,7 @@ function FormattedMirrorNotesInput({
   style,
   plainRef,
   autoFocus,
+  selection,
   selectionColor = "#2563eb",
   cursorColor = "#2563eb",
   notesMinHeight,
@@ -371,25 +451,25 @@ function FormattedMirrorNotesInput({
     if (value) return [{ text: value, style: {} }];
     return [];
   }, [displayHtml, value]);
+  const useCustomSelection = usesMirrorSelectionOverlay(
+    displayHtml,
+    true,
+    selection,
+  );
+  const resolvedSelectionColor = useCustomSelection
+    ? "transparent"
+    : selectionColor;
 
   return (
     <View style={[styles.mirrorContainer, notesHeights]}>
-      <Text
-        pointerEvents="none"
-        style={[styles.mirrorText, typography]}
-        allowFontScaling={false}>
-        {runs.length === 0 && !value && placeholder ? (
-          <Text style={{ color: placeholderTextColor }}>{placeholder}</Text>
-        ) : (
-          runs.map((run, index) => (
-            <Text
-              key={`${index}-${run.text.slice(0, 8)}`}
-              style={runToMirrorTextStyle(run.style, BASE_TEXT)}>
-              {run.text}
-            </Text>
-          ))
-        )}
-      </Text>
+      <MirrorFormattedText
+        runs={runs}
+        selection={selection}
+        typography={typography}
+        placeholder={placeholder}
+        placeholderTextColor={placeholderTextColor}
+        useCustomSelection={useCustomSelection}
+      />
       <TextInput
         ref={plainRef}
         value={value}
@@ -407,7 +487,7 @@ function FormattedMirrorNotesInput({
           styles.mirrorPlainInput,
           styles.mirrorInput,
         ]}
-        selectionColor={selectionColor}
+        selectionColor={resolvedSelectionColor}
         cursorColor={cursorColor}
         {...SHARED_INPUT_PROPS}
       />

@@ -28,6 +28,7 @@ export function ListsSidebar({
   onRetry,
   onReorderLists,
   onCreateList,
+  onCreateLabel,
   onRenameList,
   onDeleteList,
   onRenameLabel,
@@ -81,7 +82,9 @@ export function ListsSidebar({
       error={error}
       refreshing={refreshing}
       onRefresh={onRefresh}
-      onRetry={onRetry}>
+      onRetry={onRetry}
+      onCreateList={onCreateList}
+      onCreateLabel={onCreateLabel}>
       {(refreshControl) => (
         <NestableScrollContainer
           style={styles.scroll}

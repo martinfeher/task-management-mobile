@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
+  Text,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppSymbol } from "@/components/app-symbol";
+import { IoMdTimeIcon } from "@/components/io-md-time-icon";
+import { IoTimerOutlineIcon } from "@/components/io-timer-outline-icon";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import {
@@ -36,19 +42,29 @@ type TaskDatePickerSheetProps = {
   onClose: () => void;
 };
 
-type RepeatOption = "none" | "daily" | "weekly" | "monthly";
-
+type RepeatOption =
+  | "none"
+  | "daily"
+  | "weekday"
+  | "weekly"
+  | "monthly"
+  | "custom";
 
 const ACCENT = "#87a1cb";
 // const ACCENT = "#8caacf";
 // const ACCENT = "#88a4c8";
 // const ACCENT = "#7a94b4";
 const TIME_PICKER_BLUE = "#8095be";
-// const TIME_PICKER_BLUE = "#85b6bc";
-// const TIME_PICKER_BLUE = "#85a6c9";
-/** #6d8eb5 adjusted +23% lightness, −20% saturation (HSL) */
-const TIME_PICKER_WHEEL_BORDER = "#cedeee";
 const TIME_PICKER_BAR_BG = "#eef3f8";
+const TIME_TOGGLE_SWITCH_BASE = Platform.select({
+  ios: { width: 51, height: 31 },
+  default: { width: 48, height: 28 },
+});
+const TIME_TOGGLE_SWITCH_WIDTH = TIME_TOGGLE_SWITCH_BASE.width - 4;
+const TIME_TOGGLE_SWITCH_HEIGHT = TIME_TOGGLE_SWITCH_BASE.height - 3;
+const TIME_TOGGLE_ROW_HEIGHT = TIME_TOGGLE_SWITCH_HEIGHT;
+const TIME_TOGGLE_LABEL_COLOR = "#6b7c93";
+const TIME_TOGGLE_STATUS_COLOR = "#94a3b8";
 const DAY_SELECTION_CIRCLE_SIZE = 36;
 const MONTH_NAV_ICON_SIZE = 21;
 /** #111827 lightened 15% toward white */
@@ -58,11 +74,28 @@ const CLOSE_ICON_COLOR = "#6f7c8d";
 const HEADER_CORNER_INSET = Spacing.two;
 const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 const REPEAT_OPTIONS: { id: RepeatOption; label: string }[] = [
-  { id: "none", label: "Once" },
+  { id: "none", label: "None" },
   { id: "daily", label: "Daily" },
   { id: "weekly", label: "Weekly" },
   { id: "monthly", label: "Monthly" },
+  { id: "weekday", label: "Every Weekday" },
+  { id: "custom", label: "Custom" },
 ];
+const REPEAT_SCROLL_TRACK_HEIGHT = 3;
+const REPEAT_SCROLL_THUMB_MIN_WIDTH = 28;
+/** #b8c4d9 lightened 20% toward white */
+const SCHEDULE_SCROLL_THUMB_COLOR = "#c6d0e1";
+const SCHEDULE_CHIP_HEIGHT = 33;
+const DURATION_PRESETS = [
+  { value: 15, label: "15m" },
+  { value: 30, label: "30m" },
+  { value: 60, label: "1 h" },
+  { value: 120, label: "2 h" },
+] as const;
+const DURATION_PRESET_VALUES = new Set<number>(
+  DURATION_PRESETS.map((option) => option.value),
+);
+const DEFAULT_DURATION_MINUTES = 60;
 const HOUR_VALUES = Array.from({ length: 12 }, (_, index) => index + 1);
 const MINUTE_VALUES = Array.from({ length: 60 }, (_, index) => index);
 const WHEEL_ITEM_HEIGHT = 44;
@@ -107,6 +140,7 @@ function formatScheduleSummary(
   minute: number,
   isPm: boolean,
   repeat: RepeatOption,
+  timeEnabled: boolean,
 ) {
   if (!date) return "Select a date";
 
@@ -115,11 +149,104 @@ function formatScheduleSummary(
     month: "short",
     day: "numeric",
   });
+
+  if (!timeEnabled) {
+    if (repeat === "none") {
+      return datePart;
+    }
+
+    const repeatPart =
+      REPEAT_OPTIONS.find((option) => option.id === repeat)?.label ?? "Custom";
+
+    return `${datePart} · ${repeatPart}`;
+  }
+
   const timePart = formatTime12h(hour12, minute, isPm);
+  if (repeat === "none") {
+    return `${datePart} · ${timePart}`;
+  }
+
   const repeatPart =
-    REPEAT_OPTIONS.find((option) => option.id === repeat)?.label ?? "Once";
+    REPEAT_OPTIONS.find((option) => option.id === repeat)?.label ?? "Custom";
 
   return `${datePart} · ${timePart} · ${repeatPart}`;
+}
+
+function isPresetDuration(minutes: number | null) {
+  return minutes != null && DURATION_PRESET_VALUES.has(minutes);
+}
+
+const REPEAT_CONFIRM_OPTIONS = new Set<RepeatOption>([
+  "daily",
+  "weekday",
+  "weekly",
+  "monthly",
+]);
+
+function repeatConfirmMessage(option: RepeatOption) {
+  switch (option) {
+    case "daily":
+      return "This task will repeat every day.";
+    case "weekday":
+      return "This task will repeat every weekday.";
+    case "weekly":
+      return "This task will repeat every week.";
+    case "monthly":
+      return "This task will repeat every month.";
+    default:
+      return "";
+  }
+}
+
+function getRepeatOptionSubtitle(
+  optionId: RepeatOption,
+  selectedDate: Date | null,
+): string | null {
+  if (!selectedDate) return null;
+
+  switch (optionId) {
+    case "weekly":
+      return selectedDate.toLocaleDateString(undefined, { weekday: "long" });
+    case "monthly": {
+      const nextMonth = new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth() + 1,
+        selectedDate.getDate(),
+      );
+      const day = nextMonth.getDate();
+      const month = nextMonth.toLocaleDateString(undefined, { month: "short" });
+      return `${day}.${month}`;
+    }
+    case "weekday":
+      return "Mon - Fri";
+    default:
+      return null;
+  }
+}
+
+function TimeOffSwitch({
+  value,
+  onValueChange,
+}: {
+  value: boolean;
+  onValueChange: (next: boolean) => void;
+}) {
+  return (
+    <View style={styles.timeToggleSwitchWrap}>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        trackColor={{
+          false: "#e5e7eb",
+          true: TIME_PICKER_BLUE,
+        }}
+        thumbColor="#ffffff"
+        ios_backgroundColor="#e5e7eb"
+        accessibilityLabel="Set time"
+        style={styles.timeToggleSwitchScaled}
+      />
+    </View>
+  );
 }
 
 function WheelPicker({
@@ -145,7 +272,9 @@ function WheelPicker({
   }, [selectedValue, values]);
 
   function handleScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const index = Math.round(event.nativeEvent.contentOffset.y / WHEEL_ITEM_HEIGHT);
+    const index = Math.round(
+      event.nativeEvent.contentOffset.y / WHEEL_ITEM_HEIGHT,
+    );
     const clamped = Math.max(0, Math.min(values.length - 1, index));
     onSelect(values[clamped] ?? selectedValue);
   }
@@ -162,19 +291,237 @@ function WheelPicker({
         onScrollEndDrag={handleScrollEnd}
         contentContainerStyle={{
           paddingVertical: WHEEL_ITEM_HEIGHT * paddingRows,
-        }}>
-        {values.map((value) => {
-          const active = value === selectedValue;
+        }}
+      >
+        {values.map((value) => (
+          <View key={value} style={styles.wheelItem}>
+            <ThemedText style={styles.wheelItemText}>
+              {formatValue(value)}
+            </ThemedText>
+          </View>
+        ))}
+      </ScrollView>
+      <View pointerEvents="none" style={styles.wheelHighlight} />
+      <View pointerEvents="none" style={styles.wheelSelectedValue}>
+        <Text style={styles.wheelItemTextActive}>
+          {formatValue(selectedValue)}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function DurationOptionsRow({
+  durationMinutes,
+  onSelectPreset,
+}: {
+  durationMinutes: number | null;
+  onSelectPreset: (value: number) => void;
+}) {
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
+  const [scrollX, setScrollX] = useState(0);
+
+  const customActive = !isPresetDuration(durationMinutes);
+  const canScroll = contentWidth > viewportWidth + 1;
+  const maxScrollX = Math.max(1, contentWidth - viewportWidth);
+  const thumbWidth = canScroll
+    ? Math.max(
+        REPEAT_SCROLL_THUMB_MIN_WIDTH,
+        (viewportWidth / contentWidth) * viewportWidth,
+      )
+    : viewportWidth;
+  const thumbOffset = canScroll
+    ? (scrollX / maxScrollX) * Math.max(0, viewportWidth - thumbWidth)
+    : 0;
+
+  function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    setScrollX(event.nativeEvent.contentOffset.x);
+  }
+
+  return (
+    <View style={styles.durationSection}>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={handleScroll}
+        onLayout={(event) => {
+          setViewportWidth(event.nativeEvent.layout.width);
+        }}
+        onContentSizeChange={(width) => {
+          setContentWidth(width);
+        }}
+        contentContainerStyle={styles.durationRow}
+      >
+        {DURATION_PRESETS.map((option) => {
+          const active = durationMinutes === option.value;
           return (
-            <View key={value} style={styles.wheelItem}>
-              <ThemedText style={[styles.wheelItemText, active && styles.wheelItemTextActive]}>
-                {formatValue(value)}
+            <Pressable
+              key={option.value}
+              style={[styles.durationChip, active && styles.durationChipActive]}
+              onPress={() => onSelectPreset(option.value)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <ThemedText
+                style={[
+                  styles.scheduleChipText,
+                  active && styles.scheduleChipTextActive,
+                ]}
+              >
+                {option.label}
               </ThemedText>
-            </View>
+            </Pressable>
+          );
+        })}
+
+        <Pressable
+          style={[
+            styles.durationChip,
+            customActive && styles.durationChipActive,
+          ]}
+          accessibilityRole="button"
+          accessibilityState={{ selected: customActive }}
+        >
+          <ThemedText
+            style={[
+              styles.scheduleChipText,
+              styles.durationCustomChipText,
+              customActive && styles.scheduleChipTextActive,
+            ]}
+          >
+            Custom
+          </ThemedText>
+        </Pressable>
+      </ScrollView>
+
+      {canScroll ? (
+        <View style={styles.repeatScrollTrack}>
+          <View
+            style={[
+              styles.repeatScrollThumb,
+              {
+                width: thumbWidth,
+                left: thumbOffset,
+              },
+            ]}
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function RepeatOptionsRow({
+  options,
+  selected,
+  selectedDate,
+  onSelect,
+}: {
+  options: { id: RepeatOption; label: string }[];
+  selected: RepeatOption;
+  selectedDate: Date | null;
+  onSelect: (id: RepeatOption) => void;
+}) {
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
+  const [scrollX, setScrollX] = useState(0);
+
+  const canScroll = contentWidth > viewportWidth + 1;
+  const maxScrollX = Math.max(1, contentWidth - viewportWidth);
+  const thumbWidth = canScroll
+    ? Math.max(
+        REPEAT_SCROLL_THUMB_MIN_WIDTH,
+        (viewportWidth / contentWidth) * viewportWidth,
+      )
+    : viewportWidth;
+  const thumbOffset = canScroll
+    ? (scrollX / maxScrollX) * Math.max(0, viewportWidth - thumbWidth)
+    : 0;
+
+  function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    setScrollX(event.nativeEvent.contentOffset.x);
+  }
+
+  return (
+    <View style={styles.repeatSection}>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={handleScroll}
+        onLayout={(event) => {
+          setViewportWidth(event.nativeEvent.layout.width);
+        }}
+        onContentSizeChange={(width) => {
+          setContentWidth(width);
+        }}
+        contentContainerStyle={styles.repeatRow}
+      >
+        {options.map((option) => {
+          const active = selected === option.id;
+          const subtitle = getRepeatOptionSubtitle(option.id, selectedDate);
+          return (
+            <Pressable
+              key={option.id}
+              style={[styles.repeatChip, active && styles.repeatChipActive]}
+              onPress={() => onSelect(option.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={
+                subtitle ? `${option.label}, ${subtitle}` : option.label
+              }
+            >
+              {subtitle ? (
+                <View style={styles.repeatChipContent}>
+                  <ThemedText
+                    style={[
+                      styles.repeatChipTextCompact,
+                      active && styles.repeatChipTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </ThemedText>
+                  <ThemedText
+                    style={[
+                      styles.repeatChipSubtitle,
+                      active && styles.repeatChipSubtitleActive,
+                    ]}
+                  >
+                    {subtitle}
+                  </ThemedText>
+                </View>
+              ) : (
+                <ThemedText
+                  style={[
+                    styles.scheduleChipText,
+                    active && styles.scheduleChipTextActive,
+                  ]}
+                >
+                  {option.label}
+                </ThemedText>
+              )}
+            </Pressable>
           );
         })}
       </ScrollView>
-      <View pointerEvents="none" style={styles.wheelHighlight} />
+
+      {canScroll ? (
+        <View style={styles.repeatScrollTrack}>
+          <View
+            style={[
+              styles.repeatScrollThumb,
+              {
+                width: thumbWidth,
+                left: thumbOffset,
+              },
+            ]}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -190,25 +537,36 @@ export function TaskDatePickerSheet({
   const insets = useSafeAreaInsets();
   const initialTime = fromMinutes(dueTimeMinutes);
 
-  const [monthDate, setMonthDate] = useState(() => parseDateKey(value) ?? startOfDay(new Date()));
-  const [selectedDate, setSelectedDate] = useState<Date | null>(() => parseDateKey(value));
+  const [monthDate, setMonthDate] = useState(
+    () => parseDateKey(value) ?? startOfDay(new Date()),
+  );
+  const [selectedDate, setSelectedDate] = useState<Date | null>(() =>
+    parseDateKey(value),
+  );
   const [hour12, setHour12] = useState(initialTime.hour12);
   const [minute, setMinute] = useState(initialTime.minute);
   const [isPm, setIsPm] = useState(initialTime.isPm);
   const [draftRepeat, setDraftRepeat] = useState<RepeatOption>("none");
+  const [timeEnabled, setTimeEnabled] = useState(dueTimeMinutes != null);
+  const [durationMinutes, setDurationMinutes] = useState<number | null>(
+    dueDurationMinutes ?? DEFAULT_DURATION_MINUTES,
+  );
 
   useEffect(() => {
     if (!visible) return;
 
     const parsed = parseDateKey(value);
     const time = fromMinutes(dueTimeMinutes);
+    const nextDuration = dueDurationMinutes ?? DEFAULT_DURATION_MINUTES;
     setSelectedDate(parsed);
     setMonthDate(parsed ?? startOfDay(new Date()));
     setHour12(time.hour12);
     setMinute(time.minute);
     setIsPm(time.isPm);
     setDraftRepeat("none");
-  }, [dueTimeMinutes, value, visible]);
+    setTimeEnabled(dueTimeMinutes != null);
+    setDurationMinutes(nextDuration);
+  }, [dueDurationMinutes, dueTimeMinutes, value, visible]);
 
   const monthDays = useMemo(
     () => getMonthGrid(monthDate.getFullYear(), monthDate.getMonth()),
@@ -220,13 +578,51 @@ export function TaskDatePickerSheet({
     year: "numeric",
   });
 
-  const summary = formatScheduleSummary(selectedDate, hour12, minute, isPm, draftRepeat);
+  const summary = formatScheduleSummary(
+    selectedDate,
+    hour12,
+    minute,
+    isPm,
+    draftRepeat,
+    timeEnabled,
+  );
+
+  function handleTimeToggle(nextEnabled: boolean) {
+    setTimeEnabled(nextEnabled);
+    if (nextEnabled) {
+      setDurationMinutes((current) => current ?? DEFAULT_DURATION_MINUTES);
+    }
+  }
+
+  function selectDurationPreset(value: number) {
+    setDurationMinutes(value);
+  }
+
+  function handleRepeatSelect(next: RepeatOption) {
+    if (next === draftRepeat) return;
+
+    if (REPEAT_CONFIRM_OPTIONS.has(next)) {
+      const label =
+        REPEAT_OPTIONS.find((option) => option.id === next)?.label ?? next;
+      Alert.alert(
+        `Repeat ${label.toLowerCase()}?`,
+        repeatConfirmMessage(next),
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Confirm", onPress: () => setDraftRepeat(next) },
+        ],
+      );
+      return;
+    }
+
+    setDraftRepeat(next);
+  }
 
   function handleConfirm() {
     onSelect({
       dueDate: selectedDate ? toDateKey(selectedDate) : null,
-      dueTimeMinutes: toMinutes(hour12, minute, isPm),
-      dueDurationMinutes,
+      dueTimeMinutes: timeEnabled ? toMinutes(hour12, minute, isPm) : null,
+      dueDurationMinutes: timeEnabled ? durationMinutes : null,
     });
     onClose();
   }
@@ -237,173 +633,280 @@ export function TaskDatePickerSheet({
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={[styles.card, { marginBottom: Math.max(insets.bottom, Spacing.three) }]}>
-          <View style={styles.header}>
-            <Pressable
-              style={styles.headerCloseButton}
-              onPress={onClose}
-              accessibilityRole="button"
-              accessibilityLabel="Close">
-              <AppSymbol ios="xmark" android="close" size={18} tintColor={CLOSE_ICON_COLOR} />
-            </Pressable>
-
-            <View style={styles.headerCenter}>
-              <ThemedText style={styles.headerTitle}>Set date & time</ThemedText>
-              <ThemedText style={styles.headerSubtitle} numberOfLines={1}>
-                {summary}
-              </ThemedText>
-            </View>
-
-            <Pressable
-              style={styles.confirmButton}
-              onPress={handleConfirm}
-              accessibilityRole="button"
-              accessibilityLabel="Confirm">
-              <AppSymbol ios="checkmark" android="check" size={16} tintColor="#ffffff" />
-            </Pressable>
-          </View>
-
-          <View style={styles.monthHeader}>
-            <ThemedText style={styles.monthLabel}>{monthLabel}</ThemedText>
-            <View style={styles.monthNavGroup}>
+        <View
+          style={[
+            styles.card,
+            {
+              marginTop: 0,
+              marginBottom: Math.max(insets.bottom, Spacing.three),
+            },
+          ]}
+        >
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.cardContent}
+          >
+            <View style={styles.header}>
               <Pressable
-                style={styles.monthNavButton}
-                onPress={() =>
-                  setMonthDate(
-                    startOfDay(new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1)),
-                  )
-                }
+                style={styles.headerCloseButton}
+                onPress={onClose}
                 accessibilityRole="button"
-                accessibilityLabel="Previous month">
-                <AppSymbol ios="chevron.left" android="chevron-left" size={MONTH_NAV_ICON_SIZE} tintColor="#c3ccdb" />
-                {/* <AppSymbol ios="chevron.left" android="chevron-left" size={MONTH_NAV_ICON_SIZE} tintColor="#9ca3af" /> */}
-              </Pressable>
-              <Pressable
-                style={styles.monthNavButton}
-                onPress={() =>
-                  setMonthDate(
-                    startOfDay(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1)),
-                  )
-                }
-                accessibilityRole="button"
-                accessibilityLabel="Next month">
+                accessibilityLabel="Close"
+              >
                 <AppSymbol
-                  ios="chevron.right"
-                  android="chevron-right"
-                  size={MONTH_NAV_ICON_SIZE}
-                  tintColor="#c3ccdb"
-                  // tintColor="#9ca3af"
+                  ios="xmark"
+                  android="close"
+                  size={18}
+                  tintColor={CLOSE_ICON_COLOR}
+                />
+              </Pressable>
+
+              <View style={styles.headerCenter}>
+                <ThemedText style={styles.headerSubtitle} numberOfLines={1}>
+                  {summary}
+                </ThemedText>
+              </View>
+
+              <Pressable
+                style={styles.confirmButton}
+                onPress={handleConfirm}
+                accessibilityRole="button"
+                accessibilityLabel="Confirm"
+              >
+                <AppSymbol
+                  ios="checkmark"
+                  android="check"
+                  size={16}
+                  tintColor="#ffffff"
                 />
               </Pressable>
             </View>
-          </View>
 
-          <View style={styles.weekdayRow}>
-            {WEEKDAY_LABELS.map((label, index) => (
-              <ThemedText key={`${label}-${index}`} style={styles.weekdayLabel}>
-                {label}
-              </ThemedText>
-            ))}
-          </View>
-
-          <View style={styles.monthGrid}>
-            {monthDays.map((day) => {
-              const inMonth = day.getMonth() === monthDate.getMonth();
-              const selected = selectedDate ? isSameDay(day, selectedDate) : false;
-
-              return (
+            <View style={styles.monthHeader}>
+              <ThemedText style={styles.monthLabel}>{monthLabel}</ThemedText>
+              <View style={styles.monthNavGroup}>
                 <Pressable
-                  key={toDateKey(day)}
-                  style={styles.dayCell}
-                  onPress={() => setSelectedDate(day)}
+                  style={styles.monthNavButton}
+                  onPress={() =>
+                    setMonthDate(
+                      startOfDay(
+                        new Date(
+                          monthDate.getFullYear(),
+                          monthDate.getMonth() - 1,
+                          1,
+                        ),
+                      ),
+                    )
+                  }
                   accessibilityRole="button"
-                  accessibilityLabel={day.toLocaleDateString()}>
-                  <View style={styles.dayMarker}>
-                    {selected ? <View style={styles.daySelectedCircle} /> : null}
-                    <ThemedText
-                      style={[
-                        styles.dayNumber,
-                        !inMonth && styles.dayNumberMuted,
-                        selected && styles.dayNumberSelected,
-                      ]}>
-                      {day.getDate()}
+                  accessibilityLabel="Previous month"
+                >
+                  <AppSymbol
+                    ios="chevron.left"
+                    android="chevron-left"
+                    size={MONTH_NAV_ICON_SIZE}
+                    tintColor="#c3ccdb"
+                  />
+                  {/* <AppSymbol ios="chevron.left" android="chevron-left" size={MONTH_NAV_ICON_SIZE} tintColor="#9ca3af" /> */}
+                </Pressable>
+                <Pressable
+                  style={styles.monthNavButton}
+                  onPress={() =>
+                    setMonthDate(
+                      startOfDay(
+                        new Date(
+                          monthDate.getFullYear(),
+                          monthDate.getMonth() + 1,
+                          1,
+                        ),
+                      ),
+                    )
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="Next month"
+                >
+                  <AppSymbol
+                    ios="chevron.right"
+                    android="chevron-right"
+                    size={MONTH_NAV_ICON_SIZE}
+                    tintColor="#c3ccdb"
+                    // tintColor="#9ca3af"
+                  />
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.weekdayRow}>
+              {WEEKDAY_LABELS.map((label, index) => (
+                <ThemedText
+                  key={`${label}-${index}`}
+                  style={styles.weekdayLabel}
+                >
+                  {label}
+                </ThemedText>
+              ))}
+            </View>
+
+            <View style={styles.monthGrid}>
+              {monthDays.map((day) => {
+                const inMonth = day.getMonth() === monthDate.getMonth();
+                const selected = selectedDate
+                  ? isSameDay(day, selectedDate)
+                  : false;
+
+                return (
+                  <Pressable
+                    key={toDateKey(day)}
+                    style={styles.dayCell}
+                    onPress={() => setSelectedDate(day)}
+                    accessibilityRole="button"
+                    accessibilityLabel={day.toLocaleDateString()}
+                  >
+                    <View style={styles.dayMarker}>
+                      {selected ? (
+                        <View style={styles.daySelectedCircle} />
+                      ) : null}
+                      <ThemedText
+                        style={[
+                          styles.dayNumber,
+                          !inMonth && styles.dayNumberMuted,
+                          selected && styles.dayNumberSelected,
+                        ]}
+                      >
+                        {day.getDate()}
+                      </ThemedText>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {timeEnabled ? (
+              <>
+                <View style={[styles.sectionHeader, styles.timeSectionHeader]}>
+                  <IoMdTimeIcon size={16} color="#9ca3af" />
+                  <ThemedText style={styles.sectionLabel}>TIME</ThemedText>
+                  <View style={styles.timeSectionHeaderSpacer} />
+                  <Pressable
+                    style={styles.clearTimeButton}
+                    onPress={() => handleTimeToggle(false)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear time"
+                  >
+                    <ThemedText style={styles.clearTimeText}>
+                      Clear time
                     </ThemedText>
+                    <AppSymbol
+                      ios="xmark"
+                      android="close"
+                      size={12}
+                      tintColor={CLOSE_ICON_COLOR}
+                    />
+                  </Pressable>
+                </View>
+
+                <View style={styles.timePickerBar}>
+                  <View style={styles.timeWheels}>
+                    <WheelPicker
+                      values={HOUR_VALUES}
+                      selectedValue={hour12}
+                      onSelect={setHour12}
+                      formatValue={(value) => String(value)}
+                    />
+                    <ThemedText style={styles.timeColon}>:</ThemedText>
+                    <WheelPicker
+                      values={MINUTE_VALUES}
+                      selectedValue={minute}
+                      onSelect={setMinute}
+                      formatValue={(value) => String(value).padStart(2, "0")}
+                    />
                   </View>
-                </Pressable>
-              );
-            })}
-          </View>
 
-          <View style={[styles.sectionHeader, styles.timeSectionHeader]}>
-            <AppSymbol ios="clock" android="schedule" size={16} tintColor="#9ca3af" />
-            <ThemedText style={styles.sectionLabel}>TIME</ThemedText>
-          </View>
+                  <View style={styles.ampmColumn}>
+                    <Pressable
+                      style={[
+                        styles.ampmButton,
+                        !isPm && styles.ampmButtonActive,
+                      ]}
+                      onPress={() => setIsPm(false)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: !isPm }}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.ampmText,
+                          !isPm && styles.ampmTextActive,
+                        ]}
+                      >
+                        AM
+                      </ThemedText>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.ampmButton,
+                        isPm && styles.ampmButtonActive,
+                      ]}
+                      onPress={() => setIsPm(true)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isPm }}
+                    >
+                      <ThemedText
+                        style={[styles.ampmText, isPm && styles.ampmTextActive]}
+                      >
+                        PM
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
 
-          <View style={styles.timePickerBar}>
-            <View style={styles.timeWheels}>
-              <WheelPicker
-                values={HOUR_VALUES}
-                selectedValue={hour12}
-                onSelect={setHour12}
-                formatValue={(value) => String(value)}
-              />
-              <ThemedText style={styles.timeColon}>:</ThemedText>
-              <WheelPicker
-                values={MINUTE_VALUES}
-                selectedValue={minute}
-                onSelect={setMinute}
-                formatValue={(value) => String(value).padStart(2, "0")}
-              />
-            </View>
+                <View
+                  style={[styles.sectionHeader, styles.durationSectionHeader]}
+                >
+                  <IoTimerOutlineIcon size={16} color="#9ca3af" />
+                  <ThemedText style={styles.sectionLabel}>DURATION</ThemedText>
+                </View>
 
-            <View style={styles.ampmColumn}>
-              <Pressable
-                style={[styles.ampmButton, !isPm && styles.ampmButtonActive]}
-                onPress={() => setIsPm(false)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: !isPm }}>
-                <ThemedText style={[styles.ampmText, !isPm && styles.ampmTextActive]}>AM</ThemedText>
-              </Pressable>
-              <Pressable
-                style={[styles.ampmButton, isPm && styles.ampmButtonActive]}
-                onPress={() => setIsPm(true)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isPm }}>
-                <ThemedText style={[styles.ampmText, isPm && styles.ampmTextActive]}>PM</ThemedText>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.sectionDivider} />
-
-          <View style={[styles.sectionHeader, styles.repeatSectionHeader]}>
-            <AppSymbol
-              ios="arrow.triangle.2.circlepath"
-              android="repeat"
-              size={16}
-              tintColor="#9ca3af"
-            />
-            <ThemedText style={styles.sectionLabel}>REPEAT</ThemedText>
-          </View>
-
-          <View style={styles.repeatRow}>
-            {REPEAT_OPTIONS.map((option) => {
-              const active = draftRepeat === option.id;
-              return (
-                <Pressable
-                  key={option.id}
-                  style={[styles.repeatChip, active && styles.repeatChipActive]}
-                  onPress={() => setDraftRepeat(option.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}>
-                  <ThemedText
-                    style={[styles.repeatChipText, active && styles.repeatChipTextActive]}>
-                    {option.label}
+                <DurationOptionsRow
+                  durationMinutes={durationMinutes}
+                  onSelectPreset={selectDurationPreset}
+                />
+              </>
+            ) : (
+              <View style={styles.timeToggleRow}>
+                <View style={styles.timeToggleLeft}>
+                  <IoMdTimeIcon size={16} color="#9ca3af" />
+                  <ThemedText style={styles.timeToggleLabel}>TIME</ThemedText>
+                  <ThemedText style={styles.timeToggleStatus}>
+                    Not set
                   </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+                </View>
+                <TimeOffSwitch
+                  value={timeEnabled}
+                  onValueChange={handleTimeToggle}
+                />
+              </View>
+            )}
+
+            <View style={styles.sectionDivider} />
+
+            <View style={[styles.sectionHeader, styles.repeatSectionHeader]}>
+              <AppSymbol
+                ios="arrow.triangle.2.circlepath"
+                android="repeat"
+                size={16}
+                tintColor="#9ca3af"
+              />
+              <ThemedText style={styles.sectionLabel}>REPEAT</ThemedText>
+            </View>
+
+            <RepeatOptionsRow
+              options={REPEAT_OPTIONS}
+              selected={draftRepeat}
+              selectedDate={selectedDate}
+              onSelect={handleRepeatSelect}
+            />
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -423,14 +926,17 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 24,
+    maxHeight: "90%",
+    overflow: "hidden",
+  },
+  cardContent: {
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.two,
     paddingBottom: Spacing.three,
-    maxHeight: "90%",
   },
   header: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     marginBottom: Spacing.two,
   },
@@ -452,14 +958,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: Spacing.one,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
-  },
   headerSubtitle: {
-    marginTop: 4,
-    fontSize: 13,
+    fontSize: 14,
     color: "#9ca3af",
     textAlign: "center",
   },
@@ -481,6 +981,7 @@ const styles = StyleSheet.create({
     fontSize: 19,
     fontWeight: "700",
     color: MONTH_LABEL_COLOR,
+    marginTop: -15,
   },
   monthNavGroup: {
     flexDirection: "row",
@@ -550,12 +1051,73 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 4,
     marginBottom: Spacing.one,
   },
   timeSectionHeader: {
-    marginTop: 0,
-    // marginTop: Spacing.two * 0.3,
+    marginTop: Spacing.one - 40,
+  },
+  timeSectionHeaderSpacer: {
+    flex: 1,
+  },
+  clearTimeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginRight: 8,
+  },
+  clearTimeText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: TIME_TOGGLE_STATUS_COLOR,
+  },
+  timeToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: Spacing.one - 6,
+    paddingRight: 14,
+    height: TIME_TOGGLE_ROW_HEIGHT,
+  },
+  timeToggleLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+    width: 30,
+    height: TIME_TOGGLE_ROW_HEIGHT,
+  },
+  timeToggleSwitchWrap: {
+    width: TIME_TOGGLE_SWITCH_WIDTH,
+    height: TIME_TOGGLE_SWITCH_HEIGHT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timeToggleSwitchScaled: {
+    transform: [
+      {
+        scaleX: TIME_TOGGLE_SWITCH_WIDTH / TIME_TOGGLE_SWITCH_BASE.width,
+      },
+      {
+        scaleY: TIME_TOGGLE_SWITCH_HEIGHT / TIME_TOGGLE_SWITCH_BASE.height,
+      },
+    ],
+  },
+  timeToggleLabel: {
+    fontSize: 12,
+    lineHeight: TIME_TOGGLE_ROW_HEIGHT,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    color: TIME_TOGGLE_LABEL_COLOR,
+  },
+  timeToggleStatus: {
+    fontSize: 12,
+    lineHeight: TIME_TOGGLE_ROW_HEIGHT,
+    fontWeight: "400",
+    color: TIME_TOGGLE_STATUS_COLOR,
+  },
+  durationSectionHeader: {
+    marginTop: Spacing.two,
   },
   repeatSectionHeader: {
     paddingTop: 3,
@@ -572,25 +1134,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: TIME_PICKER_BAR_BG,
     borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 0,
   },
   timeWheels: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    gap: 4,
+    justifyContent: "center",
+    gap: 6,
   },
   timeColon: {
-    fontSize: 30,
-    fontWeight: "600",
-    color: "#64748b",
+    fontSize: 23,
+    fontWeight: "500",
+    color: "#475569",
     marginHorizontal: 2,
     lineHeight: WHEEL_ITEM_HEIGHT,
     textAlign: "center",
   },
   wheelShell: {
-    width: 68,
+    width: 72,
     height: WHEEL_ITEM_HEIGHT * WHEEL_VISIBLE_ROWS,
     overflow: "hidden",
     position: "relative",
@@ -603,70 +1166,156 @@ const styles = StyleSheet.create({
   },
   wheelItemText: {
     width: "100%",
-    fontSize: 24,
+    fontSize: 20.5,
     fontWeight: "500",
     color: "#cbd5e1",
     textAlign: "center",
     lineHeight: WHEEL_ITEM_HEIGHT,
   },
   wheelItemTextActive: {
-    color: "#1e293b",
-    fontWeight: "700",
+    color: "#393939",
+    fontWeight: "500",
+    fontSize: 20,
+    textAlign: "center",
+    lineHeight: WHEEL_ITEM_HEIGHT,
   },
   wheelHighlight: {
     position: "absolute",
-    left: 0,
-    right: 0,
+    left: 2,
+    right: 2,
     top: WHEEL_ITEM_HEIGHT,
     height: WHEEL_ITEM_HEIGHT,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: TIME_PICKER_WHEEL_BORDER,
-    backgroundColor: "transparent",
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    shadowColor: "#64748b",
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  wheelSelectedValue: {
+    position: "absolute",
+    left: 2,
+    right: 2,
+    top: WHEEL_ITEM_HEIGHT,
+    height: WHEEL_ITEM_HEIGHT,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
   },
   ampmColumn: {
-    gap: 6,
+    gap: 8,
     marginLeft: Spacing.two,
   },
   ampmButton: {
-    minWidth: 54,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: "#dfe6ef",
+    minWidth: 56,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#e8edf3",
     alignItems: "center",
   },
   ampmButtonActive: {
     backgroundColor: TIME_PICKER_BLUE,
   },
   ampmText: {
-    fontSize: 14,
+    fontSize: 12.5,
     fontWeight: "700",
     color: "#64748b",
   },
   ampmTextActive: {
     color: "#ffffff",
   },
-  repeatRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  durationSection: {
     gap: 8,
   },
-  repeatChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  durationRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingBottom: 2,
+  },
+  durationChip: {
+    flexShrink: 0,
+    height: SCHEDULE_CHIP_HEIGHT,
+    paddingHorizontal: 17,
     borderRadius: 999,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: TIME_PICKER_BAR_BG,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  durationChipActive: {
+    backgroundColor: TIME_PICKER_BLUE,
+  },
+  scheduleChipText: {
+    fontSize: 13.5,
+    lineHeight: 15,
+    fontWeight: "500",
+    color: "#393939",
+  },
+  durationCustomChipText: {
+    fontSize: 12.5,
+    lineHeight: 14,
+  },
+  scheduleChipTextActive: {
+    color: "#ffffff",
+  },
+  repeatSection: {
+    gap: 8,
+  },
+  repeatRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingBottom: 2,
+  },
+  repeatScrollTrack: {
+    height: REPEAT_SCROLL_TRACK_HEIGHT,
+    borderRadius: 999,
+    backgroundColor: "#e5e7eb",
+    overflow: "hidden",
+  },
+  repeatScrollThumb: {
+    position: "absolute",
+    top: 0,
+    height: REPEAT_SCROLL_TRACK_HEIGHT,
+    borderRadius: 999,
+    backgroundColor: SCHEDULE_SCROLL_THUMB_COLOR,
+  },
+  repeatChip: {
+    flexShrink: 0,
+    height: SCHEDULE_CHIP_HEIGHT,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: TIME_PICKER_BAR_BG,
+    alignItems: "center",
+    justifyContent: "center",
   },
   repeatChipActive: {
-    backgroundColor: ACCENT,
+    backgroundColor: TIME_PICKER_BLUE,
   },
-  repeatChipText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#6b7280",
+  repeatChipContent: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  repeatChipTextCompact: {
+    fontSize: 11.5,
+    lineHeight: 12,
+    fontWeight: "500",
+    color: "#393939",
+    textAlign: "center",
+    marginTop: 2,
+  },
+  repeatChipSubtitle: {
+    fontSize: 7,
+    lineHeight: 8,
+    fontWeight: "400",
+    color: "#9ca3af",
+    textAlign: "center",
+    marginTop: 1,
   },
   repeatChipTextActive: {
     color: "#ffffff",
+  },
+  repeatChipSubtitleActive: {
+    color: "rgba(255,255,255,0.85)",
   },
 });

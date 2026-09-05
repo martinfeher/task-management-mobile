@@ -7,11 +7,11 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { FAB_RIGHT_INSET, getFabBottomOffset } from "@/constants/tab-bar";
 import { useApp } from "@/contexts/app-context";
-import {
-  FAB_RIGHT_INSET,
-  getFabBottomOffset,
-} from "@/constants/tab-bar";
+
+const FAB_SIZE = 62;
+const FAB_RADIUS = FAB_SIZE / 2;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -64,27 +64,29 @@ export function AddTaskButton({
           animatedStyle,
         ]}
       >
-        <BlurView
-          intensity={60}
-          tint="systemChromeMaterial"
-          experimentalBlurMethod="dimezisBlurView"
-          style={styles.blur}
-        >
-          <View className="absolute inset-0 items-center justify-center bg-[#70a6e0]">
-            <View className="flex-1 justify-center">
-              <Text
-                className="text-white text-[36px] font-light leading-[40px] text-center mb-[1px]"
-                style={{
-                  includeFontPadding: false,
-                  marginTop: Platform.OS === "android" ? -2 : -1,
-                }}
-                allowFontScaling={false}
-              >
-                +
-              </Text>
+        <View style={styles.fabSurface}>
+          <BlurView
+            intensity={60}
+            tint="systemChromeMaterial"
+            experimentalBlurMethod="dimezisBlurView"
+            style={styles.blur}
+          >
+            <View className="absolute inset-0 items-center justify-center bg-[#6c82dc]">
+              <View className="flex-1 justify-center">
+                <Text
+                  className="text-white text-[34px] font-light leading-[38px] text-center mb-[1px]"
+                  style={{
+                    includeFontPadding: false,
+                    marginTop: Platform.OS === "android" ? -2 : -1,
+                  }}
+                  allowFontScaling={false}
+                >
+                  +
+                </Text>
+              </View>
             </View>
-          </View>
-        </BlurView>
+          </BlurView>
+        </View>
       </AnimatedPressable>
     </View>
   );
@@ -102,28 +104,44 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    height: 64,
-    width: 64,
-    borderRadius: 32,
+    height: FAB_SIZE,
+    width: FAB_SIZE,
+    borderRadius: FAB_RADIUS,
+    backgroundColor: "#6c82dc",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000000",
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+      },
+      android: {
+        elevation: 8,
+      },
+      default: {
+        boxShadow: "0px 4px 12px 0px rgba(0, 0, 0, 0.1)",
+      },
+    }),
+  },
+  fabSurface: {
+    flex: 1,
+    borderRadius: FAB_RADIUS,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 12,
   },
   blur: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
-    borderRadius: 32,
+    borderRadius: FAB_RADIUS,
   },
   plusWrap: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#70a6e0",
+    backgroundColor: "#6c82dc",
+    // backgroundColor: "#3379e2",
+    // backgroundColor: "#70a6e0",
   },
   plus: {
     color: "#ffffff",

@@ -93,6 +93,7 @@ export type TaskDetail = {
   listId: string;
   listName: string;
   labels: TaskLabel[];
+  calendarColor?: string | null;
 };
 
 export type SelectedView =
