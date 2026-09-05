@@ -46,3 +46,9 @@ example
 .history*
 
 .vscode/
+.vscode/*
+
+.claude/
+.claude/*
+
+.env
