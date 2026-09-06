@@ -857,49 +857,51 @@ export function TaskDatePickerSheet({
               </View>
             </View>
 
-            <View style={styles.weekdayRow}>
-              {WEEKDAY_LABELS.map((label, index) => (
-                <ThemedText
-                  key={`${label}-${index}`}
-                  style={styles.weekdayLabel}
-                >
-                  {label}
-                </ThemedText>
-              ))}
-            </View>
-
-            <View style={styles.monthGrid}>
-              {monthDays.map((day) => {
-                const inMonth = day.getMonth() === monthDate.getMonth();
-                const selected = selectedDate
-                  ? isSameDay(day, selectedDate)
-                  : false;
-
-                return (
-                  <Pressable
-                    key={toDateKey(day)}
-                    style={styles.dayCell}
-                    onPress={() => handleDaySelect(day)}
-                    accessibilityRole="button"
-                    accessibilityLabel={day.toLocaleDateString()}
+            <View style={styles.calendarSection}>
+              <View style={styles.weekdayRow}>
+                {WEEKDAY_LABELS.map((label, index) => (
+                  <ThemedText
+                    key={`${label}-${index}`}
+                    style={styles.weekdayLabel}
                   >
-                    <View style={styles.dayMarker}>
-                      {selected ? (
-                        <View style={styles.daySelectedCircle} />
-                      ) : null}
-                      <ThemedText
-                        style={[
-                          styles.dayNumber,
-                          !inMonth && styles.dayNumberMuted,
-                          selected && styles.dayNumberSelected,
-                        ]}
-                      >
-                        {day.getDate()}
-                      </ThemedText>
-                    </View>
-                  </Pressable>
-                );
-              })}
+                    {label}
+                  </ThemedText>
+                ))}
+              </View>
+
+              <View style={styles.monthGrid}>
+                {monthDays.map((day) => {
+                  const inMonth = day.getMonth() === monthDate.getMonth();
+                  const selected = selectedDate
+                    ? isSameDay(day, selectedDate)
+                    : false;
+
+                  return (
+                    <Pressable
+                      key={toDateKey(day)}
+                      style={styles.dayCell}
+                      onPress={() => handleDaySelect(day)}
+                      accessibilityRole="button"
+                      accessibilityLabel={day.toLocaleDateString()}
+                    >
+                      <View style={styles.dayMarker}>
+                        {selected ? (
+                          <View style={styles.daySelectedCircle} />
+                        ) : null}
+                        <ThemedText
+                          style={[
+                            styles.dayNumber,
+                            !inMonth && styles.dayNumberMuted,
+                            selected && styles.dayNumberSelected,
+                          ]}
+                        >
+                          {day.getDate()}
+                        </ThemedText>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
 
             {timeEnabled ? (
@@ -993,19 +995,23 @@ export function TaskDatePickerSheet({
                 />
 
                 <Pressable
-                  style={[
-                    styles.reminderButton,
-                    reminderEnabled && styles.reminderButtonActive,
-                  ]}
+                  style={styles.reminderButton}
                   onPress={handleReminderToggle}
                   accessibilityRole="button"
                   accessibilityLabel="Reminder"
                   accessibilityState={{ selected: reminderEnabled }}
                 >
-                  <TimeReminderIcon
-                    size={14}
-                    color={reminderEnabled ? "#ffffff" : "#393939"}
-                  />
+                  <View
+                    style={[
+                      styles.reminderIconCircle,
+                      reminderEnabled && styles.reminderIconCircleActive,
+                    ]}
+                  >
+                    <TimeReminderIcon
+                      size={14}
+                      color={reminderEnabled ? "#ffffff" : "#393939"}
+                    />
+                  </View>
                   <ThemedText
                     style={[
                       styles.reminderButtonText,
@@ -1181,6 +1187,9 @@ const styles = StyleSheet.create({
     height: 32,
     alignItems: "center",
     justifyContent: "center",
+  },
+  calendarSection: {
+    marginHorizontal: -3,
   },
   weekdayRow: {
     flexDirection: "row",
@@ -1459,29 +1468,35 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     marginTop: 8,
-    height: SCHEDULE_CHIP_HEIGHT,
-    paddingHorizontal: 14,
     marginBottom: 6,
-    borderRadius: 999,
+  },
+  reminderIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#babfdb",
     borderStyle: "dashed",
     backgroundColor: "#ffffff",
+    alignItems: "center",
     justifyContent: "center",
   },
-  reminderButtonActive: {
+  reminderIconCircleActive: {
     backgroundColor: TIME_PICKER_BLUE,
+    borderColor: TIME_PICKER_BLUE,
+    borderStyle: "solid",
   },
   reminderButtonText: {
     fontSize: 13.5,
     lineHeight: 15,
     fontWeight: "400",
+    marginTop: 1,
     color: "#383848",
   },
   reminderButtonTextActive: {
-    color: "#ffffff",
+    color: TIME_PICKER_BLUE,
   },
   repeatSection: {
     gap: 8,

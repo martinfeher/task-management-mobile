@@ -247,7 +247,7 @@ export function CalendarTimeGridView({
 
                   {dayTasks.map((task) => (
                     <CalendarTimedTaskBlock
-                      key={`${task.id}-${dateKey}`}
+                      key={`${task.id}-${dateKey}-${task.calendarColor ?? ""}`}
                       task={task}
                       dateKey={dateKey}
                       columnIndex={columnIndex}

@@ -78,6 +78,13 @@ type AppContextValue = {
   openListsDrawer: () => void;
   reorderLists: (lists: SidebarListItem[]) => void;
   reorderTasks: (section: "tasks" | "pinned", tasks: TaskItem[]) => void;
+  calendarTasks: TaskItem[];
+  calendarLoading: boolean;
+  calendarRefreshing: boolean;
+  loadCalendarTasks: (isRefresh?: boolean) => Promise<void>;
+  patchCalendarTask: (taskId: string, patch: Partial<TaskItem>) => void;
+  replaceCalendarTasks: (tasks: TaskItem[]) => void;
+  setCalendarTaskColor: (taskId: string, calendarColor: string) => void;
 };
 
 function findInboxList(lists: SidebarListItem[]) {
@@ -116,6 +123,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [listsDrawerOpen, setListsDrawerOpen] = useState(false);
+  const [calendarTasks, setCalendarTasks] = useState<TaskItem[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarRefreshing, setCalendarRefreshing] = useState(false);
 
   selectedViewRef.current = selectedView;
   sidebarDataRef.current = sidebarData;
@@ -514,6 +524,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [loadTasksForView]);
 
+  const loadCalendarTasks = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setCalendarRefreshing(true);
+    } else {
+      setCalendarLoading(true);
+    }
+
+    try {
+      const data = await fetchTasks({ type: "calendar" });
+      setCalendarTasks(data.tasks);
+    } catch {
+      setCalendarTasks([]);
+    } finally {
+      setCalendarLoading(false);
+      setCalendarRefreshing(false);
+    }
+  }, []);
+
+  const patchCalendarTask = useCallback(
+    (taskId: string, patch: Partial<TaskItem>) => {
+      setCalendarTasks((current) =>
+        current.map((task) =>
+          task.id === taskId ? { ...task, ...patch } : task,
+        ),
+      );
+    },
+    [],
+  );
+
+  const replaceCalendarTasks = useCallback((tasks: TaskItem[]) => {
+    setCalendarTasks(tasks);
+  }, []);
+
+  const setCalendarTaskColor = useCallback((taskId: string, calendarColor: string) => {
+    setCalendarTasks((current) =>
+      current.map((task) =>
+        task.id === taskId ? { ...task, calendarColor } : task,
+      ),
+    );
+    setTaskData((current) =>
+      current
+        ? {
+            ...current,
+            pinned: current.pinned.map((task) =>
+              task.id === taskId ? { ...task, calendarColor } : task,
+            ),
+            tasks: current.tasks.map((task) =>
+              task.id === taskId ? { ...task, calendarColor } : task,
+            ),
+          }
+        : current,
+    );
+  }, []);
+
   const value = useMemo<AppContextValue>(
     () => ({
       sidebarData,
@@ -555,6 +619,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       openListsDrawer,
       reorderLists,
       reorderTasks,
+      calendarTasks,
+      calendarLoading,
+      calendarRefreshing,
+      loadCalendarTasks,
+      patchCalendarTask,
+      replaceCalendarTasks,
+      setCalendarTaskColor,
     }),
     [
       sidebarData,
@@ -594,6 +665,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       openListsDrawer,
       reorderLists,
       reorderTasks,
+      calendarTasks,
+      calendarLoading,
+      calendarRefreshing,
+      loadCalendarTasks,
+      patchCalendarTask,
+      replaceCalendarTasks,
+      setCalendarTaskColor,
     ],
   );
 

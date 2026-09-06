@@ -60,7 +60,7 @@ export function AddTaskButton({
         onPress={handlePress}
         style={[
           styles.fab,
-          { bottom: fabBottom - 40, right: FAB_RIGHT_INSET },
+          { bottom: fabBottom - 42, right: FAB_RIGHT_INSET },
           animatedStyle,
         ]}
       >

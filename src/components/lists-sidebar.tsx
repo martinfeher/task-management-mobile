@@ -38,12 +38,14 @@ export function ListsSidebar({
       onRefresh={onRefresh}
       onRetry={onRetry}
       onCreateList={onCreateList}
-      onCreateLabel={onCreateLabel}>
+      onCreateLabel={onCreateLabel}
+    >
       {(refreshControl) => (
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ paddingBottom: 96 }}
-          refreshControl={refreshControl as never}>
+          refreshControl={refreshControl as never}
+        >
           <ListsPinnedRows
             data={data}
             selectedView={selectedView}
@@ -51,11 +53,9 @@ export function ListsSidebar({
             navIconColor={navIconColor}
           />
 
-          <SidebarRow title="New list" onPress={onCreateList} />
-
           {lists.length === 0 ? (
             <Text className="px-4 pt-2 text-sm text-zinc-500">
-              No lists yet. Tap New list to create one.
+              No lists yet. Use Create to add one.
             </Text>
           ) : (
             lists.map((list) => {

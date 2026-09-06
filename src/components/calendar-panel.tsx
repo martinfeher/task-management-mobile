@@ -28,7 +28,6 @@ import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import {
   fetchLabels,
-  fetchTasks,
   moveTaskToList,
   toggleTaskImportant,
   toggleTaskLabel,
@@ -121,14 +120,17 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
     uncompleteTask,
     sidebarData,
     loadSidebar,
+    calendarTasks,
+    calendarLoading,
+    calendarRefreshing,
+    loadCalendarTasks,
+    patchCalendarTask,
+    replaceCalendarTasks,
   } = useApp();
   const openCalendarTask = useCallback(
     (task: TaskItem) => openTask(task, { fromCalendar: true }),
     [openTask],
   );
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<CalendarViewMode>("threeDay");
   const [viewPickerOpen, setViewPickerOpen] = useState(false);
   const [monthDate, setMonthDate] = useState(() => startOfDay(new Date()));
@@ -144,30 +146,13 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
 
   const contextTask = contextMenu?.task ?? null;
 
-  const loadCalendarTasks = useCallback(async (isRefresh = false) => {
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-    try {
-      const data = await fetchTasks({ type: "calendar" });
-      setTasks(data.tasks);
-    } catch {
-      setTasks([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
   useEffect(() => {
     void loadCalendarTasks();
   }, [loadCalendarTasks, refreshNonce]);
 
   const tasksByDate = useMemo(() => {
     const map = new Map<string, TaskItem[]>();
-    for (const task of tasks) {
+    for (const task of calendarTasks) {
       if (!task.dueDate) continue;
       const key = task.dueDate.slice(0, 10);
       const existing = map.get(key) ?? [];
@@ -175,7 +160,7 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
       map.set(key, existing);
     }
     return map;
-  }, [tasks]);
+  }, [calendarTasks]);
 
   const monthDays = useMemo(
     () => getMonthGrid(monthDate.getFullYear(), monthDate.getMonth()),
@@ -246,19 +231,12 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
   }, []);
 
   async function handleUpdateTaskSchedule(task: TaskItem, update: TaskScheduleUpdate) {
-    const previousTasks = tasks;
-    setTasks((current) =>
-      current.map((item) =>
-        item.id === task.id
-          ? {
-              ...item,
-              dueDate: update.dueDate,
-              dueTimeMinutes: update.dueTimeMinutes,
-              dueDurationMinutes: update.dueDurationMinutes,
-            }
-          : item,
-      ),
-    );
+    const previousTasks = calendarTasks;
+    patchCalendarTask(task.id, {
+      dueDate: update.dueDate,
+      dueTimeMinutes: update.dueTimeMinutes,
+      dueDurationMinutes: update.dueDurationMinutes,
+    });
 
     try {
       const result = await updateTaskSchedule(task.id, update);
@@ -268,20 +246,13 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
         dueDate: result.dueDate,
         dueTimeMinutes: result.dueTimeMinutes,
       });
-      setTasks((current) =>
-        current.map((item) =>
-          item.id === task.id
-            ? {
-                ...item,
-                dueDate: result.dueDate,
-                dueTimeMinutes: result.dueTimeMinutes,
-                dueDurationMinutes: result.dueDurationMinutes,
-              }
-            : item,
-        ),
-      );
+      patchCalendarTask(task.id, {
+        dueDate: result.dueDate,
+        dueTimeMinutes: result.dueTimeMinutes,
+        dueDurationMinutes: result.dueDurationMinutes,
+      });
     } catch {
-      setTasks(previousTasks);
+      replaceCalendarTasks(previousTasks);
       Alert.alert("Couldn't update task schedule");
     }
   }
@@ -423,8 +394,8 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
             days={gridDays}
             tasksByDate={tasksByDate}
             selectedDate={selectedDate}
-            loading={loading}
-            refreshing={refreshing}
+            loading={calendarLoading}
+            refreshing={calendarRefreshing}
             onSelectDate={setSelectedDate}
             onPressTask={openCalendarTask}
             onScheduleChange={(task, update) => void handleUpdateTaskSchedule(task, update)}
@@ -479,7 +450,7 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
             contentContainerStyle={styles.dayTasksContent}
             refreshControl={
               <RefreshControl
-                refreshing={refreshing}
+                refreshing={calendarRefreshing}
                 onRefresh={() => void loadCalendarTasks(true)}
               />
             }>
@@ -491,7 +462,7 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
               })}
             </ThemedText>
 
-            {loading ? (
+            {calendarLoading ? (
               <ActivityIndicator color="#3c87f7" style={styles.loader} />
             ) : selectedDayTasks.length === 0 ? (
               <ThemedText themeColor="textSecondary" style={styles.emptyDay}>

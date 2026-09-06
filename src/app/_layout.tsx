@@ -8,6 +8,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { AddTaskComposer } from "@/components/add-task-composer";
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
+import { ListsDrawerOverlay } from "@/components/lists-drawer-overlay";
+import { LastTabTracker } from "@/components/main-tabs-config";
 import { TaskAddedBadge } from "@/components/task-added-badge";
 import { AppProvider, useApp } from "@/contexts/app-context";
 import { HistoryActionsProvider } from "@/contexts/history-actions-toolbar-context";
@@ -50,11 +52,12 @@ export default function RootLayout() {
             <TextFormatToolbarProvider>
               <HistoryActionsProvider>
                 <View style={styles.root}>
+                  <LastTabTracker />
                   <AnimatedSplashOverlay />
                   <Stack>
                     <Stack.Screen
                       name="(tabs)"
-                      options={{ headerShown: false }}
+                      options={{ headerShown: false, freezeOnBlur: false }}
                     />
                     <Stack.Screen
                       name="task/[id]"
@@ -78,6 +81,7 @@ export default function RootLayout() {
                   </Stack>
                   <AddTaskComposerHost />
                   <TaskAddedBadge />
+                  <ListsDrawerOverlay />
                 </View>
               </HistoryActionsProvider>
             </TextFormatToolbarProvider>

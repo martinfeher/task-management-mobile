@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import {
   NestableDraggableFlatList,
   NestableScrollContainer,
@@ -97,12 +97,8 @@ export function ListsSidebar({
             navIconColor={navIconColor}
           />
 
-          <Pressable style={styles.newListRow} onPress={onCreateList}>
-            <Text style={styles.newListText}>New list</Text>
-          </Pressable>
-
           {lists.length === 0 ? (
-            <Text style={styles.emptyLists}>No lists yet. Tap New list to create one.</Text>
+            <Text style={styles.emptyLists}>No lists yet. Use Create to add one.</Text>
           ) : (
             <NestableDraggableFlatList
               data={lists}
@@ -144,17 +140,5 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     fontSize: 14,
     color: "#71717a",
-  },
-  newListRow: {
-    marginHorizontal: 6,
-    marginBottom: 2,
-    minHeight: 45,
-    justifyContent: "center",
-    paddingHorizontal: 12,
-  },
-  newListText: {
-    fontSize: 15,
-    color: "#2563eb",
-    fontWeight: "500",
   },
 });

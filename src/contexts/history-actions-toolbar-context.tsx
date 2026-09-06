@@ -10,14 +10,6 @@ import {
 
 import { HistoryActionsHost } from "@/components/history-actions-host";
 
-export type CalendarColorAction = {
-  color: string;
-  pickerOpen: boolean;
-  onTogglePicker: () => void;
-  onSelectColor: (color: string) => void;
-  onClosePicker: () => void;
-};
-
 export type HistoryActionsRegistration = {
   bottom: number;
   canUndo: boolean;
@@ -26,7 +18,6 @@ export type HistoryActionsRegistration = {
   onRedo: () => void;
   /** Re-focus the notes field on button touch so the keyboard stays visible. */
   onKeepKeyboardFocus?: () => void;
-  calendarColor?: CalendarColorAction;
 };
 
 type HistoryActionsContextValue = {
@@ -70,13 +61,10 @@ export function useHistoryActionsRegistration(
   onUndo: () => void,
   onRedo: () => void,
   onKeepKeyboardFocus?: () => void,
-  calendarColor?: CalendarColorAction,
 ) {
   const context = useContext(HistoryActionsContext);
   const handlersRef = useRef({ onUndo, onRedo, onKeepKeyboardFocus });
-  const calendarColorRef = useRef(calendarColor);
   handlersRef.current = { onUndo, onRedo, onKeepKeyboardFocus };
-  calendarColorRef.current = calendarColor;
 
   if (!context) {
     throw new Error(
@@ -99,28 +87,10 @@ export function useHistoryActionsRegistration(
       onUndo: () => handlersRef.current.onUndo(),
       onRedo: () => handlersRef.current.onRedo(),
       onKeepKeyboardFocus: () => handlersRef.current.onKeepKeyboardFocus?.(),
-      calendarColor: calendarColorRef.current
-        ? {
-            color: calendarColorRef.current.color,
-            pickerOpen: calendarColorRef.current.pickerOpen,
-            onTogglePicker: () => calendarColorRef.current?.onTogglePicker(),
-            onSelectColor: (color: string) =>
-              calendarColorRef.current?.onSelectColor(color),
-            onClosePicker: () => calendarColorRef.current?.onClosePicker(),
-          }
-        : undefined,
     });
 
     return () => {
       setRegistration(null);
     };
-  }, [
-    visible,
-    bottom,
-    canUndo,
-    canRedo,
-    calendarColor?.color,
-    calendarColor?.pickerOpen,
-    setRegistration,
-  ]);
+  }, [visible, bottom, canUndo, canRedo, setRegistration]);
 }

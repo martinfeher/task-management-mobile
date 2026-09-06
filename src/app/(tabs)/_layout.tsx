@@ -2,8 +2,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { useColorScheme } from "react-native";
 
-import { LastTabTracker, TAB_ITEMS } from "@/components/main-tabs-config";
-import { ListsDrawerOverlay } from "@/components/lists-drawer-overlay";
+import { TAB_ITEMS } from "@/components/main-tabs-config";
 import { Colors } from "@/constants/theme";
 
 export default function TabsLayout() {
@@ -12,7 +11,6 @@ export default function TabsLayout() {
 
   return (
     <>
-      <LastTabTracker />
       <NativeTabs
         tintColor="#3c87f7"
         labelStyle={{
@@ -34,7 +32,6 @@ export default function TabsLayout() {
           </NativeTabs.Trigger>
         ))}
       </NativeTabs>
-      <ListsDrawerOverlay />
     </>
   );
 }

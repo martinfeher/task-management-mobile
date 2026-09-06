@@ -49,7 +49,10 @@ import { TEXT_FORMAT_TOOLBAR_HEIGHT } from "@/components/text-format-toolbar";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
-import type { CalendarColorAction } from "@/contexts/history-actions-toolbar-context";
+import {
+  CalendarColorControl,
+  calendarColorTitleReserveSpace,
+} from "@/components/calendar-color-control";
 import { useHistoryActionsRegistration } from "@/contexts/history-actions-toolbar-context";
 import { useTextFormatToolbarRegistration } from "@/contexts/text-format-toolbar-context";
 import {
@@ -192,6 +195,7 @@ export function TaskDetailScreen() {
     fromCalendar?: string;
     calendarColor?: string;
   }>();
+  const resolvedTaskId = Array.isArray(id) ? id[0] : id;
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const navigation = useNavigation();
@@ -202,6 +206,7 @@ export function TaskDetailScreen() {
     sidebarData,
     loadSidebar,
     deleteTask: removeTask,
+    setCalendarTaskColor,
   } = useApp();
   const closingRef = useRef(false);
   const openedFromCalendar = fromCalendar === "1";
@@ -277,7 +282,7 @@ export function TaskDetailScreen() {
   draftNameRef.current = draftName;
   draftNotesRef.current = draftNotes;
   caretTypingBoldRef.current = caretTypingBold;
-  taskIdRef.current = id;
+  taskIdRef.current = resolvedTaskId;
 
   const openedFromSearch = fromSearch === "1";
 
@@ -1293,41 +1298,28 @@ export function TaskDetailScreen() {
       const taskId = taskIdRef.current;
       if (!taskId) return;
 
+      const previousColor = calendarColor;
       const nextColor = normalizeCalendarColor(color);
       setCalendarColor(nextColor);
       setCalendarColorPickerOpen(false);
       setDetail((current) =>
         current ? { ...current, calendarColor: nextColor } : current,
       );
+      setCalendarTaskColor(taskId, nextColor);
 
       try {
         await updateTaskCalendarColor(taskId, nextColor);
-        handleTaskCompleted();
       } catch {
+        setCalendarColor(previousColor);
+        setDetail((current) =>
+          current ? { ...current, calendarColor: previousColor } : current,
+        );
+        setCalendarTaskColor(taskId, previousColor);
         Alert.alert("Couldn't update calendar color");
       }
     },
-    [handleTaskCompleted],
+    [calendarColor, setCalendarTaskColor],
   );
-
-  const calendarColorAction = useMemo<CalendarColorAction | undefined>(() => {
-    if (!openedFromCalendar) return undefined;
-
-    return {
-      color: calendarColor,
-      pickerOpen: calendarColorPickerOpen,
-      onTogglePicker: () => setCalendarColorPickerOpen((open) => !open),
-      onSelectColor: (color) => {
-        void handleSelectCalendarColor(color);
-      },
-      onClosePicker: () => setCalendarColorPickerOpen(false),
-    };
-  }, [
-    calendarColor,
-    calendarColorPickerOpen,
-    handleSelectCalendarColor,
-    openedFromCalendar,
-  ]);
 
   const handleAddSubtask = async () => {
     if (!detail) return;
@@ -1488,7 +1480,6 @@ export function TaskDetailScreen() {
     undoEdit,
     redoEdit,
     keepNotesKeyboardFocus,
-    calendarColorAction,
   );
 
   useEffect(() => {
@@ -1620,6 +1611,14 @@ export function TaskDetailScreen() {
               onPress={() => setPriorityMenuOpen(false)}
               accessibilityRole="button"
               accessibilityLabel="Dismiss priority menu"
+            />
+          ) : null}
+          {calendarColorPickerOpen ? (
+            <Pressable
+              style={styles.priorityBackdrop}
+              onPress={() => setCalendarColorPickerOpen(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss color picker"
             />
           ) : null}
           <View style={styles.handleRow}>
@@ -1782,11 +1781,28 @@ export function TaskDetailScreen() {
                       }}
                       placeholder="Task name"
                       placeholderTextColor="#9ca3af"
-                      style={styles.taskTitleInput}
+                      style={[
+                        styles.taskTitleInput,
+                        openedFromCalendar && styles.taskTitleInputWithCalendarColor,
+                      ]}
                       multiline
                       blurOnSubmit
                       returnKeyType="done"
                     />
+                    {openedFromCalendar ? (
+                      <CalendarColorControl
+                        color={calendarColor}
+                        pickerOpen={calendarColorPickerOpen}
+                        onTogglePicker={() =>
+                          setCalendarColorPickerOpen((open) => !open)
+                        }
+                        onSelectColor={(color) => {
+                          void handleSelectCalendarColor(color);
+                        }}
+                        onClosePicker={() => setCalendarColorPickerOpen(false)}
+                        onKeepKeyboardFocus={keepNotesKeyboardFocus}
+                      />
+                    ) : null}
                   </View>
 
                   {!loading ? (
@@ -1991,20 +2007,25 @@ export function TaskDetailScreen() {
                   <ThemedText style={styles.toolbarCaption}>Date</ThemedText>
                 </View>
                 <View style={styles.flagAnchor}>
-                  <DetailToolbarIcon
-                    accessibilityLabel="Priority"
-                    ios={detail?.priority != null ? "flag.fill" : "flag"}
-                    android={
-                      detail?.priority != null ? "flag" : "outlined-flag"
-                    }
-                    active={detail?.priority != null}
-                    tintColor={
-                      detail?.priority != null
-                        ? getTaskPriorityColor(detail?.priority ?? null)
-                        : undefined
-                    }
-                    onPress={() => setPriorityMenuOpen((open) => !open)}
-                  />
+                  <View style={styles.toolbarLabeledItem}>
+                    <DetailToolbarIcon
+                      accessibilityLabel="Priority"
+                      ios={detail?.priority != null ? "flag.fill" : "flag"}
+                      android={
+                        detail?.priority != null ? "flag" : "outlined-flag"
+                      }
+                      active={detail?.priority != null}
+                      tintColor={
+                        detail?.priority != null
+                          ? getTaskPriorityColor(detail?.priority ?? null)
+                          : undefined
+                      }
+                      onPress={() => setPriorityMenuOpen((open) => !open)}
+                    />
+                    <ThemedText style={styles.toolbarCaption}>
+                      Priority
+                    </ThemedText>
+                  </View>
                   {priorityMenuOpen ? (
                     <TaskPriorityFlagPopup
                       embedded
@@ -2024,6 +2045,8 @@ export function TaskDetailScreen() {
                     onPress={() => setLabelPickerOpen(true)}
                   />
                   <ThemedText style={styles.toolbarCaption}>Label</ThemedText>
+                </View>
+                <View style={styles.toolbarLabeledItem}>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Attachment"
@@ -2031,12 +2054,14 @@ export function TaskDetailScreen() {
                     onPress={handleAttachment}
                     style={({ pressed }) => [
                       detailToolbarStyles.toolbarIconSlot,
-                      detailToolbarStyles.toolbarInlineIconSlot,
                       pressed && detailToolbarStyles.toolbarIconPressed,
                     ]}
                   >
                     <RiAttachment2Icon size={22} color={TOOLBAR_ICON_COLOR} />
                   </Pressable>
+                  <ThemedText style={styles.toolbarCaption}>
+                    Images/Files
+                  </ThemedText>
                 </View>
                 <View style={styles.toolbarLabeledItem}>
                   <Pressable
@@ -2167,7 +2192,7 @@ function DetailToolbarIcon({
 const detailToolbarStyles = StyleSheet.create({
   toolbarIconSlot: {
     height: 24,
-    minWidth: 32,
+    minWidth: 24,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2258,9 +2283,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 10,
     right: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 15.5,
+    width: 33,
+    height: 33,
+    borderRadius: 17,
     backgroundColor: "#f3f4f6",
     alignItems: "center",
     justifyContent: "center",
@@ -2302,7 +2327,7 @@ const styles = StyleSheet.create({
   },
   dateCheckboxHit: {
     padding: 2,
-    marginLeft: 4,
+    marginLeft: -4,
   },
   dateCheckbox: {
     width: 21,
@@ -2345,6 +2370,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.four,
   },
   titleRow: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "flex-start",
     gap: Spacing.two,
@@ -2359,6 +2385,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111827",
     padding: 0,
+  },
+  taskTitleInputWithCalendarColor: {
+    paddingRight: calendarColorTitleReserveSpace,
   },
   notesInput: {
     fontSize: 17,
@@ -2423,7 +2452,7 @@ const styles = StyleSheet.create({
   toolbarLabeledItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 0,
   },
   toolbarCaption: {
     fontSize: 9,
