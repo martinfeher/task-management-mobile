@@ -494,6 +494,7 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
 
       {contextMenu && !labelPickerOpen && !listPickerOpen ? (
         <TaskContextMenu
+          variant="calendar"
           task={contextMenu.task}
           top={contextMenu.anchor.y + contextMenu.anchor.height}
           left={contextMenu.anchor.x}
@@ -502,11 +503,6 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
             setContextMenu(null);
             openCalendarTask(contextMenu.task);
           }}
-          onTogglePinned={() => void handleTogglePinned()}
-          onToggleImportant={() => void handleToggleImportant()}
-          onSetPriority={(priority) => void handleSetPriority(priority)}
-          onMoveTo={() => setListPickerOpen(true)}
-          onAddLabel={() => void openLabelPicker()}
           onChangeDate={() => {
             setRescheduleTask(contextMenu.task);
             setContextMenu(null);

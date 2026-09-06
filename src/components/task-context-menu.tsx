@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { BlurView } from "expo-blur";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { AppSymbol } from "@/components/app-symbol";
 import { ThemedText } from "@/components/themed-text";
@@ -24,16 +25,17 @@ type TaskContextMenuProps = {
   left: number;
   /** When false, backdrop taps are ignored (e.g. right after long-press release). */
   backdropEnabled?: boolean;
-  /** Full task list menu vs calendar planning menu. */
-  variant?: "full" | "calendar";
+  /** Task panel menu vs calendar planning menu. */
+  variant?: "panel" | "calendar";
   onClose: () => void;
-  onRename: () => void;
-  onTogglePinned: () => void;
-  onToggleImportant: () => void;
-  onSetPriority: (priority: number | null) => void;
-  onMoveTo: () => void;
-  onAddLabel: () => void;
+  onSetPriority?: (priority: number | null) => void;
+  onMoveTo?: () => void;
+  onDate?: () => void;
+  onAddLabel?: () => void;
+  onDuplicate?: () => void;
+  onCopyLink?: () => void;
   onDelete: () => void;
+  onRename?: () => void;
   onChangeDate?: () => void;
 };
 
@@ -44,47 +46,54 @@ export function TaskContextMenu({
   top,
   left,
   backdropEnabled = true,
-  variant = "full",
+  variant = "panel",
   onClose,
-  onRename,
-  onTogglePinned,
-  onToggleImportant,
   onSetPriority,
   onMoveTo,
+  onDate,
   onAddLabel,
+  onDuplicate,
+  onCopyLink,
   onDelete,
+  onRename,
   onChangeDate,
 }: TaskContextMenuProps) {
   const isCalendar = variant === "calendar";
 
   return (
-    <View
-      style={StyleSheet.absoluteFill}
-      pointerEvents="box-none">
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <BlurView
+        intensity={Platform.OS === "ios" ? 28 : 48}
+        tint="dark"
+        experimentalBlurMethod="dimezisBlurView"
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <View
+        style={[StyleSheet.absoluteFill, styles.backdropTint]}
+        pointerEvents="none"
+      />
       {backdropEnabled ? (
         <Pressable
-          style={styles.backdrop}
+          style={StyleSheet.absoluteFill}
           onPress={onClose}
           accessibilityRole="button"
           accessibilityLabel="Dismiss menu"
         />
       ) : null}
       <View style={[styles.menu, { top, left, width: MENU_WIDTH }]}>
-        <MenuRow
-          label={isCalendar ? "Open task" : "Rename"}
-          onPress={onRename}
-        />
-        {!isCalendar ? (
+        {isCalendar ? (
           <>
-            <MenuRow
-              label={task.pinned ? "Unpin task" : "Pin task"}
-              onPress={onTogglePinned}
-            />
-            <MenuRow
-              label={task.important ? "Unmark important" : "Mark as important"}
-              onPress={onToggleImportant}
-            />
-
+            {onRename ? (
+              <MenuRow label="Open task" onPress={onRename} />
+            ) : null}
+            {onChangeDate ? (
+              <MenuRow label="Change date" onPress={onChangeDate} />
+            ) : null}
+            <MenuRow label="Delete task" onPress={onDelete} destructive />
+          </>
+        ) : (
+          <>
             <View style={styles.priorityBlock}>
               <ThemedText style={styles.priorityLabel}>Priority</ThemedText>
               <View style={styles.priorityRow}>
@@ -95,7 +104,7 @@ export function TaskContextMenu({
                       key={option.level}
                       accessibilityRole="button"
                       accessibilityLabel={option.label}
-                      onPress={() => onSetPriority(option.level)}
+                      onPress={() => onSetPriority?.(option.level)}
                       style={[
                         styles.priorityDot,
                         { backgroundColor: option.color },
@@ -107,11 +116,12 @@ export function TaskContextMenu({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Clear priority"
-                  onPress={() => onSetPriority(null)}
+                  onPress={() => onSetPriority?.(null)}
                   style={[
                     styles.priorityClear,
                     task.priority == null && styles.priorityDotSelected,
-                  ]}>
+                  ]}
+                >
                   <AppSymbol
                     ios="xmark"
                     android="close"
@@ -125,8 +135,12 @@ export function TaskContextMenu({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Move to"
-              onPress={onMoveTo}
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+              onPress={() => onMoveTo?.()}
+              style={({ pressed }) => [
+                styles.row,
+                pressed && styles.rowPressed,
+              ]}
+            >
               <ThemedText style={styles.rowLabel}>Move to</ThemedText>
               <AppSymbol
                 ios="chevron.right"
@@ -136,20 +150,26 @@ export function TaskContextMenu({
               />
             </Pressable>
 
-            <MenuRow label="Add label" onPress={onAddLabel} />
+            {onDate ? <MenuRow label="Date" onPress={onDate} /> : null}
+            {onAddLabel ? (
+              <MenuRow label="Add labels" onPress={onAddLabel} />
+            ) : null}
+            {onDuplicate ? (
+              <MenuRow label="Duplicate task" onPress={onDuplicate} />
+            ) : null}
+            {onCopyLink ? (
+              <MenuRow label="Copy link" onPress={onCopyLink} />
+            ) : null}
+            <MenuRow label="Delete" onPress={onDelete} destructive />
           </>
-        ) : null}
-        {onChangeDate ? (
-          <MenuRow label="Change date" onPress={onChangeDate} />
-        ) : null}
-        <MenuRow label="Delete task" onPress={onDelete} destructive />
+        )}
       </View>
     </View>
   );
 }
 
 export const TASK_CONTEXT_MENU_WIDTH = MENU_WIDTH;
-export const TASK_CONTEXT_MENU_ESTIMATED_HEIGHT = 364;
+export const TASK_CONTEXT_MENU_ESTIMATED_HEIGHT = 352;
 
 function MenuRow({
   label,
@@ -165,8 +185,11 @@ function MenuRow({
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
-      <ThemedText style={[styles.rowLabel, destructive && styles.rowDestructive]}>
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+    >
+      <ThemedText
+        style={[styles.rowLabel, destructive && styles.rowDestructive]}
+      >
         {label}
       </ThemedText>
     </Pressable>
@@ -174,9 +197,8 @@ function MenuRow({
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "transparent",
+  backdropTint: {
+    backgroundColor: "rgba(15, 23, 42, 0.18)",
   },
   menu: {
     position: "absolute",

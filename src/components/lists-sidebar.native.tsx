@@ -15,7 +15,7 @@ import {
   type ListsSidebarProps,
 } from "@/components/lists-sidebar-shared";
 import { SidebarRow } from "@/components/sidebar-row";
-import type { SidebarListItem } from "@/types/todo";
+import { listsWithoutInbox } from "@/lib/inbox-list";
 
 export function ListsSidebar({
   data,
@@ -36,7 +36,7 @@ export function ListsSidebar({
   onChangeLabelColor,
 }: ListsSidebarProps) {
   const navIconColor = "#7c92a0";
-  const lists = data?.lists ?? [];
+  const lists = listsWithoutInbox(data?.lists ?? []);
 
   const renderListItem = useCallback(
     ({ item, drag, isActive }: RenderItemParams<SidebarListItem>) => {

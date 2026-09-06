@@ -1,4 +1,5 @@
 import { FlatList, RefreshControl, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTaskButton } from "@/components/add-task-button";
 import {
@@ -10,6 +11,7 @@ import {
   useToggleComplete,
   type TaskListPanelProps,
 } from "@/components/task-list-panel-shared";
+import { getAddTaskFabReservedHeight } from "@/constants/tab-bar";
 import { useApp } from "@/contexts/app-context";
 
 export function TaskListPanel({
@@ -25,6 +27,8 @@ export function TaskListPanel({
   onOpenTask,
 }: TaskListPanelProps) {
   const { addTaskComposerOpen, openListsDrawer } = useApp();
+  const insets = useSafeAreaInsets();
+  const listBottomPadding = getAddTaskFabReservedHeight(insets.bottom);
   const showListName = selectedView?.type !== "list";
   const handleToggleComplete = useToggleComplete(onTaskCompleted, onTaskUncompleted);
   const blockingState = getTaskListBlockingState({
@@ -41,7 +45,10 @@ export function TaskListPanel({
 
   return (
     <View style={{ flex: 1 }}>
-      <TaskListShell title={getPanelTitle(selectedView, taskData)}>
+      <TaskListShell
+        title={getPanelTitle(selectedView, taskData)}
+        onOpenLists={openListsDrawer}
+      >
         {blockingState ?? (
           <FlatList
             data={[]}
@@ -67,7 +74,7 @@ export function TaskListPanel({
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
-            contentContainerStyle={getListContentStyle()}
+            contentContainerStyle={getListContentStyle(listBottomPadding)}
           />
         )}
       </TaskListShell>

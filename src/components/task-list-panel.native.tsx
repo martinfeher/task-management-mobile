@@ -1,3 +1,4 @@
+import * as Haptics from "expo-haptics";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -6,11 +7,9 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
-  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
 import {
   NestableDraggableFlatList,
   NestableScrollContainer,
@@ -18,40 +17,49 @@ import {
   type RenderItemParams,
 } from "react-native-draggable-flatlist";
 import { ScrollView } from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTaskButton } from "@/components/add-task-button";
 import {
-  TaskContextMenu,
   TASK_CONTEXT_MENU_ESTIMATED_HEIGHT,
   TASK_CONTEXT_MENU_WIDTH,
+  TaskContextMenu,
   type TaskContextMenuAnchor,
 } from "@/components/task-context-menu";
+import { TaskDatePickerSheet } from "@/components/task-date-picker-sheet";
 import { TaskLabelPicker } from "@/components/task-label-picker";
-import { TaskRow } from "@/components/task-row";
-import { ThemedText } from "@/components/themed-text";
 import {
   getListContentStyle,
   getPanelTitle,
   getTaskListBlockingState,
   TaskListShell,
   TaskSectionTitle,
+  TASK_LIST_CONTEXT_MENU_DELAY_MS,
+  TASK_LIST_DRAG_DELAY_MS,
   useToggleComplete,
   type TaskListPanelProps,
 } from "@/components/task-list-panel-shared";
+import { TaskRow } from "@/components/task-row";
+import { ThemedText } from "@/components/themed-text";
+import { getAddTaskFabReservedHeight } from "@/constants/tab-bar";
 import { useApp } from "@/contexts/app-context";
 import {
+  createTask,
   fetchLabels,
   moveTaskToList,
-  toggleTaskImportant,
   toggleTaskLabel,
-  updateTaskName,
-  updateTaskPinned,
   updateTaskPriority,
+  updateTaskSchedule,
 } from "@/lib/api";
-import { blocksToTasks, tasksToBlocks, type TaskBlock } from "@/lib/task-blocks";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
+import { getTaskShareUrl } from "@/lib/task-link";
+import {
+  blocksToTasks,
+  tasksToBlocks,
+  type TaskBlock,
+} from "@/lib/task-blocks";
 import type { SidebarListItem, TaskItem, TaskLabel } from "@/types/todo";
 
-/** Snappy drop settle (library default: mass 0.2 / stiffness 100). */
 const DROP_ANIMATION_CONFIG = {
   damping: 36,
   mass: 0.08,
@@ -88,11 +96,16 @@ export function TaskListPanel({
     openListsDrawer,
     deleteTask,
   } = useApp();
+  const insets = useSafeAreaInsets();
+  const listBottomPadding = getAddTaskFabReservedHeight(insets.bottom);
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView | null>(null);
   const panelRef = useRef<View>(null);
   const showListName = selectedView?.type !== "list";
-  const handleToggleComplete = useToggleComplete(onTaskCompleted, onTaskUncompleted);
+  const handleToggleComplete = useToggleComplete(
+    onTaskCompleted,
+    onTaskUncompleted,
+  );
   const pinned = taskData?.pinned ?? [];
   const tasks = taskData?.tasks ?? [];
   const pinnedBlocks = useMemo(
@@ -105,15 +118,19 @@ export function TaskListPanel({
   );
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [contextMenuBackdropReady, setContextMenuBackdropReady] = useState(false);
+  const [contextMenuBackdropReady, setContextMenuBackdropReady] =
+    useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [renameDraft, setRenameDraft] = useState<string | null>(null);
   const [movePickerOpen, setMovePickerOpen] = useState(false);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [allLabels, setAllLabels] = useState<TaskLabel[]>([]);
-  const contextTask = contextMenu?.task ?? null;
+  const [activeTask, setActiveTask] = useState<TaskItem | null>(null);
+  const contextTask = activeTask;
   const contextMenuTaskIdRef = useRef<string | null>(null);
-  const backdropReadyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backdropReadyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const contextMenuGestureActiveRef = useRef(false);
 
   const blockingState = getTaskListBlockingState({
@@ -140,9 +157,10 @@ export function TaskListPanel({
     contextMenuTaskIdRef.current = null;
     setContextMenu(null);
     setContextMenuBackdropReady(false);
-    setRenameDraft(null);
+    setActiveTask(null);
     setMovePickerOpen(false);
     setLabelPickerOpen(false);
+    setDatePickerOpen(false);
   }, []);
 
   const scheduleBackdropReady = useCallback(() => {
@@ -151,7 +169,10 @@ export function TaskListPanel({
     }
     backdropReadyTimerRef.current = setTimeout(() => {
       backdropReadyTimerRef.current = null;
-      if (!contextMenuGestureActiveRef.current && contextMenuTaskIdRef.current) {
+      if (
+        !contextMenuGestureActiveRef.current &&
+        contextMenuTaskIdRef.current
+      ) {
         setContextMenuBackdropReady(true);
       }
     }, 300);
@@ -182,16 +203,21 @@ export function TaskListPanel({
         const belowTop = anchor.y - panelY + anchor.height + 6;
         const aboveTop =
           anchor.y - panelY - TASK_CONTEXT_MENU_ESTIMATED_HEIGHT - 6;
-        const fitsBelow =
-          belowTop + TASK_CONTEXT_MENU_ESTIMATED_HEIGHT <
-          windowHeight - panelY - 8;
-        const top = fitsBelow ? belowTop : Math.max(8, aboveTop);
+        const anchorCenterY = anchor.y + anchor.height / 2;
+        const openAbove = anchorCenterY >= windowHeight / 2;
+        const top = openAbove
+          ? Math.max(8, aboveTop)
+          : Math.min(
+              belowTop,
+              windowHeight - panelY - TASK_CONTEXT_MENU_ESTIMATED_HEIGHT - 8,
+            );
 
         contextMenuTaskIdRef.current = task.id;
+        setActiveTask(task);
         setContextMenu({ task, top, left });
-        setRenameDraft(null);
         setMovePickerOpen(false);
         setLabelPickerOpen(false);
+        setDatePickerOpen(false);
       });
     },
     [windowHeight, windowWidth],
@@ -213,7 +239,7 @@ export function TaskListPanel({
 
   const renderBlockItem = useCallback(
     ({ item, drag, isActive }: RenderItemParams<TaskBlock>) => (
-      <ScaleDecorator activeScale={1.02}>
+      <ScaleDecorator activeScale={0.975}>
         <View style={isActive ? styles.activeBlock : undefined}>
           <TaskRow
             task={item.root}
@@ -225,6 +251,9 @@ export function TaskListPanel({
             onMovePastThreshold={dismissContextMenuForTask}
             onDrag={drag}
             isDragging={isActive}
+            longPressDelayMs={TASK_LIST_DRAG_DELAY_MS}
+            contextMenuDelayMs={TASK_LIST_CONTEXT_MENU_DELAY_MS}
+            enableHoldShadow
             style={isActive ? styles.activeRow : undefined}
           />
           {item.children.map((child) => (
@@ -237,6 +266,8 @@ export function TaskListPanel({
               onOpenContextMenu={openContextMenu}
               onContextMenuGestureEnd={handleContextMenuGestureEnd}
               onMovePastThreshold={dismissContextMenuForTask}
+              contextMenuDelayMs={TASK_LIST_CONTEXT_MENU_DELAY_MS}
+              enableHoldShadow
             />
           ))}
         </View>
@@ -252,30 +283,6 @@ export function TaskListPanel({
     ],
   );
 
-  async function handleTogglePinned() {
-    if (!contextTask) return;
-    const next = !contextTask.pinned;
-    closeContextMenu();
-    try {
-      await updateTaskPinned(contextTask.id, next);
-      patchTaskLocally();
-    } catch {
-      Alert.alert("Couldn't update pin");
-    }
-  }
-
-  async function handleToggleImportant() {
-    if (!contextTask) return;
-    const next = !contextTask.important;
-    closeContextMenu();
-    try {
-      await toggleTaskImportant(contextTask.id, next);
-      patchTaskLocally();
-    } catch {
-      Alert.alert("Couldn't update important");
-    }
-  }
-
   async function handleSetPriority(priority: number | null) {
     if (!contextTask) return;
     closeContextMenu();
@@ -287,58 +294,63 @@ export function TaskListPanel({
     }
   }
 
-  function handleRename() {
-    if (!contextTask) return;
-    const task = contextTask;
-    if (Platform.OS === "ios") {
-      setContextMenu(null);
-      Alert.prompt(
-        "Rename task",
-        undefined,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Save",
-            onPress: (value?: string) => {
-              void (async () => {
-                const next = value?.trim();
-                if (!next) return;
-                try {
-                  await updateTaskName(task.id, next);
-                  patchTaskLocally();
-                } catch {
-                  Alert.alert("Couldn't rename task");
-                }
-              })();
-            },
-          },
-        ],
-        "plain-text",
-        task.name,
-      );
-      return;
-    }
-    setRenameDraft(contextTask.name);
+  function handleOpenDatePicker() {
+    setContextMenu(null);
+    setContextMenuBackdropReady(false);
+    setDatePickerOpen(true);
   }
 
-  async function submitRename() {
-    if (!contextTask || renameDraft == null) return;
-    const next = renameDraft.trim();
-    if (!next) {
-      setRenameDraft(null);
-      return;
-    }
+  async function handleScheduleChange(selection: {
+    dueDate: string | null;
+    dueTimeMinutes: number | null;
+    dueDurationMinutes: number | null;
+  }) {
+    if (!contextTask) return;
     closeContextMenu();
     try {
-      await updateTaskName(contextTask.id, next);
+      await updateTaskSchedule(contextTask.id, selection);
       patchTaskLocally();
     } catch {
-      Alert.alert("Couldn't rename task");
+      Alert.alert("Couldn't update date");
+    }
+  }
+
+  async function handleDuplicateTask() {
+    if (!contextTask) return;
+    closeContextMenu();
+    try {
+      await createTask({
+        name: contextTask.name,
+        listId: contextTask.listId,
+        dueDate: contextTask.dueDate,
+        priority: contextTask.priority,
+        labelIds: contextTask.labels.map((label) => label.id),
+        parentId: contextTask.parentId,
+      });
+      patchTaskLocally();
+      void loadSidebar(true);
+    } catch {
+      Alert.alert("Couldn't duplicate task");
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!contextTask) return;
+    closeContextMenu();
+    const result = await copyToClipboard(getTaskShareUrl(contextTask.id));
+    if (result === "copied") {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return;
+    }
+    if (result === "failed") {
+      Alert.alert("Couldn't copy link");
     }
   }
 
   async function openLabelPicker() {
     if (!contextTask) return;
+    setContextMenu(null);
+    setContextMenuBackdropReady(false);
     try {
       const labels = await fetchLabels();
       setAllLabels(labels);
@@ -402,16 +414,20 @@ export function TaskListPanel({
 
   return (
     <View ref={panelRef} collapsable={false} style={{ flex: 1 }}>
-      <TaskListShell title={getPanelTitle(selectedView, taskData)}>
+      <TaskListShell
+        title={getPanelTitle(selectedView, taskData)}
+        onOpenLists={openListsDrawer}
+      >
         {blockingState ?? (
           <NestableScrollContainer
             ref={scrollRef as never}
             style={{ flex: 1 }}
-            contentContainerStyle={getListContentStyle()}
+            contentContainerStyle={getListContentStyle(listBottomPadding)}
             keyboardShouldPersistTaps="handled"
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }>
+            }
+          >
             {pinnedBlocks.length > 0 ? (
               <>
                 <TaskSectionTitle title="Pinned" />
@@ -451,51 +467,47 @@ export function TaskListPanel({
       </TaskListShell>
       {!addTaskComposerOpen ? <AddTaskButton /> : null}
 
-      {contextMenu && !renameDraft && !movePickerOpen && !labelPickerOpen ? (
+      {contextMenu &&
+      !movePickerOpen &&
+      !labelPickerOpen &&
+      !datePickerOpen ? (
         <TaskContextMenu
           task={contextMenu.task}
           top={contextMenu.top}
           left={contextMenu.left}
           backdropEnabled={contextMenuBackdropReady && !isDragging}
           onClose={closeContextMenu}
-          onRename={handleRename}
-          onTogglePinned={() => void handleTogglePinned()}
-          onToggleImportant={() => void handleToggleImportant()}
           onSetPriority={(priority) => void handleSetPriority(priority)}
-          onMoveTo={() => setMovePickerOpen(true)}
+          onMoveTo={() => {
+            setContextMenu(null);
+            setContextMenuBackdropReady(false);
+            setMovePickerOpen(true);
+          }}
+          onDate={handleOpenDatePicker}
           onAddLabel={() => void openLabelPicker()}
+          onDuplicate={() => void handleDuplicateTask()}
+          onCopyLink={() => void handleCopyLink()}
           onDelete={handleDeleteTask}
         />
       ) : null}
 
-      {renameDraft != null && contextTask ? (
-        <Modal transparent animationType="fade" onRequestClose={closeContextMenu}>
-          <Pressable style={styles.renameBackdrop} onPress={closeContextMenu} />
-          <View style={styles.renameCard}>
-            <ThemedText style={styles.renameTitle}>Rename task</ThemedText>
-            <TextInput
-              value={renameDraft}
-              onChangeText={setRenameDraft}
-              autoFocus
-              style={styles.renameInput}
-              onSubmitEditing={() => void submitRename()}
-            />
-            <View style={styles.renameActions}>
-              <Pressable onPress={closeContextMenu} style={styles.renameButton}>
-                <ThemedText>Cancel</ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={() => void submitRename()}
-                style={styles.renameButton}>
-                <ThemedText style={styles.renameSave}>Save</ThemedText>
-              </Pressable>
-            </View>
-          </View>
-        </Modal>
+      {datePickerOpen && contextTask ? (
+        <TaskDatePickerSheet
+          visible={datePickerOpen}
+          value={contextTask.dueDate}
+          dueTimeMinutes={contextTask.dueTimeMinutes ?? null}
+          dueDurationMinutes={contextTask.dueDurationMinutes ?? null}
+          onSelect={(selection) => void handleScheduleChange(selection)}
+          onClose={closeContextMenu}
+        />
       ) : null}
 
       {movePickerOpen && contextTask ? (
-        <Modal transparent animationType="fade" onRequestClose={closeContextMenu}>
+        <Modal
+          transparent
+          animationType="fade"
+          onRequestClose={closeContextMenu}
+        >
           <Pressable style={styles.renameBackdrop} onPress={closeContextMenu} />
           <View style={styles.moveCard}>
             <ThemedText style={styles.renameTitle}>Move to</ThemedText>
@@ -503,12 +515,14 @@ export function TaskListPanel({
               <Pressable
                 key={list.id}
                 style={styles.moveRow}
-                onPress={() => handleMoveToList(list)}>
+                onPress={() => handleMoveToList(list)}
+              >
                 <ThemedText
                   style={[
                     styles.moveRowLabel,
                     list.id === contextTask.listId && styles.moveRowCurrent,
-                  ]}>
+                  ]}
+                >
                   {list.name}
                 </ThemedText>
               </Pressable>
@@ -537,6 +551,7 @@ const styles = StyleSheet.create({
   },
   activeRow: {
     backgroundColor: "#ffffff",
+    borderRadius: 15,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -551,39 +566,8 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.25)",
   },
-  renameCard: {
-    position: "absolute",
-    left: 28,
-    right: 28,
-    top: "35%",
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 16,
-    gap: 12,
-  },
   renameTitle: {
     fontSize: 17,
-    fontWeight: "600",
-  },
-  renameInput: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#d4d4d8",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  renameActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 16,
-  },
-  renameButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-  },
-  renameSave: {
-    color: "#2563eb",
     fontWeight: "600",
   },
   moveCard: {

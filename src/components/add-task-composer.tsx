@@ -26,6 +26,7 @@ import { useApp } from "@/contexts/app-context";
 import { fetchLabels } from "@/lib/api";
 import { formatTaskDueDate } from "@/lib/format-due-date";
 import { nextTaskNamePlaceholder } from "@/lib/task-name-placeholders";
+import { findInboxList } from "@/lib/inbox-list";
 import type { SidebarListItem, TaskLabel } from "@/types/todo";
 
 type AddTaskComposerProps = {
@@ -35,6 +36,8 @@ type AddTaskComposerProps = {
 
 const ICON_COLOR = "#5a6578";
 const ACTIVE_ICON_COLOR = "#4873c7";
+const TOOLBAR_LABELED_ICON_SIZE = 25.5;
+const TOOLBAR_UTILITY_ICON_SIZE = 25.5;
 const PLACEHOLDER_COLOR = "#b8c4d0";
 
 export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
@@ -57,6 +60,7 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [listPickerOpen, setListPickerOpen] = useState(false);
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [taskNamePlaceholder, setTaskNamePlaceholder] = useState(
     nextTaskNamePlaceholder,
@@ -72,9 +76,7 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
   const selectedList =
     lists.find((list) => list.id === listId) ??
     lists.find((list) => list.id === defaultListId) ??
-    lists.find((list) => list.name.toLowerCase() === "inbox") ??
-    lists[0] ??
-    null;
+    findInboxList(lists);
   const dueDateLabel = formatTaskDueDate(dueDate);
   const assignedLabelIds = new Set(labelIds);
 
@@ -99,6 +101,7 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
       setLabelPickerOpen(false);
       setListPickerOpen(false);
       setPriorityMenuOpen(false);
+      setMoreMenuOpen(false);
       setSubmitting(false);
       submittingRef.current = false;
       setAddTaskComposerHeight(0);
@@ -202,6 +205,7 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
   }
 
   function handleAttachment() {
+    setMoreMenuOpen(false);
     Alert.alert(
       "Attachment",
       "Save the task first, then add attachments from the task detail screen.",
@@ -209,10 +213,16 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
   }
 
   function handleToolbarSubtask() {
+    setMoreMenuOpen(false);
     Alert.alert(
       "Subtask",
       "Save the task first, then add subtasks from the task detail screen.",
     );
+  }
+
+  function handleMoreMenuLabel() {
+    setMoreMenuOpen(false);
+    void openLabelPicker();
   }
 
   function handleVoiceNote() {
@@ -386,7 +396,10 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                         accessibilityRole="button"
                         accessibilityLabel="Date"
                         hitSlop={8}
-                        onPress={() => setDatePickerOpen(true)}
+                        onPress={() => {
+                          setMoreMenuOpen(false);
+                          setDatePickerOpen(true);
+                        }}
                         style={({ pressed }) => [
                           styles.toolbarIconSlot,
                           pressed && styles.toolbarIconPressed,
@@ -394,85 +407,116 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                         <AppSymbol
                           ios="calendar"
                           android="event"
-                          size={22}
+                          size={TOOLBAR_LABELED_ICON_SIZE}
                           tintColor={dueDate ? ACTIVE_ICON_COLOR : ICON_COLOR}
                         />
                       </Pressable>
-                      <ThemedText style={styles.toolbarCaption}>Date</ThemedText>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Date"
+                        hitSlop={6}
+                        onPress={() => {
+                          setMoreMenuOpen(false);
+                          setDatePickerOpen(true);
+                        }}>
+                        <ThemedText style={styles.toolbarCaption}>Date</ThemedText>
+                      </Pressable>
                     </View>
 
                     <View style={styles.flagAnchor}>
+                      <View style={styles.toolbarLabeledItem}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Priority"
+                          hitSlop={8}
+                          onPress={() => {
+                            setMoreMenuOpen(false);
+                            setPriorityMenuOpen((open) => !open);
+                          }}
+                          style={({ pressed }) => [
+                            styles.toolbarIconSlot,
+                            pressed && styles.toolbarIconPressed,
+                          ]}>
+                          <AppSymbol
+                            ios={priority != null ? "flag.fill" : "flag"}
+                            android={priority != null ? "flag" : "outlined-flag"}
+                            size={TOOLBAR_LABELED_ICON_SIZE}
+                            tintColor={
+                              priority != null
+                                ? getTaskPriorityColor(priority)
+                                : ICON_COLOR
+                            }
+                          />
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Priority"
+                          hitSlop={6}
+                          onPress={() => {
+                            setMoreMenuOpen(false);
+                            setPriorityMenuOpen((open) => !open);
+                          }}>
+                          <ThemedText style={styles.toolbarCaption}>Priority</ThemedText>
+                        </Pressable>
+                      </View>
+                    </View>
+
+                    <View style={styles.moreMenuAnchor}>
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel="Priority"
+                        accessibilityLabel="More options"
                         hitSlop={8}
-                        onPress={() => setPriorityMenuOpen((open) => !open)}
+                        onPress={() => {
+                          setPriorityMenuOpen(false);
+                          setMoreMenuOpen((open) => !open);
+                        }}
                         style={({ pressed }) => [
                           styles.toolbarIconSlot,
                           pressed && styles.toolbarIconPressed,
                         ]}>
                         <AppSymbol
-                          ios={priority != null ? "flag.fill" : "flag"}
-                          android={priority != null ? "flag" : "outlined-flag"}
-                          size={22}
-                          tintColor={
-                            priority != null
-                              ? getTaskPriorityColor(priority)
-                              : ICON_COLOR
-                          }
+                          ios="ellipsis"
+                          android="more-horiz"
+                          size={TOOLBAR_UTILITY_ICON_SIZE}
+                          tintColor={ICON_COLOR}
                         />
                       </Pressable>
+                      {moreMenuOpen ? (
+                        <View style={styles.moreMenu}>
+                          <Pressable
+                            style={styles.moreMenuRow}
+                            onPress={handleMoreMenuLabel}>
+                            <AppSymbol
+                              ios="tag"
+                              android="local-offer"
+                              size={18}
+                              tintColor={
+                                labelIds.length > 0
+                                  ? ACTIVE_ICON_COLOR
+                                  : ICON_COLOR
+                              }
+                            />
+                            <ThemedText style={styles.moreMenuRowText}>Label</ThemedText>
+                          </Pressable>
+                          <Pressable
+                            style={styles.moreMenuRow}
+                            onPress={handleToolbarSubtask}>
+                            <TbSubtaskIcon size={18} color={ICON_COLOR} />
+                            <ThemedText style={styles.moreMenuRowText}>subtask</ThemedText>
+                          </Pressable>
+                          <Pressable
+                            style={styles.moreMenuRow}
+                            onPress={handleAttachment}>
+                            <RiAttachment2Icon size={18} color={ICON_COLOR} />
+                            <ThemedText style={styles.moreMenuRowText}>
+                              Attachment
+                            </ThemedText>
+                          </Pressable>
+                        </View>
+                      ) : null}
                     </View>
-
-                    <View style={styles.toolbarLabeledItem}>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Labels"
-                        hitSlop={8}
-                        onPress={() => void openLabelPicker()}
-                        style={({ pressed }) => [
-                          styles.toolbarIconSlot,
-                          pressed && styles.toolbarIconPressed,
-                        ]}>
-                        <AppSymbol
-                          ios="tag"
-                          android="local-offer"
-                          size={22}
-                          tintColor={
-                            labelIds.length > 0 ? ACTIVE_ICON_COLOR : ICON_COLOR
-                          }
-                        />
-                      </Pressable>
-                      <ThemedText style={styles.toolbarCaption}>Label</ThemedText>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Attachment"
-                        hitSlop={8}
-                        onPress={handleAttachment}
-                        style={({ pressed }) => [
-                          styles.toolbarIconSlot,
-                          styles.toolbarInlineIconSlot,
-                          pressed && styles.toolbarIconPressed,
-                        ]}>
-                        <RiAttachment2Icon size={22} color={ICON_COLOR} />
-                      </Pressable>
-                    </View>
-
-                    <View style={styles.toolbarLabeledItem}>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Subtask"
-                        hitSlop={8}
-                        onPress={handleToolbarSubtask}
-                        style={({ pressed }) => [
-                          styles.toolbarIconSlot,
-                          pressed && styles.toolbarIconPressed,
-                        ]}>
-                        <TbSubtaskIcon size={22} color={ICON_COLOR} />
-                      </Pressable>
-                      <ThemedText style={styles.toolbarCaption}>subtask</ThemedText>
-                    </View>
-
+                  </View>
+                  <View style={styles.toolbarTrailing}>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Voice note"
@@ -480,18 +524,17 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                       onPress={handleVoiceNote}
                       style={({ pressed }) => [
                         styles.toolbarIconSlot,
-                        styles.voiceIconSlot,
+                        styles.voiceButton,
                         pressed && styles.toolbarIconPressed,
                       ]}>
                       <AppSymbol
                         ios="mic"
                         android="mic"
-                        size={22}
+                        size={TOOLBAR_UTILITY_ICON_SIZE}
                         tintColor={ICON_COLOR}
                       />
                     </Pressable>
-                  </View>
-                  <Pressable
+                    <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Confirm add task"
                     disabled={submitting || !name.trim()}
@@ -515,6 +558,7 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                       />
                     )}
                   </Pressable>
+                  </View>
                 </View>
               </View>
               </View>
@@ -712,29 +756,63 @@ const styles = StyleSheet.create({
   flagAnchor: {
     position: "relative",
   },
+  moreMenuAnchor: {
+    position: "relative",
+    zIndex: 20,
+  },
+  moreMenu: {
+    position: "absolute",
+    left: 0,
+    bottom: 30,
+    minWidth: 168,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e5e7eb",
+    borderRadius: 10,
+    backgroundColor: "#ffffff",
+    overflow: "hidden",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  moreMenuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#f3f4f6",
+  },
+  moreMenuRowText: {
+    fontSize: 14,
+    color: "#374151",
+  },
+  voiceButton: {
+    marginRight: 15,
+  },
+  toolbarTrailing: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    flexShrink: 0,
+  },
   toolbarLabeledItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 0,
   },
   toolbarCaption: {
     fontSize: 9,
+    marginLeft: 3,
     lineHeight: 11,
     color: "#9ca3af",
-    textAlign: "center",
   },
   toolbarIconSlot: {
     height: 24,
-    minWidth: 32,
+    minWidth: 24,
     alignItems: "center",
     justifyContent: "center",
-  },
-  toolbarInlineIconSlot: {
-    minWidth: 24,
-    marginLeft: 2,
-  },
-  voiceIconSlot: {
-    marginLeft: 21,
   },
   toolbarIconPressed: {
     opacity: 0.55,

@@ -7,11 +7,12 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { FAB_RIGHT_INSET, getFabBottomOffset } from "@/constants/tab-bar";
+import { FAB_RIGHT_INSET, ADD_TASK_FAB_SIZE, FAB_BOTTOM_NUDGE, getFabBottomOffset } from "@/constants/tab-bar";
 import { useApp } from "@/contexts/app-context";
 
-const FAB_SIZE = 55;
+const FAB_SIZE = ADD_TASK_FAB_SIZE;
 const FAB_RADIUS = FAB_SIZE / 2;
+const FAB_OPACITY = 0.93;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -60,7 +61,8 @@ export function AddTaskButton({
         onPress={handlePress}
         style={[
           styles.fab,
-          { bottom: fabBottom - 42, right: FAB_RIGHT_INSET },
+          { bottom: fabBottom - FAB_BOTTOM_NUDGE, right: FAB_RIGHT_INSET },
+          { opacity: FAB_OPACITY },
           animatedStyle,
         ]}
       >

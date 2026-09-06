@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 
 import { AppSymbol } from "@/components/app-symbol";
+
+const SIDEBAR_MENU_ICON_SIZE = 18 * 0.86 * (1 - 0.13);
+const SIDEBAR_MENU_ICON_COLOR = "#c5c5c5";
 
 type SidebarRowProps = {
   title: string;
@@ -30,11 +33,12 @@ export function SidebarRow({
 }: SidebarRowProps) {
   return (
     <View
-      className={`mx-1.5 mb-px min-h-[45px] flex-row items-center gap-2 rounded-[3px] border-l-2 px-3 ${
+      className={`mb-px ml-[3px] mr-1.5 min-h-[45px] flex-row items-center gap-2 rounded-[3px] border-l-2 px-3 ${
         selected
           ? "border-l-lists-accentBorder bg-lists-selected/50"
           : "border-l-transparent"
-      }`}>
+      }`}
+    >
       {icon ? (
         <Pressable
           onPress={onPress}
@@ -43,8 +47,9 @@ export function SidebarRow({
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={title}
-          className="items-center justify-center active:opacity-85">
-          <View className="w-[22px] items-center">{icon}</View>
+          className="h-[22px] w-[22px] shrink-0 items-center justify-center active:opacity-85"
+        >
+          {icon}
         </Pressable>
       ) : null}
 
@@ -54,12 +59,22 @@ export function SidebarRow({
         delayLongPress={150}
         accessibilityRole="button"
         accessibilityLabel={title}
-        className="min-w-0 flex-1 flex-row items-center gap-2 active:opacity-85">
+        className="min-h-[22px] min-w-0 flex-1 flex-row items-center gap-2 active:opacity-85"
+      >
         <Text
-          className={`flex-1 text-[15px] leading-[21px] ${
-            selected ? "font-medium text-[#111111]" : "font-normal text-zinc-700"
+          className={`flex-1 shrink text-[17px] mb-[1px] leading-[22px] ${
+            selected
+              ? "font-medium text-[#111111]"
+              : "font-normal text-zinc-700"
           }`}
-          numberOfLines={1}>
+          numberOfLines={1}
+          {...(Platform.OS === "android"
+            ? {
+                includeFontPadding: false,
+                textAlignVertical: "center" as const,
+              }
+            : {})}
+        >
           {title}
         </Text>
         {colorDot ? (
@@ -69,7 +84,7 @@ export function SidebarRow({
           />
         ) : null}
         {count !== undefined && (alwaysShowCount || count > 0) ? (
-          <Text className="min-w-5 pr-1 text-right text-xs tabular-nums text-zinc-400">
+          <Text className="min-w-5 ml-2 text-right text-xs tabular-nums text-[#cdcdd2]">
             {count}
           </Text>
         ) : null}
@@ -81,13 +96,16 @@ export function SidebarRow({
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={`Options for ${title}`}
-          className="h-7 w-7 items-center justify-center rounded-lg active:bg-zinc-200/80">
-          <AppSymbol
-            ios="ellipsis"
-            android="more-horiz"
-            size={19}
-            tintColor="#777777"
-          />
+          className="h-7 w-7 items-center justify-center rounded-lg active:bg-zinc-200/80"
+        >
+          <View style={{ marginLeft: 7 }}>
+            <AppSymbol
+              ios="ellipsis"
+              android="more-horiz"
+              size={SIDEBAR_MENU_ICON_SIZE}
+              tintColor={SIDEBAR_MENU_ICON_COLOR}
+            />
+          </View>
         </Pressable>
       ) : null}
     </View>

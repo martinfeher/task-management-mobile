@@ -12,7 +12,7 @@ export function formatDueTime(dueTimeMinutes: number | null | undefined) {
   }).format(date);
 }
 
-export function formatTaskDueDate(
+export function formatTaskDueDateParts(
   value: string | null,
   dueTimeMinutes?: number | null,
 ) {
@@ -38,8 +38,22 @@ export function formatTaskDueDate(
     }).format(date);
   }
 
-  const timeLabel = formatDueTime(dueTimeMinutes);
-  return timeLabel ? `${dateLabel}, ${timeLabel}` : dateLabel;
+  return {
+    dateLabel,
+    timeLabel: formatDueTime(dueTimeMinutes),
+  };
+}
+
+export function formatTaskDueDate(
+  value: string | null,
+  dueTimeMinutes?: number | null,
+) {
+  const parts = formatTaskDueDateParts(value, dueTimeMinutes);
+  if (!parts) return null;
+
+  return parts.timeLabel
+    ? `${parts.dateLabel}, ${parts.timeLabel}`
+    : parts.dateLabel;
 }
 
 function startOfDay(date: Date) {

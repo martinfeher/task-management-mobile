@@ -124,6 +124,38 @@ function toMinutes(hour12: number, minute: number, isPm: boolean) {
   return hours24 * 60 + minute;
 }
 
+function schedulesEqual(
+  left: TaskScheduleSelection,
+  right: TaskScheduleSelection,
+) {
+  return (
+    left.dueDate === right.dueDate &&
+    left.dueTimeMinutes === right.dueTimeMinutes &&
+    left.dueDurationMinutes === right.dueDurationMinutes &&
+    (left.reminderEnabled ?? false) === (right.reminderEnabled ?? false)
+  );
+}
+
+function scheduleFromProps(
+  value: string | null,
+  dueTimeMinutes: number | null,
+  dueDurationMinutes: number | null,
+): TaskScheduleSelection {
+  const parsed = parseDateKey(value);
+  const timeEnabled = dueTimeMinutes != null;
+  const time = fromMinutes(dueTimeMinutes);
+  const duration = dueDurationMinutes ?? DEFAULT_DURATION_MINUTES;
+
+  return {
+    dueDate: parsed ? toDateKey(parsed) : null,
+    dueTimeMinutes: timeEnabled
+      ? toMinutes(time.hour12, time.minute, time.isPm)
+      : null,
+    dueDurationMinutes: timeEnabled ? duration : null,
+    reminderEnabled: false,
+  };
+}
+
 function formatTime12h(hour12: number, minute: number, isPm: boolean) {
   const totalMinutes = toMinutes(hour12, minute, isPm);
   const hours24 = Math.floor(totalMinutes / 60);
@@ -540,6 +572,14 @@ export function TaskDatePickerSheet({
   onClose,
 }: TaskDatePickerSheetProps) {
   const insets = useSafeAreaInsets();
+  const initialScheduleRef = useRef<TaskScheduleSelection>({
+    dueDate: null,
+    dueTimeMinutes: null,
+    dueDurationMinutes: null,
+    reminderEnabled: false,
+  });
+  const userHasEditedRef = useRef(false);
+  const sheetOpenRef = useRef(false);
   const initialTime = fromMinutes(dueTimeMinutes);
 
   const [monthDate, setMonthDate] = useState(
@@ -560,11 +600,26 @@ export function TaskDatePickerSheet({
   );
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      sheetOpenRef.current = false;
+      userHasEditedRef.current = false;
+      return;
+    }
 
     const parsed = parseDateKey(value);
     const time = fromMinutes(dueTimeMinutes);
     const nextDuration = dueDurationMinutes ?? DEFAULT_DURATION_MINUTES;
+    const isOpening = !sheetOpenRef.current;
+    sheetOpenRef.current = true;
+
+    if (!isOpening) return;
+
+    userHasEditedRef.current = false;
+    initialScheduleRef.current = scheduleFromProps(
+      value,
+      dueTimeMinutes,
+      dueDurationMinutes,
+    );
     setSelectedDate(parsed);
     setMonthDate(parsed ?? startOfDay(new Date()));
     setHour12(time.hour12);
@@ -645,6 +700,7 @@ export function TaskDatePickerSheet({
   }
 
   function handleTimeToggle(nextEnabled: boolean) {
+    markEdited();
     const nextDuration = nextEnabled
       ? (durationMinutes ?? DEFAULT_DURATION_MINUTES)
       : durationMinutes;
@@ -664,30 +720,35 @@ export function TaskDatePickerSheet({
   }
 
   function handleHourSelect(nextHour12: number) {
+    markEdited();
     setHour12(nextHour12);
     if (!timeEnabled) return;
     commitSchedule(selectedDate, { hour12: nextHour12 });
   }
 
   function handleMinuteSelect(nextMinute: number) {
+    markEdited();
     setMinute(nextMinute);
     if (!timeEnabled) return;
     commitSchedule(selectedDate, { minute: nextMinute });
   }
 
   function handleAmPmSelect(nextIsPm: boolean) {
+    markEdited();
     setIsPm(nextIsPm);
     if (!timeEnabled) return;
     commitSchedule(selectedDate, { isPm: nextIsPm });
   }
 
   function selectDurationPreset(nextDuration: number) {
+    markEdited();
     setDurationMinutes(nextDuration);
     if (!timeEnabled) return;
     commitSchedule(selectedDate, { durationMinutes: nextDuration });
   }
 
   function handleReminderToggle() {
+    markEdited();
     const nextReminderEnabled = !reminderEnabled;
     setReminderEnabled(nextReminderEnabled);
     if (!timeEnabled) return;
@@ -695,6 +756,7 @@ export function TaskDatePickerSheet({
   }
 
   function handleRepeatToggle(nextEnabled: boolean) {
+    markEdited();
     setRepeatEnabled(nextEnabled);
     if (!nextEnabled) {
       setDraftRepeat("none");
@@ -703,6 +765,8 @@ export function TaskDatePickerSheet({
 
   function handleRepeatSelect(next: RepeatOption) {
     if (next === draftRepeat) return;
+
+    markEdited();
 
     if (next === "none") {
       setDraftRepeat("none");
@@ -732,7 +796,46 @@ export function TaskDatePickerSheet({
     onClose();
   }
 
+  function markEdited() {
+    userHasEditedRef.current = true;
+  }
+
+  function hasPendingChanges() {
+    return !schedulesEqual(
+      buildScheduleSelection(selectedDate),
+      initialScheduleRef.current,
+    );
+  }
+
+  function requestDismiss() {
+    const hasChanges =
+      userHasEditedRef.current && hasPendingChanges();
+
+    if (!hasChanges) {
+      onClose();
+      return;
+    }
+
+    Alert.alert(
+      "Save changes?",
+      "You changed the date or time. Save before closing?",
+      [
+        { text: "Keep editing", style: "cancel" },
+        {
+          text: "Discard",
+          style: "destructive",
+          onPress: () => {
+            onSelect(initialScheduleRef.current);
+            onClose();
+          },
+        },
+        { text: "Save", onPress: handleConfirm },
+      ],
+    );
+  }
+
   function handleDaySelect(day: Date) {
+    markEdited();
     setSelectedDate(day);
     commitSchedule(day);
   }
@@ -750,9 +853,9 @@ export function TaskDatePickerSheet({
   if (!visible) return null;
 
   return (
-    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+    <Modal transparent animationType="fade" visible onRequestClose={requestDismiss}>
       <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable style={styles.backdrop} onPress={requestDismiss} />
         <View
           style={[
             styles.card,
@@ -770,7 +873,7 @@ export function TaskDatePickerSheet({
             <View style={styles.header}>
               <Pressable
                 style={styles.headerCloseButton}
-                onPress={onClose}
+                onPress={requestDismiss}
                 accessibilityRole="button"
                 accessibilityLabel="Close"
               >
@@ -788,19 +891,7 @@ export function TaskDatePickerSheet({
                 </ThemedText>
               </View>
 
-              <Pressable
-                style={styles.confirmButton}
-                onPress={handleConfirm}
-                accessibilityRole="button"
-                accessibilityLabel="Confirm"
-              >
-                <AppSymbol
-                  ios="checkmark"
-                  android="check"
-                  size={16}
-                  tintColor="#ffffff"
-                />
-              </Pressable>
+              <View style={styles.headerSideSpacer} />
             </View>
 
             <View style={styles.monthHeader}>
@@ -1084,18 +1175,35 @@ export function TaskDatePickerSheet({
               </View>
             )}
 
-            {selectedDate ? (
+            <View style={styles.footerActions}>
+              <View style={styles.footerActionsLeft}>
+                {selectedDate ? (
+                  <Pressable
+                    style={styles.clearScheduleButton}
+                    onPress={handleClearSchedule}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear date and time"
+                  >
+                    <ThemedText style={styles.clearScheduleButtonText}>
+                      Clear
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
               <Pressable
-                style={styles.clearScheduleButton}
-                onPress={handleClearSchedule}
+                style={styles.footerConfirmButton}
+                onPress={handleConfirm}
                 accessibilityRole="button"
-                accessibilityLabel="Clear date and time"
+                accessibilityLabel="Confirm"
               >
-                <ThemedText style={styles.clearScheduleButtonText}>
-                  Clear
-                </ThemedText>
+                <AppSymbol
+                  ios="checkmark"
+                  android="check"
+                  size={16}
+                  tintColor="#ffffff"
+                />
               </Pressable>
-            ) : null}
+            </View>
           </ScrollView>
         </View>
       </View>
@@ -1155,14 +1263,28 @@ const styles = StyleSheet.create({
     color: "#9ca3af",
     textAlign: "center",
   },
-  confirmButton: {
+  headerSideSpacer: {
+    width: 36,
+    height: 36,
+    marginRight: HEADER_CORNER_INSET - Spacing.three,
+  },
+  footerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: Spacing.three,
+  },
+  footerActionsLeft: {
+    minHeight: 33,
+    justifyContent: "center",
+  },
+  footerConfirmButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: ACCENT,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: HEADER_CORNER_INSET - Spacing.three,
   },
   monthHeader: {
     flexDirection: "row",
@@ -1558,12 +1680,10 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.85)",
   },
   clearScheduleButton: {
-    marginTop: Spacing.three,
     borderRadius: 10,
     backgroundColor: "#5e95e7",
     width: 76,
     height: 33,
-    alignSelf: "flex-start",
     alignItems: "center",
     justifyContent: "center",
   },

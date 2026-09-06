@@ -2,6 +2,7 @@ import { AppSymbol } from "@/components/app-symbol";
 import { useMemo, useState } from "react";
 import {
   Alert,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -19,6 +20,10 @@ import type { TaskLabel } from "@/types/todo";
 
 const LABEL_CHECKMARK_SIZE = Math.round(18 * 0.88);
 const LABEL_CHECKMARK_COLOR = "#22c55e"; // tailwind green-500
+const CLOSE_ICON_COLOR = "#6f7c8d";
+const CLOSE_BUTTON_TOP = 8;
+const CLOSE_BUTTON_RIGHT = 8;
+const SHEET_BOTTOM_EXTENSION = 40;
 
 type TaskLabelPickerProps = {
   labels: TaskLabel[];
@@ -30,6 +35,11 @@ type TaskLabelPickerProps = {
   bottomInset?: number;
   /** Sheet height as a fraction of the screen height. */
   sheetHeightRatio?: number;
+  /**
+   * When true, renders in a root Modal so height is based on the full screen
+   * rather than a parent sheet (e.g. iOS task edit form sheet).
+   */
+  fullScreen?: boolean;
 };
 
 export function TaskLabelPicker({
@@ -39,10 +49,14 @@ export function TaskLabelPicker({
   onClose,
   onCreateLabel,
   bottomInset = 0,
-  sheetHeightRatio = 0.55,
+  sheetHeightRatio = 0.4,
+  fullScreen = false,
 }: TaskLabelPickerProps) {
   const { height: windowHeight } = useWindowDimensions();
-  const sheetHeight = windowHeight * sheetHeightRatio;
+  const sheetHeight = fullScreen
+    ? windowHeight * sheetHeightRatio
+    : windowHeight * sheetHeightRatio + SHEET_BOTTOM_EXTENSION;
+  const sheetBottom = fullScreen ? 0 : bottomInset;
   const [draft, setDraft] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -80,129 +94,151 @@ export function TaskLabelPicker({
     }
   }
 
-  return (
+  const sheet = (
     <View style={styles.overlay} pointerEvents="box-none">
       <Pressable
-        style={[styles.backdrop, { bottom: bottomInset }]}
+        style={[styles.backdrop, { bottom: sheetBottom }]}
         onPress={onClose}
       />
       <View
-        style={[
-          styles.sheet,
-          { height: sheetHeight, bottom: bottomInset },
-        ]}>
+        style={[styles.sheet, { height: sheetHeight, bottom: sheetBottom }]}
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close labels"
           hitSlop={8}
           onPress={onClose}
-          style={styles.closeButton}>
+          style={styles.closeButton}
+        >
           <AppSymbol
             ios="xmark"
             android="close"
-            size={14}
-            weight="semibold"
-            tintColor="#7a8494"
+            size={18}
+            tintColor={CLOSE_ICON_COLOR}
           />
         </Pressable>
 
-        <View style={styles.sheetHeader}>
-          <View style={styles.handle} />
-          <ThemedText style={styles.title}>Labels</ThemedText>
+        <View style={styles.sheetBody}>
+          <View style={styles.sheetHeader}>
+            <View style={styles.handle} />
+            <ThemedText style={styles.title}>Labels</ThemedText>
 
-          <View style={styles.searchRow}>
-            <AppSymbol
-              ios="magnifyingglass"
-              android="search"
-              size={16}
-              tintColor="#9ca3af"
-            />
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              placeholder="Type in a label"
-              placeholderTextColor="#9ca3af"
-              style={styles.searchInput}
-              autoCorrect={false}
-              autoCapitalize="none"
-              returnKeyType="done"
-              {...(Platform.OS === "android"
-                ? { includeFontPadding: false, textBreakStrategy: "simple" as const }
-                : null)}
-              onSubmitEditing={() => {
-                if (showCreateOption) {
-                  void handleCreateLabel();
-                }
-              }}
-            />
-          </View>
-        </View>
-
-        <ScrollView
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
-          showsVerticalScrollIndicator
-          bounces>
-          {showCreateOption ? (
-            <Pressable
-              style={styles.createRow}
-              disabled={creating}
-              onPress={() => void handleCreateLabel()}>
+            <View style={styles.searchRow}>
               <AppSymbol
-                ios="tag"
-                android="label"
-                size={18}
-                tintColor="#6b7280"
+                ios="magnifyingglass"
+                android="search"
+                size={16}
+                tintColor="#9ca3af"
               />
-              <ThemedText style={styles.createRowText}>
-                Create label &quot;{query}&quot;
-              </ThemedText>
-            </Pressable>
-          ) : null}
+              <TextInput
+                value={draft}
+                onChangeText={setDraft}
+                placeholder="Type in a label"
+                placeholderTextColor="#9ca3af"
+                style={styles.searchInput}
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="done"
+                {...(Platform.OS === "android"
+                  ? {
+                      includeFontPadding: false,
+                      textBreakStrategy: "simple" as const,
+                    }
+                  : null)}
+                onSubmitEditing={() => {
+                  if (showCreateOption) {
+                    void handleCreateLabel();
+                  }
+                }}
+              />
+            </View>
+          </View>
 
-          {filteredLabels.length === 0 && !showCreateOption ? (
-            <ThemedText style={styles.empty} themeColor="textSecondary">
-              {query ? "No matching labels." : "No labels yet."}
-            </ThemedText>
-          ) : (
-            filteredLabels.map((label) => {
-              const assigned = assignedLabelIds.has(label.id);
-              return (
-                <Pressable
-                  key={label.id}
-                  style={styles.row}
-                  onPress={() => onToggleLabel(label.id, !assigned)}>
-                  <View
-                    style={[
-                      styles.colorSwatch,
-                      { backgroundColor: getLabelDotColor(label) },
-                    ]}
-                  />
-                  <ThemedText
-                    style={[styles.labelText, assigned && styles.labelTextSelected]}
-                    numberOfLines={1}>
-                    {label.label}
-                  </ThemedText>
-                  {assigned ? (
-                    <AppSymbol
-                      ios="checkmark"
-                      android="check"
-                      size={LABEL_CHECKMARK_SIZE}
-                      tintColor={LABEL_CHECKMARK_COLOR}
+          <ScrollView
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            bounces
+          >
+            {showCreateOption ? (
+              <Pressable
+                style={styles.createRow}
+                disabled={creating}
+                onPress={() => void handleCreateLabel()}
+              >
+                <AppSymbol
+                  ios="tag"
+                  android="label"
+                  size={18}
+                  tintColor="#6b7280"
+                />
+                <ThemedText style={styles.createRowText}>
+                  Create label &quot;{query}&quot;
+                </ThemedText>
+              </Pressable>
+            ) : null}
+
+            {filteredLabels.length === 0 && !showCreateOption ? (
+              <ThemedText style={styles.empty} themeColor="textSecondary">
+                {query ? "No matching labels." : "No labels yet."}
+              </ThemedText>
+            ) : (
+              filteredLabels.map((label) => {
+                const assigned = assignedLabelIds.has(label.id);
+                return (
+                  <Pressable
+                    key={label.id}
+                    style={styles.row}
+                    onPress={() => onToggleLabel(label.id, !assigned)}
+                  >
+                    <View
+                      style={[
+                        styles.colorSwatch,
+                        { backgroundColor: getLabelDotColor(label) },
+                      ]}
                     />
-                  ) : (
-                    <View style={styles.checkPlaceholder} />
-                  )}
-                </Pressable>
-              );
-            })
-          )}
-        </ScrollView>
+                    <ThemedText
+                      style={[
+                        styles.labelText,
+                        assigned && styles.labelTextSelected,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {label.label}
+                    </ThemedText>
+                    {assigned ? (
+                      <View style={styles.checkmarkSlot}>
+                        <AppSymbol
+                          ios="checkmark"
+                          android="check"
+                          size={LABEL_CHECKMARK_SIZE}
+                          tintColor={LABEL_CHECKMARK_COLOR}
+                        />
+                      </View>
+                    ) : (
+                      <View style={styles.checkPlaceholder} />
+                    )}
+                  </Pressable>
+                );
+              })
+            )}
+          </ScrollView>
+        </View>
       </View>
     </View>
   );
+
+  if (fullScreen) {
+    return (
+      <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+        {sheet}
+      </Modal>
+    );
+  }
+
+  return sheet;
 }
 
 const styles = StyleSheet.create({
@@ -221,24 +257,28 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+    overflow: "hidden",
+  },
+  sheetBody: {
+    flex: 1,
     paddingHorizontal: Spacing.three,
     paddingBottom: Spacing.three,
-    overflow: "hidden",
   },
   sheetHeader: {
     flexShrink: 0,
   },
   closeButton: {
     position: "absolute",
-    top: 6,
-    right: 6,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#f3f4f6",
+    top: CLOSE_BUTTON_TOP,
+    right: CLOSE_BUTTON_RIGHT,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#f4f4f6",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 1,
+    zIndex: 10,
+    elevation: 10,
   },
   handle: {
     alignSelf: "center",
@@ -253,7 +293,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     marginBottom: Spacing.two,
-    paddingRight: 36,
+    paddingRight: 44,
   },
   searchRow: {
     flexDirection: "row",
@@ -262,7 +302,7 @@ const styles = StyleSheet.create({
     minHeight: 42,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#d4d4d8",
-    borderRadius: 6,
+    borderRadius: 12,
     paddingHorizontal: 12,
     marginBottom: Spacing.two,
   },
@@ -329,8 +369,12 @@ const styles = StyleSheet.create({
     color: "#2563eb",
     fontWeight: "500",
   },
+  checkmarkSlot: {
+    marginRight: 8,
+  },
   checkPlaceholder: {
     width: LABEL_CHECKMARK_SIZE,
     height: LABEL_CHECKMARK_SIZE,
+    marginRight: 8,
   },
 });

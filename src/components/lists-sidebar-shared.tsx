@@ -22,7 +22,13 @@ import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/hooks/use-theme";
 import { fetchLabels } from "@/lib/api";
 import { getLabelDotColor } from "@/lib/label-colors";
-import type { SelectedView, SidebarData, SidebarLabelItem, SidebarListItem } from "@/types/todo";
+import { findInboxList } from "@/lib/inbox-list";
+import type {
+  SelectedView,
+  SidebarData,
+  SidebarLabelItem,
+  SidebarListItem,
+} from "@/types/todo";
 
 const SafeAreaView = withUniwind(RNSafeAreaView);
 const GestureHandlerRootView = withUniwind(GHRootView);
@@ -162,6 +168,11 @@ export function ListsPinnedRows({
   navIconColor: string;
 }) {
   const todaySelected = selectedView?.type === "today";
+  const inboxList = findInboxList(data?.lists ?? []);
+  const inboxSelected =
+    inboxList != null &&
+    selectedView?.type === "list" &&
+    selectedView.id === inboxList.id;
   const importantSelected = selectedView?.type === "important";
 
   return (
@@ -178,6 +189,22 @@ export function ListsPinnedRows({
         }
         onPress={() => onSelectView({ type: "today" })}
       />
+      {inboxList ? (
+        <SidebarRow
+          title="Inbox"
+          count={inboxList.taskCount}
+          selected={inboxSelected}
+          icon={
+            <AppSymbol
+              ios="tray"
+              android="inbox"
+              size={16}
+              tintColor={inboxSelected ? "#111111" : navIconColor}
+            />
+          }
+          onPress={() => onSelectView({ type: "list", id: inboxList.id })}
+        />
+      ) : null}
       <SidebarRow
         title="Important"
         count={data?.counts.important}

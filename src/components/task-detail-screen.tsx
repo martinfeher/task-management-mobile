@@ -30,6 +30,10 @@ import { FullWindowOverlay } from "react-native-screens";
 
 import { AppSymbol } from "@/components/app-symbol";
 import {
+  CalendarColorControl,
+  calendarColorTitleReserveSpace,
+} from "@/components/calendar-color-control";
+import {
   FormattedNotesInput,
   type NotesInputHandle,
 } from "@/components/formatted-notes-input";
@@ -49,10 +53,6 @@ import { TEXT_FORMAT_TOOLBAR_HEIGHT } from "@/components/text-format-toolbar";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
-import {
-  CalendarColorControl,
-  calendarColorTitleReserveSpace,
-} from "@/components/calendar-color-control";
 import { useHistoryActionsRegistration } from "@/contexts/history-actions-toolbar-context";
 import { useTextFormatToolbarRegistration } from "@/contexts/text-format-toolbar-context";
 import {
@@ -1605,14 +1605,6 @@ export function TaskDetailScreen() {
           style={styles.sheetMeasureRoot}
           collapsable={false}
         >
-          {priorityMenuOpen ? (
-            <Pressable
-              style={styles.priorityBackdrop}
-              onPress={() => setPriorityMenuOpen(false)}
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss priority menu"
-            />
-          ) : null}
           {calendarColorPickerOpen ? (
             <Pressable
               style={styles.priorityBackdrop}
@@ -1658,6 +1650,8 @@ export function TaskDetailScreen() {
             showsVerticalScrollIndicator={false}
             nestedScrollEnabled
             bounces
+            scrollEnabled={!priorityMenuOpen}
+            pointerEvents={priorityMenuOpen ? "none" : "auto"}
           >
             <View style={styles.listHeaderRow}>
               <Pressable
@@ -1783,7 +1777,8 @@ export function TaskDetailScreen() {
                       placeholderTextColor="#9ca3af"
                       style={[
                         styles.taskTitleInput,
-                        openedFromCalendar && styles.taskTitleInputWithCalendarColor,
+                        openedFromCalendar &&
+                          styles.taskTitleInputWithCalendarColor,
                       ]}
                       multiline
                       blurOnSubmit
@@ -1964,26 +1959,7 @@ export function TaskDetailScreen() {
             )}
           </ScrollView>
 
-          {labelPickerOpen ? (
-            <TaskLabelPicker
-              labels={allLabels}
-              assignedLabelIds={assignedLabelIds}
-              onToggleLabel={(labelId, assigned) =>
-                void handleToggleLabel(labelId, assigned)
-              }
-              onClose={() => setLabelPickerOpen(false)}
-              bottomInset={toolbarTotalHeight}
-              sheetHeightRatio={0.45}
-            />
-          ) : null}
-
-          <View
-            style={[
-              styles.toolbar,
-              toolbarSafeAreaStyle,
-              labelPickerOpen && styles.toolbarAboveLabelPicker,
-            ]}
-          >
+          <View style={[styles.toolbar, toolbarSafeAreaStyle]}>
             {saveStatusLabel ? (
               <ThemedText
                 style={[
@@ -2002,9 +1978,17 @@ export function TaskDetailScreen() {
                     ios="calendar"
                     android="event"
                     tintColor={TOOLBAR_ICON_COLOR}
+                    size={TOOLBAR_LABELED_ICON_SIZE}
                     onPress={() => setDatePickerOpen(true)}
                   />
-                  <ThemedText style={styles.toolbarCaption}>Date</ThemedText>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Date"
+                    hitSlop={6}
+                    onPress={() => setDatePickerOpen(true)}
+                  >
+                    <ThemedText style={styles.toolbarCaption}>Date</ThemedText>
+                  </Pressable>
                 </View>
                 <View style={styles.flagAnchor}>
                   <View style={styles.toolbarLabeledItem}>
@@ -2020,11 +2004,19 @@ export function TaskDetailScreen() {
                           ? getTaskPriorityColor(detail?.priority ?? null)
                           : undefined
                       }
+                      size={TOOLBAR_LABELED_ICON_SIZE}
                       onPress={() => setPriorityMenuOpen((open) => !open)}
                     />
-                    <ThemedText style={styles.toolbarCaption}>
-                      Priority
-                    </ThemedText>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Priority"
+                      hitSlop={6}
+                      onPress={() => setPriorityMenuOpen((open) => !open)}
+                    >
+                      <ThemedText style={styles.toolbarCaption}>
+                        Priority
+                      </ThemedText>
+                    </Pressable>
                   </View>
                   {priorityMenuOpen ? (
                     <TaskPriorityFlagPopup
@@ -2037,15 +2029,40 @@ export function TaskDetailScreen() {
                   ) : null}
                 </View>
                 <View style={styles.toolbarLabeledItem}>
-                  <DetailToolbarIcon
-                    accessibilityLabel="Labels"
-                    ios="tag"
-                    android="local-offer"
-                    tintColor={TOOLBAR_ICON_COLOR}
-                    onPress={() => setLabelPickerOpen(true)}
-                  />
-                  <ThemedText style={styles.toolbarCaption}>Label</ThemedText>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Subtask"
+                    hitSlop={8}
+                    onPress={() => setSubtaskDraftOpen(true)}
+                    style={({ pressed }) => [
+                      detailToolbarStyles.toolbarIconSlot,
+                      pressed && detailToolbarStyles.toolbarIconPressed,
+                    ]}
+                  >
+                    <TbSubtaskIcon
+                      size={TOOLBAR_LABELED_ICON_SIZE}
+                      color={TOOLBAR_ICON_COLOR}
+                    />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Subtask"
+                    hitSlop={6}
+                    onPress={() => setSubtaskDraftOpen(true)}
+                  >
+                    <ThemedText style={styles.toolbarCaption}>
+                      subtask
+                    </ThemedText>
+                  </Pressable>
                 </View>
+                <DetailToolbarIcon
+                  accessibilityLabel="Labels"
+                  ios="tag"
+                  android="local-offer"
+                  tintColor={TOOLBAR_ICON_COLOR}
+                  size={TOOLBAR_UTILITY_ICON_SIZE}
+                  onPress={() => setLabelPickerOpen(true)}
+                />
                 <View style={styles.toolbarLabeledItem}>
                   <Pressable
                     accessibilityRole="button"
@@ -2057,38 +2074,32 @@ export function TaskDetailScreen() {
                       pressed && detailToolbarStyles.toolbarIconPressed,
                     ]}
                   >
-                    <RiAttachment2Icon size={22} color={TOOLBAR_ICON_COLOR} />
+                    <RiAttachment2Icon
+                      size={TOOLBAR_UTILITY_ICON_SIZE}
+                      color={TOOLBAR_ICON_COLOR}
+                    />
                   </Pressable>
-                  <ThemedText style={styles.toolbarCaption}>
-                    Images/Files
-                  </ThemedText>
-                </View>
-                <View style={styles.toolbarLabeledItem}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Subtask"
-                    hitSlop={8}
-                    onPress={() => setSubtaskDraftOpen(true)}
-                    style={({ pressed }) => [
-                      detailToolbarStyles.toolbarIconSlot,
-                      pressed && detailToolbarStyles.toolbarIconPressed,
-                    ]}
-                  >
-                    <TbSubtaskIcon size={22} color={TOOLBAR_ICON_COLOR} />
-                  </Pressable>
-                  <ThemedText style={styles.toolbarCaption}>subtask</ThemedText>
+                  {/* <ThemedText style={styles.toolbarCaption}>Files</ThemedText> */}
                 </View>
                 <DetailToolbarIcon
                   accessibilityLabel="Voice note"
                   ios="mic"
                   android="mic"
+                  size={TOOLBAR_UTILITY_ICON_SIZE}
                   onPress={handleVoiceNote}
                   slotStyle={styles.voiceIconSlot}
                 />
               </View>
             </View>
           </View>
-
+          {priorityMenuOpen ? (
+            <Pressable
+              style={styles.priorityBackdrop}
+              onPress={() => setPriorityMenuOpen(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss priority menu"
+            />
+          ) : null}
           <TaskDatePickerSheet
             visible={datePickerOpen}
             value={detail != null ? detail.dueDate : (dueDate ?? null)}
@@ -2141,12 +2152,26 @@ export function TaskDetailScreen() {
         </View>
       </KeyboardAvoidingView>
       {scheduleUndoOverlay}
+      {labelPickerOpen ? (
+        <TaskLabelPicker
+          labels={allLabels}
+          assignedLabelIds={assignedLabelIds}
+          onToggleLabel={(labelId, assigned) =>
+            void handleToggleLabel(labelId, assigned)
+          }
+          onClose={() => setLabelPickerOpen(false)}
+          fullScreen
+          sheetHeightRatio={0.475}
+        />
+      ) : null}
     </>
   );
 }
 
 const TOOLBAR_ICON_COLOR = "#5a6578";
 const TOOLBAR_ACTIVE_ICON_COLOR = "#4873c7";
+const TOOLBAR_LABELED_ICON_SIZE = 25.5;
+const TOOLBAR_UTILITY_ICON_SIZE = 25.5;
 
 function DetailToolbarIcon({
   ios,
@@ -2156,6 +2181,7 @@ function DetailToolbarIcon({
   tintColor,
   onPress,
   slotStyle,
+  size = 22,
 }: {
   ios: string;
   android: string;
@@ -2164,6 +2190,7 @@ function DetailToolbarIcon({
   tintColor?: string;
   onPress?: () => void;
   slotStyle?: StyleProp<ViewStyle>;
+  size?: number;
 }) {
   return (
     <Pressable
@@ -2180,7 +2207,7 @@ function DetailToolbarIcon({
       <AppSymbol
         ios={ios}
         android={android}
-        size={22}
+        size={size}
         tintColor={
           tintColor ?? (active ? TOOLBAR_ACTIVE_ICON_COLOR : TOOLBAR_ICON_COLOR)
         }
@@ -2303,16 +2330,19 @@ const styles = StyleSheet.create({
   flagAnchor: {
     position: "relative",
     zIndex: 31,
+    elevation: 31,
   },
   priorityPopupAboveToolbar: {
     position: "absolute",
     bottom: 36,
     left: -24,
     zIndex: 32,
+    elevation: 32,
   },
   priorityBackdrop: {
     ...StyleSheet.absoluteFill,
     zIndex: 30,
+    elevation: 30,
   },
   contentContainer: {
     paddingLeft: Spacing.three,
@@ -2435,10 +2465,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     paddingTop: Spacing.two,
   },
-  toolbarAboveLabelPicker: {
-    zIndex: 40,
-    elevation: 40,
-  },
   toolbarControls: {
     paddingHorizontal: Spacing.three,
   },
@@ -2456,11 +2482,12 @@ const styles = StyleSheet.create({
   },
   toolbarCaption: {
     fontSize: 9,
+    marginLeft: 3,
     lineHeight: 11,
     color: "#9ca3af",
   },
   voiceIconSlot: {
-    marginLeft: 21,
+    marginLeft: 39,
   },
   subtaskBackdrop: {
     ...StyleSheet.absoluteFill,

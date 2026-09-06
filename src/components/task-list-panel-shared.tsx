@@ -10,10 +10,20 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppSymbol } from "@/components/app-symbol";
-import { TaskRow } from "@/components/task-row";
+import { IoChevronBackIcon } from "@/components/io-chevron-back-icon";
+import { TASK_ROW_DEFAULT_LONG_PRESS_MS, TaskRow } from "@/components/task-row";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import type { SelectedView, TaskItem, TaskListData } from "@/types/todo";
+
+/** Hold duration before drag/reorder activates in the task list panel. */
+export const TASK_LIST_DRAG_DELAY_MS = TASK_ROW_DEFAULT_LONG_PRESS_MS * 1;
+
+/** Hold duration before the task context menu opens in the task list panel. */
+export const TASK_LIST_CONTEXT_MENU_DELAY_MS = TASK_LIST_DRAG_DELAY_MS * 3;
+
+/** @deprecated Use `TASK_LIST_DRAG_DELAY_MS`. */
+export const TASK_LIST_LONG_PRESS_MS = TASK_LIST_DRAG_DELAY_MS;
 
 export type TaskListPanelProps = {
   selectedView: SelectedView | null;
@@ -68,14 +78,27 @@ export function useToggleComplete(
 export function TaskListShell({
   title,
   children,
+  onOpenLists,
 }: {
   title: string;
   children: ReactNode;
+  onOpenLists?: () => void;
 }) {
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
         <View style={styles.header}>
+          {onOpenLists ? (
+            <Pressable
+              onPress={onOpenLists}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Open lists"
+              style={styles.backButton}
+            >
+              <IoChevronBackIcon size={22} color="#4873c7" />
+            </Pressable>
+          ) : null}
           <ThemedText style={styles.headerTitle} numberOfLines={1}>
             {title}
           </ThemedText>
@@ -104,14 +127,21 @@ export function getTaskListBlockingState({
   if (!selectedView) {
     return (
       <View style={styles.centerState}>
-        <AppSymbol ios="list.bullet" android="list" size={40} tintColor="#d4d4d8" />
+        <AppSymbol
+          ios="list.bullet"
+          android="list"
+          size={40}
+          tintColor="#d4d4d8"
+        />
         <ThemedText style={styles.emptyTitle}>No list selected</ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.emptyHint}>
           Choose a list from the Lists drawer to view its tasks.
         </ThemedText>
         {onOpenListsDrawer ? (
           <Pressable style={styles.goToListsButton} onPress={onOpenListsDrawer}>
-            <ThemedText style={styles.goToListsButtonText}>Open Lists</ThemedText>
+            <ThemedText style={styles.goToListsButtonText}>
+              Open Lists
+            </ThemedText>
           </Pressable>
         ) : null}
       </View>
@@ -143,7 +173,9 @@ export function getTaskListBlockingState({
   if (pinned.length === 0 && tasks.length === 0) {
     return (
       <View style={styles.centerState}>
-        <ThemedText themeColor="textSecondary">{getEmptyMessage(selectedView)}</ThemedText>
+        <ThemedText themeColor="textSecondary">
+          {getEmptyMessage(selectedView)}
+        </ThemedText>
       </View>
     );
   }
@@ -178,7 +210,9 @@ export function StaticTaskSection({
 
   return (
     <View style={title ? styles.pinnedSection : undefined}>
-      {title ? <ThemedText style={styles.sectionTitle}>{title}</ThemedText> : null}
+      {title ? (
+        <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+      ) : null}
       {tasks.map((task) => (
         <TaskRow
           key={task.id}
@@ -203,13 +237,11 @@ export function TaskSectionTitle({ title }: { title: string }) {
 export const taskListStyles = StyleSheet.create({
   listContent: {
     flexGrow: 1,
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
   } as ViewStyle,
 });
 
-export function getListContentStyle(
-  bottomPadding = 88,
-): StyleProp<ViewStyle> {
+export function getListContentStyle(bottomPadding = 115): StyleProp<ViewStyle> {
   return [taskListStyles.listContent, { paddingBottom: bottomPadding }];
 }
 
@@ -230,6 +262,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#e4e4e7",
     backgroundColor: "#ffffff",
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    marginBottom: 2,
+    marginLeft: -6,
   },
   headerTitle: {
     fontSize: 20,

@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 
 import { createTask as createTaskRequest, deleteTask as deleteTaskRequest, fetchSidebarData, fetchTasks, reorderLists as reorderListsRequest, reorderTasks as reorderTasksRequest, toggleTaskCompleted as toggleTaskCompletedRequest } from "@/lib/api";
+import { findInboxList, listsWithoutInbox } from "@/lib/inbox-list";
 import { cancelTaskReminder, scheduleTaskReminder } from "@/lib/notifications";
 import type {
   SelectedView,
@@ -86,14 +87,6 @@ type AppContextValue = {
   replaceCalendarTasks: (tasks: TaskItem[]) => void;
   setCalendarTaskColor: (taskId: string, calendarColor: string) => void;
 };
-
-function findInboxList(lists: SidebarListItem[]) {
-  return (
-    lists.find((list) => list.name.trim().toLowerCase() === "inbox") ??
-    lists[0] ??
-    null
-  );
-}
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -493,9 +486,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const reorderLists = useCallback((lists: SidebarListItem[]) => {
-    setSidebarData((current) => (current ? { ...current, lists } : current));
-    void reorderListsRequest(lists.map((list) => list.id)).catch((error) => {
+  const reorderLists = useCallback((reorderedLists: SidebarListItem[]) => {
+    const current = sidebarDataRef.current;
+    if (!current) return;
+
+    const inbox = findInboxList(current.lists);
+    const nextLists = inbox ? [inbox, ...reorderedLists] : reorderedLists;
+
+    setSidebarData({ ...current, lists: nextLists });
+    void reorderListsRequest(nextLists.map((list) => list.id)).catch((error) => {
       console.warn("Failed to persist list order:", error);
       void loadSidebar(true);
     });

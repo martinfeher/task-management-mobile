@@ -1,7 +1,7 @@
+import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import * as Haptics from "expo-haptics";
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -10,6 +10,10 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/themed-text";
+import {
+  getCalendarTaskBackgroundColor,
+  getCalendarTaskTitleColor,
+} from "@/lib/calendar-colors";
 import {
   CALENDAR_DEFAULT_DURATION_MINUTES,
   CALENDAR_HOUR_END,
@@ -49,8 +53,7 @@ const WORKLET_MIN_DURATION = 15;
 function snapTopFromDrag(baseTop: number, dragOffsetY: number) {
   "worklet";
   const proposedTop = baseTop + dragOffsetY;
-  const minutes =
-    (proposedTop / WORKLET_HOUR_HEIGHT + WORKLET_HOUR_START) * 60;
+  const minutes = (proposedTop / WORKLET_HOUR_HEIGHT + WORKLET_HOUR_START) * 60;
   const snapped =
     Math.round(minutes / WORKLET_SLOT_MINUTES) * WORKLET_SLOT_MINUTES;
   const minMinutes = WORKLET_HOUR_START * 60;
@@ -61,8 +64,7 @@ function snapTopFromDrag(baseTop: number, dragOffsetY: number) {
 
 function minutesFromTop(snappedTop: number) {
   "worklet";
-  const minutes =
-    (snappedTop / WORKLET_HOUR_HEIGHT + WORKLET_HOUR_START) * 60;
+  const minutes = (snappedTop / WORKLET_HOUR_HEIGHT + WORKLET_HOUR_START) * 60;
   return Math.round(minutes / WORKLET_SLOT_MINUTES) * WORKLET_SLOT_MINUTES;
 }
 
@@ -71,18 +73,24 @@ function snappedColumnShift(dragOffsetX: number, columnWidth: number) {
   return Math.round(dragOffsetX / Math.max(columnWidth, 1));
 }
 
-function snappedResizeHeight(baseHeight: number, dragOffsetY: number, maxHeight: number) {
+function snappedResizeHeight(
+  baseHeight: number,
+  dragOffsetY: number,
+  maxHeight: number,
+) {
   "worklet";
   const minHeight = Math.max(
     28,
     (WORKLET_MIN_DURATION / 60) * WORKLET_HOUR_HEIGHT,
   );
-  const proposed = Math.max(minHeight, Math.min(maxHeight, baseHeight + dragOffsetY));
+  const proposed = Math.max(
+    minHeight,
+    Math.min(maxHeight, baseHeight + dragOffsetY),
+  );
   const duration = Math.max(
     WORKLET_MIN_DURATION,
-    Math.round(
-      ((proposed / WORKLET_HOUR_HEIGHT) * 60) / WORKLET_SLOT_MINUTES,
-    ) * WORKLET_SLOT_MINUTES,
+    Math.round(((proposed / WORKLET_HOUR_HEIGHT) * 60) / WORKLET_SLOT_MINUTES) *
+      WORKLET_SLOT_MINUTES,
   );
   return Math.max(minHeight, (duration / 60) * WORKLET_HOUR_HEIGHT);
 }
@@ -145,6 +153,14 @@ export function CalendarTimedTaskBlock({
     () => formatCalendarTimeRange(dueTimeMinutes, dueDurationMinutes),
     [dueDurationMinutes, dueTimeMinutes],
   );
+  const taskBackgroundColor = useMemo(
+    () => getCalendarTaskBackgroundColor(task.calendarColor),
+    [task.calendarColor],
+  );
+  const taskTitleColor = useMemo(
+    () => getCalendarTaskTitleColor(taskBackgroundColor),
+    [taskBackgroundColor],
+  );
   const [livePreviewLabel, setLivePreviewLabel] = useState(previewLabel);
 
   useEffect(() => {
@@ -187,9 +203,14 @@ export function CalendarTimedTaskBlock({
     translateY,
   ]);
 
-  const updatePreviewLabel = useCallback((startMinutes: number, durationMinutes: number) => {
-    setLivePreviewLabel(formatCalendarTimeRange(startMinutes, durationMinutes));
-  }, []);
+  const updatePreviewLabel = useCallback(
+    (startMinutes: number, durationMinutes: number) => {
+      setLivePreviewLabel(
+        formatCalendarTimeRange(startMinutes, durationMinutes),
+      );
+    },
+    [],
+  );
 
   const setInteractionActive = useCallback(
     (active: boolean) => {
@@ -269,7 +290,10 @@ export function CalendarTimedTaskBlock({
       if (isResizing.value) return;
 
       const snappedTop = snapTopFromDrag(baseTop.value, event.translationY);
-      const columnShift = snappedColumnShift(event.translationX, columnWidthSv.value);
+      const columnShift = snappedColumnShift(
+        event.translationX,
+        columnWidthSv.value,
+      );
       const clampedShift = Math.max(
         -columnIndexSv.value,
         Math.min(dayCountSv.value - 1 - columnIndexSv.value, columnShift),
@@ -382,18 +406,25 @@ export function CalendarTimedTaskBlock({
           height: layout.height,
         },
         blockStyle,
-      ]}>
-      <Animated.View pointerEvents="none" style={[styles.timePreview, previewStyle]}>
-        <ThemedText style={styles.timePreviewText}>{livePreviewLabel}</ThemedText>
+      ]}
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.timePreview, previewStyle]}
+      >
+        <ThemedText style={styles.timePreviewText}>
+          {livePreviewLabel}
+        </ThemedText>
       </Animated.View>
 
       <GestureDetector gesture={bodyGesture}>
         <Animated.View
-          style={[
-            styles.taskBlock,
-            { backgroundColor: task.calendarColor ?? "#b8b8b8" },
-          ]}>
-          <ThemedText style={styles.taskBlockText} numberOfLines={4}>
+          style={[styles.taskBlock, { backgroundColor: taskBackgroundColor }]}
+        >
+          <ThemedText
+            style={[styles.taskBlockText, { color: taskTitleColor }]}
+            numberOfLines={4}
+          >
             {task.name}
           </ThemedText>
         </Animated.View>
@@ -447,8 +478,8 @@ const styles = StyleSheet.create({
   },
   taskBlockText: {
     fontSize: 12,
+    lineHeight: 12 * 1.3,
     fontWeight: "600",
-    color: "#ffffff",
   },
   resizeHandle: {
     position: "absolute",

@@ -1,22 +1,40 @@
+import { AppSymbol } from "@/components/app-symbol";
+import { TaskCheckbox } from "@/components/task-checkbox";
+import type { TaskContextMenuAnchor } from "@/components/task-context-menu";
+import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
+import { ThemedText } from "@/components/themed-text";
+import { formatTaskDueDateParts } from "@/lib/format-due-date";
+import { getLabelDotColor } from "@/lib/label-colors";
+import type { TaskItem, TaskLabel } from "@/types/todo";
 import { useEffect, useRef, useState } from "react";
 import {
+  Platform,
   Pressable,
   StyleSheet,
   View,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { TaskCheckbox } from "@/components/task-checkbox";
-import { AppSymbol } from "@/components/app-symbol";
-import { ThemedText } from "@/components/themed-text";
-import type { TaskContextMenuAnchor } from "@/components/task-context-menu";
-import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
-import { formatTaskDueDate } from "@/lib/format-due-date";
-import { getLabelDotColor } from "@/lib/label-colors";
-import type { TaskItem, TaskLabel } from "@/types/todo";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 const CONTEXT_MENU_HOLD_MS = 250;
+export const TASK_ROW_DEFAULT_LONG_PRESS_MS = CONTEXT_MENU_HOLD_MS;
 const MOVE_CLOSE_THRESHOLD_PX = 15;
+const HOLD_SHADOW_BORDER_RADIUS = 10;
+const HOLD_SHADOW_MIN_RADIUS = 20;
+const HOLD_SHADOW_MAX_RADIUS = 40;
+const HOLD_SHADOW_MAX_OPACITY = 0.3;
+const HOLD_SHADOW_COLOR = "#4b5669";
+const HOLD_SHADOW_MAX_ELEVATION = 10;
+const IS_IOS = Platform.OS === "ios";
+
+const AnimatedView = Animated.createAnimatedComponent(View);
 
 const TASK_ROW_HORIZONTAL_INSET = 14;
 
@@ -34,6 +52,12 @@ type TaskRowProps = {
   isDragging?: boolean;
   onToggleComplete?: (taskId: string, completed: boolean) => void;
   style?: StyleProp<ViewStyle>;
+  /** Delay before drag/reorder activates. */
+  longPressDelayMs?: number;
+  /** Delay before the context menu opens; should be longer than `longPressDelayMs`. */
+  contextMenuDelayMs?: number;
+  /** Grow a lift shadow while the finger is held before long-press completes. */
+  enableHoldShadow?: boolean;
 };
 
 function TaskLabelChip({ label }: { label: TaskLabel }) {
@@ -59,8 +83,15 @@ export function TaskRow({
   isDragging = false,
   onToggleComplete,
   style,
+  longPressDelayMs = TASK_ROW_DEFAULT_LONG_PRESS_MS,
+  contextMenuDelayMs,
+  enableHoldShadow = false,
 }: TaskRowProps) {
-  const dueDateLabel = formatTaskDueDate(task.dueDate, task.dueTimeMinutes);
+  const dueDateParts = formatTaskDueDateParts(
+    task.dueDate,
+    task.dueTimeMinutes,
+  );
+  const hasDueDate = dueDateParts != null;
   const [optimisticChecked, setOptimisticChecked] = useState(false);
   const checked = task.completed || optimisticChecked;
   const rowRef = useRef<View>(null);
@@ -68,12 +99,126 @@ export function TaskRow({
   const pressOriginRef = useRef<{ x: number; y: number } | null>(null);
   const moveThresholdFiredRef = useRef(false);
   const pressActiveRef = useRef(false);
+  const holdProgress = useSharedValue(0);
+  const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const contextMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const dragActivatedRef = useRef(false);
+  const canLongPress = Boolean(onOpenContextMenu || onDrag);
+  const usesSplitHoldTiming =
+    contextMenuDelayMs != null && contextMenuDelayMs > longPressDelayMs;
+  const holdShadowDurationMs = usesSplitHoldTiming
+    ? contextMenuDelayMs
+    : longPressDelayMs;
 
   useEffect(() => {
     setOptimisticChecked(false);
   }, [task.id, task.completed]);
 
+  const holdShadowStyle = useAnimatedStyle(() => {
+    const progress = holdProgress.value;
+    if (progress <= 0) {
+      return {};
+    }
+
+    const surfaceStyle = {
+      borderRadius: HOLD_SHADOW_BORDER_RADIUS * progress,
+      marginHorizontal: progress * 5,
+      marginVertical: progress * 2,
+      zIndex: Math.round(progress * 20),
+    };
+
+    if (IS_IOS) {
+      return {
+        ...surfaceStyle,
+        shadowColor: HOLD_SHADOW_COLOR,
+        shadowOpacity:
+          HOLD_SHADOW_MAX_OPACITY * 0.35 +
+          progress * (HOLD_SHADOW_MAX_OPACITY * 0.65),
+        shadowRadius:
+          HOLD_SHADOW_MIN_RADIUS +
+          progress * (HOLD_SHADOW_MAX_RADIUS - HOLD_SHADOW_MIN_RADIUS),
+        shadowOffset: { width: 0, height: 0 },
+      };
+    }
+
+    return {
+      ...surfaceStyle,
+      elevation: 1 + progress * HOLD_SHADOW_MAX_ELEVATION,
+    };
+  });
+
+  function startHoldShadow() {
+    if (!enableHoldShadow || !canLongPress) return;
+    cancelAnimation(holdProgress);
+    holdProgress.value = 0;
+    holdProgress.value = withTiming(1, {
+      duration: holdShadowDurationMs,
+      easing: Easing.linear,
+    });
+  }
+
+  function clearHoldTimers() {
+    if (dragTimerRef.current) {
+      clearTimeout(dragTimerRef.current);
+      dragTimerRef.current = null;
+    }
+    if (contextMenuTimerRef.current) {
+      clearTimeout(contextMenuTimerRef.current);
+      contextMenuTimerRef.current = null;
+    }
+  }
+
+  function triggerContextMenu() {
+    resetHoldShadow();
+    menuOpenedThisGestureRef.current = true;
+    if (onOpenContextMenu) {
+      rowRef.current?.measureInWindow((x, y, width, height) => {
+        onOpenContextMenu(task, { x, y, width, height });
+      });
+    }
+  }
+
+  function triggerDrag() {
+    if (!onDrag || dragActivatedRef.current) return;
+    dragActivatedRef.current = true;
+    onDrag();
+  }
+
+  function scheduleSplitHoldActions() {
+    clearHoldTimers();
+    dragActivatedRef.current = false;
+
+    if (onDrag) {
+      dragTimerRef.current = setTimeout(() => {
+        dragTimerRef.current = null;
+        if (!pressActiveRef.current || menuOpenedThisGestureRef.current) return;
+        triggerDrag();
+      }, longPressDelayMs);
+    }
+
+    if (onOpenContextMenu) {
+      const menuDelay = usesSplitHoldTiming
+        ? contextMenuDelayMs
+        : longPressDelayMs;
+      contextMenuTimerRef.current = setTimeout(() => {
+        contextMenuTimerRef.current = null;
+        if (!pressActiveRef.current || menuOpenedThisGestureRef.current) return;
+        triggerContextMenu();
+      }, menuDelay);
+    }
+  }
+
+  function resetHoldShadow() {
+    if (!enableHoldShadow) return;
+    cancelAnimation(holdProgress);
+    holdProgress.value = withTiming(0, { duration: 120 });
+  }
+
   function handleLongPress() {
+    if (usesSplitHoldTiming) return;
+    resetHoldShadow();
     menuOpenedThisGestureRef.current = true;
     if (onOpenContextMenu) {
       rowRef.current?.measureInWindow((x, y, width, height) => {
@@ -87,11 +232,33 @@ export function TaskRow({
     pressActiveRef.current = true;
     pressOriginRef.current = { x: pageX, y: pageY };
     moveThresholdFiredRef.current = false;
+    menuOpenedThisGestureRef.current = false;
+    if (usesSplitHoldTiming) {
+      scheduleSplitHoldActions();
+    }
+    startHoldShadow();
   }
 
   function handleTouchMove(pageX: number, pageY: number) {
-    if (!menuOpenedThisGestureRef.current || !pressActiveRef.current) return;
     const origin = pressOriginRef.current;
+    if (
+      pressActiveRef.current &&
+      !menuOpenedThisGestureRef.current &&
+      origin &&
+      Math.hypot(pageX - origin.x, pageY - origin.y) >= 8
+    ) {
+      if (dragTimerRef.current) {
+        clearTimeout(dragTimerRef.current);
+        dragTimerRef.current = null;
+      }
+      if (contextMenuTimerRef.current) {
+        clearTimeout(contextMenuTimerRef.current);
+        contextMenuTimerRef.current = null;
+      }
+      resetHoldShadow();
+    }
+
+    if (!menuOpenedThisGestureRef.current || !pressActiveRef.current) return;
     if (!origin || moveThresholdFiredRef.current) return;
     const dx = pageX - origin.x;
     const dy = pageY - origin.y;
@@ -104,6 +271,8 @@ export function TaskRow({
   function handleTouchEnd() {
     pressActiveRef.current = false;
     pressOriginRef.current = null;
+    clearHoldTimers();
+    resetHoldShadow();
   }
 
   function clearMenuOpenedFlagSoon() {
@@ -112,29 +281,17 @@ export function TaskRow({
     }, 250);
   }
 
-  const canLongPress = Boolean(onOpenContextMenu || onDrag);
   const visibleLabels = task.labels.slice(0, 2);
-  const hiddenLabelCount = Math.max(0, task.labels.length - visibleLabels.length);
+  const hiddenLabelCount = Math.max(
+    0,
+    task.labels.length - visibleLabels.length,
+  );
 
-  return (
-    <View
-      ref={rowRef}
-      collapsable={false}
-      onTouchStart={(event) => {
-        handleTouchStart(event.nativeEvent.pageX, event.nativeEvent.pageY);
-      }}
-      onTouchMove={(event) => {
-        handleTouchMove(event.nativeEvent.pageX, event.nativeEvent.pageY);
-      }}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
-      style={[
-        styles.row,
-        task.depth > 0 && styles.subtaskRow,
-        isDragging && styles.draggingRow,
-        style,
-      ]}>
-      <View style={styles.checkboxHit}>
+  const rowContents = (
+    <>
+      <View
+        style={[styles.checkboxHit, !hasDueDate && styles.checkboxHitNoDueDate]}
+      >
         <TaskCheckbox
           checked={checked}
           onPress={() => {
@@ -155,7 +312,10 @@ export function TaskRow({
       </View>
 
       <Pressable
-        style={styles.contentPressable}
+        style={[
+          styles.contentPressable,
+          !hasDueDate && styles.contentPressableNoDueDate,
+        ]}
         onPressIn={() => {
           menuOpenedThisGestureRef.current = false;
         }}
@@ -163,26 +323,40 @@ export function TaskRow({
           if (menuOpenedThisGestureRef.current) return;
           onPress?.(task);
         }}
-        onLongPress={canLongPress ? handleLongPress : undefined}
+        onLongPress={
+          canLongPress && !usesSplitHoldTiming ? handleLongPress : undefined
+        }
         onPressOut={() => {
+          clearHoldTimers();
+          resetHoldShadow();
           if (menuOpenedThisGestureRef.current) {
             onContextMenuGestureEnd?.();
             clearMenuOpenedFlagSoon();
           }
         }}
-        delayLongPress={CONTEXT_MENU_HOLD_MS}
+        delayLongPress={
+          canLongPress && !usesSplitHoldTiming ? longPressDelayMs : undefined
+        }
         disabled={!onPress && !canLongPress}
         accessibilityRole="button"
         accessibilityLabel={
           canLongPress
             ? `Open task ${task.name}. Long press for options or drag to reorder`
             : `Open task ${task.name}`
-        }>
-        <View style={[styles.textBlock, !dueDateLabel && styles.textBlockCentered]}>
+        }
+      >
+        <View
+          style={[styles.textBlock, !hasDueDate && styles.textBlockNoDueDate]}
+        >
           <View style={styles.mainRow}>
             <ThemedText
-              style={[styles.title, checked && styles.titleCompleted]}
-              numberOfLines={1}>
+              style={[
+                styles.title,
+                !hasDueDate && styles.titleNoDueDate,
+                checked && styles.titleCompleted,
+              ]}
+              numberOfLines={1}
+            >
               {task.name}
             </ThemedText>
 
@@ -210,39 +384,105 @@ export function TaskRow({
                 <TaskLabelChip key={label.id} label={label} />
               ))}
               {hiddenLabelCount > 0 ? (
-                <ThemedText style={styles.moreLabels}>+{hiddenLabelCount}</ThemedText>
+                <ThemedText style={styles.moreLabels}>
+                  +{hiddenLabelCount}
+                </ThemedText>
               ) : null}
             </View>
           </View>
 
-          {dueDateLabel ? (
+          {dueDateParts ? (
             <View style={styles.dueDateRow}>
               <ThemedText
                 style={[styles.dueDate, checked && styles.dueDateCompleted]}
-                numberOfLines={1}>
-                {dueDateLabel}
+                numberOfLines={1}
+              >
+                {dueDateParts.dateLabel}
+                {dueDateParts.timeLabel ? ", " : ""}
               </ThemedText>
+              {dueDateParts.timeLabel ? (
+                <ThemedText
+                  style={[
+                    styles.dueDate,
+                    styles.dueTime,
+                    checked && styles.dueDateCompleted,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {dueDateParts.timeLabel}
+                </ThemedText>
+              ) : null}
             </View>
           ) : null}
         </View>
       </Pressable>
-    </View>
+      {!isDragging ? (
+        <View pointerEvents="none" style={styles.separator} />
+      ) : null}
+    </>
+  );
+
+  return (
+    <AnimatedView
+      ref={rowRef}
+      collapsable={false}
+      onTouchStart={(event) => {
+        handleTouchStart(event.nativeEvent.pageX, event.nativeEvent.pageY);
+      }}
+      onTouchMove={(event) => {
+        handleTouchMove(event.nativeEvent.pageX, event.nativeEvent.pageY);
+      }}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+      style={
+        enableHoldShadow
+          ? [styles.rowHost, styles.rowHoldShadowHost]
+          : undefined
+      }
+    >
+      <AnimatedView
+        style={[
+          styles.row,
+          !hasDueDate && styles.rowNoDueDate,
+          task.depth > 0 && styles.subtaskRow,
+          isDragging && styles.draggingRow,
+          enableHoldShadow && !isDragging && holdShadowStyle,
+          style,
+        ]}
+      >
+        {rowContents}
+      </AnimatedView>
+    </AnimatedView>
   );
 }
 
 const styles = StyleSheet.create({
+  rowHost: {
+    overflow: "visible",
+  },
   row: {
     minHeight: 54,
     flexDirection: "row",
     alignItems: "stretch",
     paddingLeft: TASK_ROW_HORIZONTAL_INSET,
     paddingRight: TASK_ROW_HORIZONTAL_INSET,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#d9d9d9",
     backgroundColor: "#ffffff",
+    position: "relative",
+  },
+  rowHoldShadowHost: {
+    overflow: "visible",
+  },
+  separator: {
+    position: "absolute",
+    left: "10%",
+    bottom: 0,
+    right: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "#d9d9d9",
   },
   draggingRow: {
-    opacity: 0.97,
+    opacity: 0.92,
+    borderRadius: 15,
   },
   subtaskRow: {
     paddingLeft: TASK_ROW_HORIZONTAL_INSET + 20,
@@ -264,8 +504,21 @@ const styles = StyleSheet.create({
     minWidth: 0,
     gap: 1,
   },
-  textBlockCentered: {
+  rowNoDueDate: {
+    alignItems: "center",
+  },
+  checkboxHitNoDueDate: {
+    paddingVertical: 0,
+  },
+  contentPressableNoDueDate: {
+    paddingVertical: 0,
+  },
+  textBlockNoDueDate: {
+    flex: 0,
     justifyContent: "center",
+  },
+  titleNoDueDate: {
+    marginTop: 0,
   },
   mainRow: {
     flexDirection: "row",
@@ -277,9 +530,10 @@ const styles = StyleSheet.create({
     flex: 1,
     flexShrink: 1,
     minWidth: 48,
-    fontSize: 16.5,
-    lineHeight: 21.5,
-    color: "#3f3f46",
+    fontSize: 19,
+    lineHeight: 22.5,
+    marginTop: 2,
+    color: "#545454",
     fontWeight: "400",
   },
   titleCompleted: {
@@ -318,14 +572,18 @@ const styles = StyleSheet.create({
   },
   dueDateRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
+    marginTop: 1.5,
   },
   dueDate: {
-    fontSize: 10,
+    fontSize: 9,
     lineHeight: 13,
     fontWeight: "500",
     flexShrink: 1,
-    color: "#afafaf",
+    color: "#bfbfbf",
+  },
+  dueTime: {
+    marginTop: 0.5,
   },
   dueDateCompleted: {
     color: "#c4c4c4",
