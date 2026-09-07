@@ -370,11 +370,11 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   checkmarkSlot: {
-    marginRight: 8,
+    marginRight: 18,
   },
   checkPlaceholder: {
     width: LABEL_CHECKMARK_SIZE,
     height: LABEL_CHECKMARK_SIZE,
-    marginRight: 8,
+    marginRight: 18,
   },
 });

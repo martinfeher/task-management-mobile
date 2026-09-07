@@ -18,6 +18,7 @@ import {
 import Animated, {
   cancelAnimation,
   Easing,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -27,12 +28,24 @@ const CONTEXT_MENU_HOLD_MS = 250;
 export const TASK_ROW_DEFAULT_LONG_PRESS_MS = CONTEXT_MENU_HOLD_MS;
 const MOVE_CLOSE_THRESHOLD_PX = 15;
 const HOLD_SHADOW_BORDER_RADIUS = 10;
-const HOLD_SHADOW_MIN_RADIUS = 20;
-const HOLD_SHADOW_MAX_RADIUS = 40;
-const HOLD_SHADOW_MAX_OPACITY = 0.3;
+const HOLD_SHADOW_MIN_RADIUS = 4;
+const HOLD_SHADOW_MAX_RADIUS = 8;
+const HOLD_SHADOW_MAX_OPACITY = 0.22;
 const HOLD_SHADOW_COLOR = "#4b5669";
-const HOLD_SHADOW_MAX_ELEVATION = 10;
+const HOLD_SHADOW_MAX_ELEVATION = 4;
 const IS_IOS = Platform.OS === "ios";
+
+const NO_SURFACE_SHADOW = Platform.select({
+  ios: {
+    shadowColor: "#000000",
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  default: {
+    elevation: 0,
+  },
+})!;
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
@@ -100,6 +113,7 @@ export function TaskRow({
   const moveThresholdFiredRef = useRef(false);
   const pressActiveRef = useRef(false);
   const holdProgress = useSharedValue(0);
+  const isDraggingSv = useSharedValue(isDragging);
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contextMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -116,17 +130,47 @@ export function TaskRow({
     setOptimisticChecked(false);
   }, [task.id, task.completed]);
 
+  function clearHoldShadowImmediate() {
+    if (!enableHoldShadow) return;
+    cancelAnimation(holdProgress);
+    holdProgress.value = 0;
+  }
+
+  function resetHoldShadow() {
+    if (!enableHoldShadow) return;
+    cancelAnimation(holdProgress);
+    holdProgress.value = withTiming(0, { duration: 120 });
+  }
+
+  useEffect(() => {
+    isDraggingSv.value = isDragging;
+    if (!isDragging) {
+      dragActivatedRef.current = false;
+    }
+  }, [isDragging, isDraggingSv]);
+
+  useAnimatedReaction(
+    () => isDraggingSv.value,
+    (current, previous) => {
+      if (current || previous) {
+        cancelAnimation(holdProgress);
+        holdProgress.value = 0;
+      }
+    },
+  );
+
   const holdShadowStyle = useAnimatedStyle(() => {
+    if (isDraggingSv.value) {
+      return NO_SURFACE_SHADOW;
+    }
+
     const progress = holdProgress.value;
     if (progress <= 0) {
-      return {};
+      return NO_SURFACE_SHADOW;
     }
 
     const surfaceStyle = {
       borderRadius: HOLD_SHADOW_BORDER_RADIUS * progress,
-      marginHorizontal: progress * 5,
-      marginVertical: progress * 2,
-      zIndex: Math.round(progress * 20),
     };
 
     if (IS_IOS) {
@@ -139,7 +183,7 @@ export function TaskRow({
         shadowRadius:
           HOLD_SHADOW_MIN_RADIUS +
           progress * (HOLD_SHADOW_MAX_RADIUS - HOLD_SHADOW_MIN_RADIUS),
-        shadowOffset: { width: 0, height: 0 },
+        shadowOffset: { width: 0, height: 1 },
       };
     }
 
@@ -149,8 +193,38 @@ export function TaskRow({
     };
   });
 
+  const dragSurfaceStyle = useAnimatedStyle(() => {
+    if (isDraggingSv.value) {
+      if (IS_IOS) {
+        return {
+          opacity: 0.92,
+          borderRadius: 15,
+          backgroundColor: "#ffffff",
+          shadowColor: "#000000",
+          shadowOpacity: 0.14,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 2 },
+        };
+      }
+
+      return {
+        opacity: 0.92,
+        borderRadius: 15,
+        backgroundColor: "#ffffff",
+        elevation: 4,
+      };
+    }
+
+    return {
+      opacity: 1,
+      borderRadius: 0,
+      backgroundColor: "#ffffff",
+      ...NO_SURFACE_SHADOW,
+    };
+  });
+
   function startHoldShadow() {
-    if (!enableHoldShadow || !canLongPress) return;
+    if (!enableHoldShadow || !canLongPress || isDragging) return;
     cancelAnimation(holdProgress);
     holdProgress.value = 0;
     holdProgress.value = withTiming(1, {
@@ -183,6 +257,8 @@ export function TaskRow({
   function triggerDrag() {
     if (!onDrag || dragActivatedRef.current) return;
     dragActivatedRef.current = true;
+    clearHoldShadowImmediate();
+    clearHoldTimers();
     onDrag();
   }
 
@@ -210,15 +286,9 @@ export function TaskRow({
     }
   }
 
-  function resetHoldShadow() {
-    if (!enableHoldShadow) return;
-    cancelAnimation(holdProgress);
-    holdProgress.value = withTiming(0, { duration: 120 });
-  }
-
   function handleLongPress() {
     if (usesSplitHoldTiming) return;
-    resetHoldShadow();
+    clearHoldShadowImmediate();
     menuOpenedThisGestureRef.current = true;
     if (onOpenContextMenu) {
       rowRef.current?.measureInWindow((x, y, width, height) => {
@@ -271,6 +341,7 @@ export function TaskRow({
   function handleTouchEnd() {
     pressActiveRef.current = false;
     pressOriginRef.current = null;
+    dragActivatedRef.current = false;
     clearHoldTimers();
     resetHoldShadow();
   }
@@ -328,6 +399,7 @@ export function TaskRow({
         }
         onPressOut={() => {
           clearHoldTimers();
+          dragActivatedRef.current = false;
           resetHoldShadow();
           if (menuOpenedThisGestureRef.current) {
             onContextMenuGestureEnd?.();
@@ -445,8 +517,9 @@ export function TaskRow({
           styles.row,
           !hasDueDate && styles.rowNoDueDate,
           task.depth > 0 && styles.subtaskRow,
-          isDragging && styles.draggingRow,
-          enableHoldShadow && !isDragging && holdShadowStyle,
+          NO_SURFACE_SHADOW,
+          dragSurfaceStyle,
+          enableHoldShadow && holdShadowStyle,
           style,
         ]}
       >
@@ -479,10 +552,6 @@ const styles = StyleSheet.create({
     right: 0,
     height: StyleSheet.hairlineWidth,
     backgroundColor: "#d9d9d9",
-  },
-  draggingRow: {
-    opacity: 0.92,
-    borderRadius: 15,
   },
   subtaskRow: {
     paddingLeft: TASK_ROW_HORIZONTAL_INSET + 20,

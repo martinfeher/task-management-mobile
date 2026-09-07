@@ -14,6 +14,7 @@ type SidebarRowProps = {
   selected?: boolean;
   icon?: ReactNode;
   showMenu?: boolean;
+  countNudgeLeft?: number;
   onPress?: () => void;
   onLongPress?: () => void;
   onPressMenu?: () => void;
@@ -27,6 +28,7 @@ export function SidebarRow({
   selected = false,
   icon,
   showMenu = false,
+  countNudgeLeft,
   onPress,
   onLongPress,
   onPressMenu,
@@ -84,7 +86,10 @@ export function SidebarRow({
           />
         ) : null}
         {count !== undefined && (alwaysShowCount || count > 0) ? (
-          <Text className="min-w-5 ml-2 text-right text-xs tabular-nums text-[#cdcdd2]">
+          <Text
+            className="min-w-5 ml-2 text-right text-xs tabular-nums text-[#cdcdd2]"
+            style={countNudgeLeft ? { marginRight: countNudgeLeft } : undefined}
+          >
             {count}
           </Text>
         ) : null}

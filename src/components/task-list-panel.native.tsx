@@ -3,7 +3,6 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
-  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -240,37 +239,33 @@ export function TaskListPanel({
   const renderBlockItem = useCallback(
     ({ item, drag, isActive }: RenderItemParams<TaskBlock>) => (
       <ScaleDecorator activeScale={0.975}>
-        <View style={isActive ? styles.activeBlock : undefined}>
+        <TaskRow
+          task={item.root}
+          showListName={showListName}
+          onToggleComplete={handleToggleComplete}
+          onPress={onOpenTask}
+          onOpenContextMenu={openContextMenu}
+          onContextMenuGestureEnd={handleContextMenuGestureEnd}
+          onMovePastThreshold={dismissContextMenuForTask}
+          onDrag={drag}
+          isDragging={isActive}
+          longPressDelayMs={TASK_LIST_DRAG_DELAY_MS}
+          contextMenuDelayMs={TASK_LIST_CONTEXT_MENU_DELAY_MS}
+          enableHoldShadow
+        />
+        {item.children.map((child) => (
           <TaskRow
-            task={item.root}
+            key={child.id}
+            task={child}
             showListName={showListName}
             onToggleComplete={handleToggleComplete}
             onPress={onOpenTask}
             onOpenContextMenu={openContextMenu}
             onContextMenuGestureEnd={handleContextMenuGestureEnd}
             onMovePastThreshold={dismissContextMenuForTask}
-            onDrag={drag}
-            isDragging={isActive}
-            longPressDelayMs={TASK_LIST_DRAG_DELAY_MS}
             contextMenuDelayMs={TASK_LIST_CONTEXT_MENU_DELAY_MS}
-            enableHoldShadow
-            style={isActive ? styles.activeRow : undefined}
           />
-          {item.children.map((child) => (
-            <TaskRow
-              key={child.id}
-              task={child}
-              showListName={showListName}
-              onToggleComplete={handleToggleComplete}
-              onPress={onOpenTask}
-              onOpenContextMenu={openContextMenu}
-              onContextMenuGestureEnd={handleContextMenuGestureEnd}
-              onMovePastThreshold={dismissContextMenuForTask}
-              contextMenuDelayMs={TASK_LIST_CONTEXT_MENU_DELAY_MS}
-              enableHoldShadow
-            />
-          ))}
-        </View>
+        ))}
       </ScaleDecorator>
     ),
     [
@@ -546,22 +541,6 @@ export function TaskListPanel({
 }
 
 const styles = StyleSheet.create({
-  activeBlock: {
-    zIndex: 10,
-  },
-  activeRow: {
-    backgroundColor: "#ffffff",
-    borderRadius: 15,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOpacity: 0.18,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 4 },
-      },
-      android: { elevation: 6 },
-    }),
-  },
   renameBackdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.25)",

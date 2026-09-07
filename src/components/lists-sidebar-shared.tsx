@@ -180,6 +180,7 @@ export function ListsPinnedRows({
       <SidebarRow
         title="Today"
         count={data?.counts.today}
+        countNudgeLeft={18}
         selected={todaySelected}
         icon={
           <TodayCalendarIcon
@@ -193,6 +194,7 @@ export function ListsPinnedRows({
         <SidebarRow
           title="Inbox"
           count={inboxList.taskCount}
+          countNudgeLeft={18}
           selected={inboxSelected}
           icon={
             <AppSymbol
@@ -208,6 +210,7 @@ export function ListsPinnedRows({
       <SidebarRow
         title="Important"
         count={data?.counts.important}
+        countNudgeLeft={18}
         selected={importantSelected}
         icon={
           <AppSymbol

@@ -163,6 +163,8 @@ const DETAILS_SAVE_DEBOUNCE_MS = 700;
 /** Wait for native editor init callbacks before allowing notes persistence. */
 const NOTES_HYDRATION_DELAY_MS = 1000;
 const HISTORY_COMMIT_DEBOUNCE_MS = 500;
+/** Minimum collapsed sheet height as a fraction of the screen. */
+const TASK_SHEET_MIN_HEIGHT_FRACTION = 0.47;
 /** Max scroll area when notes are long; keeps the sheet from exceeding ~80% screen. */
 const TASK_SHEET_MAX_HEIGHT_FRACTION = 0.8;
 const TASK_DETAIL_HANDLE_HEIGHT = 28;
@@ -1506,7 +1508,8 @@ export function TaskDetailScreen() {
     return () => clearTimeout(timeoutId);
   }, [datePickerOpen, measureSheetTop, scheduleUndoSnapshot]);
 
-  const sheetMinHeight = windowHeight * TASK_SHEET_MAX_HEIGHT_FRACTION;
+  const sheetMinHeight = windowHeight * TASK_SHEET_MIN_HEIGHT_FRACTION;
+  const sheetMaxScrollHeight = windowHeight * TASK_SHEET_MAX_HEIGHT_FRACTION;
   const toolbarSafeAreaStyle =
     keyboardHeight > 0
       ? { paddingBottom: Spacing.two }
@@ -1530,7 +1533,7 @@ export function TaskDetailScreen() {
   );
   const maxScrollHeight = Math.max(
     160,
-    sheetMinHeight - toolbarTotalHeight - TASK_DETAIL_HANDLE_HEIGHT,
+    sheetMaxScrollHeight - toolbarTotalHeight - TASK_DETAIL_HANDLE_HEIGHT,
   );
   const expandedNotesHeight = Math.max(280, expandedScrollHeight - 170);
   const expandedTaskBodyHeight = expandedNotesHeight + 72;
@@ -1539,7 +1542,7 @@ export function TaskDetailScreen() {
     sheetTopY != null
       ? sheetTopY - SCHEDULE_UNDO_BUTTON_HEIGHT - SCHEDULE_UNDO_ABOVE_GAP
       : windowHeight -
-        sheetMinHeight -
+        sheetMaxScrollHeight -
         SCHEDULE_UNDO_BUTTON_HEIGHT -
         SCHEDULE_UNDO_ABOVE_GAP;
 
@@ -1594,6 +1597,7 @@ export function TaskDetailScreen() {
       <KeyboardAvoidingView
         style={[
           styles.container,
+          { minHeight: sheetMinHeight },
           expandedFullscreen && { minHeight: expandedContainerHeight },
         ]}
         behavior={Platform.OS === "ios" ? "padding" : "height"}

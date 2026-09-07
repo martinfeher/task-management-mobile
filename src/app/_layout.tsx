@@ -64,7 +64,8 @@ export default function RootLayout() {
                       options={{
                         presentation: "formSheet",
                         headerShown: false,
-                        sheetAllowedDetents: "fitToContents",
+                        sheetAllowedDetents: [0.47, 1],
+                        sheetInitialDetentIndex: 0,
                         sheetGrabberVisible: false,
                         contentStyle: { backgroundColor: "#ffffff" },
                       }}

@@ -103,6 +103,8 @@ const HOUR_VALUES = Array.from({ length: 12 }, (_, index) => index + 1);
 const MINUTE_VALUES = Array.from({ length: 60 }, (_, index) => index);
 const WHEEL_ITEM_HEIGHT = 44;
 const WHEEL_VISIBLE_ROWS = 3;
+const VISIBLE_MONTH_COUNT = 6;
+const CALENDAR_MONTH_SCROLL_MAX_HEIGHT = 300;
 
 function fromMinutes(minutes: number | null) {
   if (minutes == null) {
@@ -256,6 +258,36 @@ function getRepeatOptionSubtitle(
       return "Mon - Fri";
     default:
       return null;
+  }
+}
+
+function matchesRepeatPattern(
+  day: Date,
+  anchor: Date,
+  repeat: RepeatOption,
+): boolean {
+  if (repeat === "none" || repeat === "custom") return false;
+
+  const dayStart = startOfDay(day);
+  const anchorStart = startOfDay(anchor);
+
+  switch (repeat) {
+    case "daily":
+      return dayStart >= anchorStart;
+    case "weekday": {
+      const dayOfWeek = dayStart.getDay();
+      return dayOfWeek >= 1 && dayOfWeek <= 5 && dayStart >= anchorStart;
+    }
+    case "weekly":
+      return (
+        dayStart.getDay() === anchorStart.getDay() && dayStart >= anchorStart
+      );
+    case "monthly":
+      return (
+        dayStart.getDate() === anchorStart.getDate() && dayStart >= anchorStart
+      );
+    default:
+      return false;
   }
 }
 
@@ -632,8 +664,13 @@ export function TaskDatePickerSheet({
     setDurationMinutes(nextDuration);
   }, [dueDurationMinutes, dueTimeMinutes, value, visible]);
 
-  const monthDays = useMemo(
-    () => getMonthGrid(monthDate.getFullYear(), monthDate.getMonth()),
+  const monthSequence = useMemo(
+    () =>
+      Array.from({ length: VISIBLE_MONTH_COUNT }, (_, index) =>
+        startOfDay(
+          new Date(monthDate.getFullYear(), monthDate.getMonth() + index, 1),
+        ),
+      ),
     [monthDate],
   );
 
@@ -650,6 +687,7 @@ export function TaskDatePickerSheet({
     repeatEnabled ? draftRepeat : "none",
     timeEnabled,
   );
+  const effectiveRepeat = repeatEnabled ? draftRepeat : "none";
 
   function buildScheduleSelection(
     date: Date | null,
@@ -960,39 +998,88 @@ export function TaskDatePickerSheet({
                 ))}
               </View>
 
-              <View style={styles.monthGrid}>
-                {monthDays.map((day) => {
-                  const inMonth = day.getMonth() === monthDate.getMonth();
-                  const selected = selectedDate
-                    ? isSameDay(day, selectedDate)
-                    : false;
+              <ScrollView
+                style={styles.monthScroll}
+                contentContainerStyle={styles.monthScrollContent}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator
+                keyboardShouldPersistTaps="handled"
+              >
+                {monthSequence.map((visibleMonth, monthIndex) => {
+                  const visibleMonthDays = getMonthGrid(
+                    visibleMonth.getFullYear(),
+                    visibleMonth.getMonth(),
+                  );
+                  const visibleMonthLabel = visibleMonth.toLocaleDateString(
+                    undefined,
+                    {
+                      month: "long",
+                      year: "numeric",
+                    },
+                  );
 
                   return (
-                    <Pressable
-                      key={toDateKey(day)}
-                      style={styles.dayCell}
-                      onPress={() => handleDaySelect(day)}
-                      accessibilityRole="button"
-                      accessibilityLabel={day.toLocaleDateString()}
+                    <View
+                      key={toDateKey(visibleMonth)}
+                      style={styles.monthBlock}
                     >
-                      <View style={styles.dayMarker}>
-                        {selected ? (
-                          <View style={styles.daySelectedCircle} />
-                        ) : null}
-                        <ThemedText
-                          style={[
-                            styles.dayNumber,
-                            !inMonth && styles.dayNumberMuted,
-                            selected && styles.dayNumberSelected,
-                          ]}
-                        >
-                          {day.getDate()}
+                      {monthIndex > 0 ? (
+                        <ThemedText style={styles.monthBlockLabel}>
+                          {visibleMonthLabel}
                         </ThemedText>
+                      ) : null}
+                      <View style={styles.monthGrid}>
+                        {visibleMonthDays.map((day) => {
+                          const inMonth =
+                            day.getMonth() === visibleMonth.getMonth();
+                          const selected = selectedDate
+                            ? isSameDay(day, selectedDate)
+                            : false;
+                          const repeatOccurrence =
+                            inMonth &&
+                            selectedDate &&
+                            effectiveRepeat !== "none" &&
+                            !selected &&
+                            matchesRepeatPattern(
+                              day,
+                              selectedDate,
+                              effectiveRepeat,
+                            );
+
+                          return (
+                            <Pressable
+                              key={toDateKey(day)}
+                              style={styles.dayCell}
+                              onPress={() => handleDaySelect(day)}
+                              accessibilityRole="button"
+                              accessibilityLabel={day.toLocaleDateString()}
+                            >
+                              <View style={styles.dayMarker}>
+                                {repeatOccurrence ? (
+                                  <View style={styles.dayRepeatCircle} />
+                                ) : null}
+                                {selected ? (
+                                  <View style={styles.daySelectedCircle} />
+                                ) : null}
+                                <ThemedText
+                                  style={[
+                                    styles.dayNumber,
+                                    !inMonth && styles.dayNumberMuted,
+                                    repeatOccurrence && styles.dayNumberRepeat,
+                                    selected && styles.dayNumberSelected,
+                                  ]}
+                                >
+                                  {day.getDate()}
+                                </ThemedText>
+                              </View>
+                            </Pressable>
+                          );
+                        })}
                       </View>
-                    </Pressable>
+                    </View>
                   );
                 })}
-              </View>
+              </ScrollView>
             </View>
 
             {timeEnabled ? (
@@ -1313,6 +1400,21 @@ const styles = StyleSheet.create({
   calendarSection: {
     marginHorizontal: -3,
   },
+  monthScroll: {
+    maxHeight: CALENDAR_MONTH_SCROLL_MAX_HEIGHT,
+  },
+  monthScrollContent: {
+    paddingBottom: Spacing.one,
+  },
+  monthBlock: {
+    marginBottom: Spacing.two,
+  },
+  monthBlockLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: MONTH_LABEL_COLOR,
+    marginBottom: Spacing.one,
+  },
   weekdayRow: {
     flexDirection: "row",
     marginBottom: Spacing.half,
@@ -1346,6 +1448,11 @@ const styles = StyleSheet.create({
     borderRadius: DAY_SELECTION_CIRCLE_SIZE / 2,
     backgroundColor: ACCENT,
   },
+  dayRepeatCircle: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: DAY_SELECTION_CIRCLE_SIZE / 2,
+    backgroundColor: "rgba(135, 161, 203, 0.28)",
+  },
   dayNumber: {
     width: DAY_SELECTION_CIRCLE_SIZE,
     fontSize: 16,
@@ -1356,6 +1463,10 @@ const styles = StyleSheet.create({
   },
   dayNumberMuted: {
     color: "#d1d5db",
+  },
+  dayNumberRepeat: {
+    color: ACCENT,
+    fontWeight: "600",
   },
   dayNumberSelected: {
     color: "#ffffff",
@@ -1375,6 +1486,11 @@ const styles = StyleSheet.create({
   },
   timeSectionHeader: {
     marginTop: Spacing.one - 40,
+    marginHorizontal: -Spacing.three,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
+    zIndex: 1,
   },
   timeSectionHeaderSpacer: {
     flex: 1,
