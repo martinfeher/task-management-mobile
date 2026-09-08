@@ -27,7 +27,9 @@ import Animated, {
 const CONTEXT_MENU_HOLD_MS = 250;
 export const TASK_ROW_DEFAULT_LONG_PRESS_MS = CONTEXT_MENU_HOLD_MS;
 const MOVE_CLOSE_THRESHOLD_PX = 15;
-const HOLD_SHADOW_BORDER_RADIUS = 10;
+/** Vertical finger movement that interrupts the context menu and starts drag. */
+const DRAG_VERTICAL_ACTIVATION_PX = 1;
+const HOLD_SHADOW_BORDER_RADIUS = 20;
 const HOLD_SHADOW_MIN_RADIUS = 4;
 const HOLD_SHADOW_MAX_RADIUS = 8;
 const HOLD_SHADOW_MAX_OPACITY = 0.22;
@@ -110,6 +112,7 @@ export function TaskRow({
   const rowRef = useRef<View>(null);
   const menuOpenedThisGestureRef = useRef(false);
   const pressOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const lastTouchRef = useRef<{ x: number; y: number } | null>(null);
   const moveThresholdFiredRef = useRef(false);
   const pressActiveRef = useRef(false);
   const holdProgress = useSharedValue(0);
@@ -119,6 +122,9 @@ export function TaskRow({
     null,
   );
   const dragActivatedRef = useRef(false);
+  const dragArmedRef = useRef(false);
+  const dragIntentRef = useRef(false);
+  const pressStartedAtRef = useRef(0);
   const canLongPress = Boolean(onOpenContextMenu || onDrag);
   const usesSplitHoldTiming =
     contextMenuDelayMs != null && contextMenuDelayMs > longPressDelayMs;
@@ -146,6 +152,12 @@ export function TaskRow({
     isDraggingSv.value = isDragging;
     if (!isDragging) {
       dragActivatedRef.current = false;
+      return;
+    }
+
+    if (contextMenuTimerRef.current) {
+      clearTimeout(contextMenuTimerRef.current);
+      contextMenuTimerRef.current = null;
     }
   }, [isDragging, isDraggingSv]);
 
@@ -244,11 +256,64 @@ export function TaskRow({
     }
   }
 
+  function cancelContextMenuTimer() {
+    if (contextMenuTimerRef.current) {
+      clearTimeout(contextMenuTimerRef.current);
+      contextMenuTimerRef.current = null;
+    }
+  }
+
+  function hasVerticalDragIntent(pageY: number) {
+    const origin = pressOriginRef.current;
+    if (!origin) return false;
+    return Math.abs(pageY - origin.y) >= DRAG_VERTICAL_ACTIVATION_PX;
+  }
+
+  function hasDragIntentMovement() {
+    return dragIntentRef.current;
+  }
+
+  function markDragIntent() {
+    dragIntentRef.current = true;
+    cancelContextMenuTimer();
+  }
+
+  function hasMetDragHoldDelay() {
+    return Date.now() - pressStartedAtRef.current >= longPressDelayMs;
+  }
+
+  function tryStartDragFromVerticalMove(pageY: number) {
+    if (
+      !usesSplitHoldTiming ||
+      !hasVerticalDragIntent(pageY) ||
+      menuOpenedThisGestureRef.current ||
+      dragActivatedRef.current
+    ) {
+      return;
+    }
+
+    markDragIntent();
+
+    if (dragArmedRef.current || hasMetDragHoldDelay()) {
+      dragArmedRef.current = true;
+      triggerDrag();
+    }
+  }
+
   function triggerContextMenu() {
+    if (dragActivatedRef.current || isDragging || hasDragIntentMovement()) {
+      return;
+    }
+
+    dragArmedRef.current = false;
     resetHoldShadow();
     menuOpenedThisGestureRef.current = true;
     if (onOpenContextMenu) {
       rowRef.current?.measureInWindow((x, y, width, height) => {
+        if (dragActivatedRef.current || isDragging || hasDragIntentMovement()) {
+          menuOpenedThisGestureRef.current = false;
+          return;
+        }
         onOpenContextMenu(task, { x, y, width, height });
       });
     }
@@ -265,12 +330,19 @@ export function TaskRow({
   function scheduleSplitHoldActions() {
     clearHoldTimers();
     dragActivatedRef.current = false;
+    dragArmedRef.current = false;
 
     if (onDrag) {
       dragTimerRef.current = setTimeout(() => {
         dragTimerRef.current = null;
         if (!pressActiveRef.current || menuOpenedThisGestureRef.current) return;
-        triggerDrag();
+        dragArmedRef.current = true;
+        if (dragIntentRef.current) {
+          cancelContextMenuTimer();
+          if (!dragActivatedRef.current) {
+            triggerDrag();
+          }
+        }
       }, longPressDelayMs);
     }
 
@@ -280,7 +352,15 @@ export function TaskRow({
         : longPressDelayMs;
       contextMenuTimerRef.current = setTimeout(() => {
         contextMenuTimerRef.current = null;
-        if (!pressActiveRef.current || menuOpenedThisGestureRef.current) return;
+        if (
+          !pressActiveRef.current ||
+          menuOpenedThisGestureRef.current ||
+          dragActivatedRef.current ||
+          isDragging ||
+          hasDragIntentMovement()
+        ) {
+          return;
+        }
         triggerContextMenu();
       }, menuDelay);
     }
@@ -300,9 +380,13 @@ export function TaskRow({
 
   function handleTouchStart(pageX: number, pageY: number) {
     pressActiveRef.current = true;
+    pressStartedAtRef.current = Date.now();
     pressOriginRef.current = { x: pageX, y: pageY };
+    lastTouchRef.current = { x: pageX, y: pageY };
     moveThresholdFiredRef.current = false;
     menuOpenedThisGestureRef.current = false;
+    dragArmedRef.current = false;
+    dragIntentRef.current = false;
     if (usesSplitHoldTiming) {
       scheduleSplitHoldActions();
     }
@@ -311,28 +395,32 @@ export function TaskRow({
 
   function handleTouchMove(pageX: number, pageY: number) {
     const origin = pressOriginRef.current;
-    if (
-      pressActiveRef.current &&
-      !menuOpenedThisGestureRef.current &&
-      origin &&
-      Math.hypot(pageX - origin.x, pageY - origin.y) >= 8
-    ) {
-      if (dragTimerRef.current) {
-        clearTimeout(dragTimerRef.current);
-        dragTimerRef.current = null;
+    if (!pressActiveRef.current || !origin) return;
+
+    lastTouchRef.current = { x: pageX, y: pageY };
+
+    if (usesSplitHoldTiming) {
+      // Let the task list scroll freely until the drag hold delay completes.
+      if (!hasMetDragHoldDelay()) {
+        return;
       }
-      if (contextMenuTimerRef.current) {
-        clearTimeout(contextMenuTimerRef.current);
-        contextMenuTimerRef.current = null;
+
+      if (hasVerticalDragIntent(pageY)) {
+        tryStartDragFromVerticalMove(pageY);
+
+        if (menuOpenedThisGestureRef.current && !moveThresholdFiredRef.current) {
+          moveThresholdFiredRef.current = true;
+          menuOpenedThisGestureRef.current = false;
+          onMovePastThreshold?.(task);
+        }
       }
-      resetHoldShadow();
     }
 
     if (!menuOpenedThisGestureRef.current || !pressActiveRef.current) return;
-    if (!origin || moveThresholdFiredRef.current) return;
-    const dx = pageX - origin.x;
-    const dy = pageY - origin.y;
-    if (Math.hypot(dx, dy) >= MOVE_CLOSE_THRESHOLD_PX) {
+    if (moveThresholdFiredRef.current) return;
+    if (
+      Math.hypot(pageX - origin.x, pageY - origin.y) >= MOVE_CLOSE_THRESHOLD_PX
+    ) {
       moveThresholdFiredRef.current = true;
       onMovePastThreshold?.(task);
     }
@@ -341,7 +429,10 @@ export function TaskRow({
   function handleTouchEnd() {
     pressActiveRef.current = false;
     pressOriginRef.current = null;
+    lastTouchRef.current = null;
     dragActivatedRef.current = false;
+    dragArmedRef.current = false;
+    dragIntentRef.current = false;
     clearHoldTimers();
     resetHoldShadow();
   }
@@ -398,14 +489,23 @@ export function TaskRow({
           canLongPress && !usesSplitHoldTiming ? handleLongPress : undefined
         }
         onPressOut={() => {
+          if (usesSplitHoldTiming && pressActiveRef.current) {
+            return;
+          }
           clearHoldTimers();
           dragActivatedRef.current = false;
+          dragIntentRef.current = false;
           resetHoldShadow();
           if (menuOpenedThisGestureRef.current) {
             onContextMenuGestureEnd?.();
             clearMenuOpenedFlagSoon();
           }
         }}
+        pressRetentionOffset={
+          usesSplitHoldTiming
+            ? { top: 40, right: 40, bottom: 40, left: 40 }
+            : undefined
+        }
         delayLongPress={
           canLongPress && !usesSplitHoldTiming ? longPressDelayMs : undefined
         }

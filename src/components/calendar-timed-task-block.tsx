@@ -49,6 +49,21 @@ const WORKLET_HOUR_END = 23;
 const WORKLET_HOUR_HEIGHT = 56;
 const WORKLET_SLOT_MINUTES = 15;
 const WORKLET_MIN_DURATION = 15;
+const TASK_BLOCK_FONT_SIZE = 13.5;
+const TASK_BLOCK_LINE_HEIGHT = TASK_BLOCK_FONT_SIZE * 1.3;
+const WEEK_TASK_BLOCK_FONT_SIZE = TASK_BLOCK_FONT_SIZE - 6.5;
+const WEEK_TASK_BLOCK_LINE_HEIGHT = WEEK_TASK_BLOCK_FONT_SIZE * 1.2;
+const TASK_BLOCK_PADDING_HORIZONTAL = 8;
+const TASK_BLOCK_PADDING_TOP = 6;
+const TASK_BLOCK_PADDING_BOTTOM = 26;
+const WEEK_TASK_BLOCK_PADDING_HORIZONTAL = TASK_BLOCK_PADDING_HORIZONTAL - 3;
+const WEEK_TASK_BLOCK_PADDING_TOP = TASK_BLOCK_PADDING_TOP - 2;
+const WEEK_TASK_BLOCK_PADDING_BOTTOM = TASK_BLOCK_PADDING_BOTTOM - 3;
+
+const THREE_DAY_TIME_PREVIEW_TOP_OFFSET = 3;
+const TIME_PREVIEW_TOP = -22;
+const THREE_DAY_TIME_PREVIEW_TOP =
+  TIME_PREVIEW_TOP - THREE_DAY_TIME_PREVIEW_TOP_OFFSET;
 
 function snapTopFromDrag(baseTop: number, dragOffsetY: number) {
   "worklet";
@@ -121,6 +136,25 @@ export function CalendarTimedTaskBlock({
     task.dueDurationMinutes && task.dueDurationMinutes > 0
       ? task.dueDurationMinutes
       : CALENDAR_DEFAULT_DURATION_MINUTES;
+  const isWeekView = dayCount === 7;
+  const isThreeDayView = dayCount === 3;
+  const taskTitleFontSize = isWeekView
+    ? WEEK_TASK_BLOCK_FONT_SIZE
+    : TASK_BLOCK_FONT_SIZE;
+  const taskTitleLineHeight = isWeekView
+    ? WEEK_TASK_BLOCK_LINE_HEIGHT
+    : TASK_BLOCK_LINE_HEIGHT;
+  const taskBlockPadding = isWeekView
+    ? {
+        paddingHorizontal: WEEK_TASK_BLOCK_PADDING_HORIZONTAL,
+        paddingTop: WEEK_TASK_BLOCK_PADDING_TOP,
+        paddingBottom: WEEK_TASK_BLOCK_PADDING_BOTTOM,
+      }
+    : {
+        paddingHorizontal: TASK_BLOCK_PADDING_HORIZONTAL,
+        paddingTop: TASK_BLOCK_PADDING_TOP,
+        paddingBottom: TASK_BLOCK_PADDING_BOTTOM,
+      };
 
   const layout = useMemo(() => {
     const top = getTopForCalendarMinutes(dueTimeMinutes);
@@ -393,6 +427,10 @@ export function CalendarTimedTaskBlock({
     opacity: showPreview.value,
   }));
 
+  const weekMovePreviewStyle = useAnimatedStyle(() => ({
+    opacity: isDragging.value ? 1 : 0,
+  }));
+
   if (layout.top < 0 || layout.top > layout.gridHeight) {
     return null;
   }
@@ -402,27 +440,65 @@ export function CalendarTimedTaskBlock({
       style={[
         styles.taskShell,
         {
-          top: layout.top,
+          top: layout.top + 14,
           height: layout.height,
         },
         blockStyle,
       ]}
     >
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.timePreview, previewStyle]}
-      >
-        <ThemedText style={styles.timePreviewText}>
-          {livePreviewLabel}
-        </ThemedText>
-      </Animated.View>
+      {isWeekView ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.weekTimePreview,
+            { top: -(taskTitleLineHeight + 26) },
+            weekMovePreviewStyle,
+          ]}
+        >
+          <ThemedText
+            style={[
+              styles.weekTimePreviewText,
+              {
+                fontSize: taskTitleFontSize,
+                lineHeight: taskTitleLineHeight,
+              },
+            ]}
+          >
+            {livePreviewLabel}
+          </ThemedText>
+        </Animated.View>
+      ) : (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.timePreview,
+            isThreeDayView && { top: THREE_DAY_TIME_PREVIEW_TOP },
+            previewStyle,
+          ]}
+        >
+          <ThemedText style={styles.timePreviewText}>
+            {livePreviewLabel}
+          </ThemedText>
+        </Animated.View>
+      )}
 
       <GestureDetector gesture={bodyGesture}>
         <Animated.View
-          style={[styles.taskBlock, { backgroundColor: taskBackgroundColor }]}
+          style={[
+            styles.taskBlock,
+            taskBlockPadding,
+            { backgroundColor: taskBackgroundColor },
+          ]}
         >
           <ThemedText
-            style={[styles.taskBlockText, { color: taskTitleColor }]}
+            style={[
+              styles.taskBlockText,
+              {
+                fontSize: taskTitleFontSize,
+                lineHeight: taskTitleLineHeight,
+                color: taskTitleColor,
+              },
+            ]}
             numberOfLines={4}
           >
             {task.name}
@@ -447,7 +523,7 @@ const styles = StyleSheet.create({
   },
   timePreview: {
     position: "absolute",
-    top: -22,
+    top: TIME_PREVIEW_TOP,
     left: 0,
     right: 0,
     alignItems: "center",
@@ -468,18 +544,34 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  weekTimePreview: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 40,
+  },
+  weekTimePreviewText: {
+    fontWeight: "500",
+    color: "#494949",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    overflow: "hidden",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   taskBlock: {
     flex: 1,
     borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingTop: 6,
-    paddingBottom: 26,
     overflow: "hidden",
   },
   taskBlockText: {
-    fontSize: 12,
-    lineHeight: 12 * 1.3,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   resizeHandle: {
     position: "absolute",

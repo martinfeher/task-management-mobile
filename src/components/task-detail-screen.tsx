@@ -77,6 +77,7 @@ import {
 } from "@/lib/html-to-text-runs";
 import { getLabelDotColor } from "@/lib/label-colors";
 import { applyTaskReminder } from "@/lib/notifications";
+import { normalizeTaskRepeat } from "@/lib/task-repeat";
 import {
   parseTaskDetails,
   type ParsedDetailBlock,
@@ -114,6 +115,13 @@ import {
   type TextFormatAction,
 } from "@/lib/text-format";
 import type { SidebarListItem, TaskDetail, TaskLabel } from "@/types/todo";
+
+function parseRouteInt(value: string | string[] | undefined): number | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 const VISUAL_SPAN_FORMAT_ACTIONS = new Set<TextFormatAction>([
   "highlight",
@@ -187,6 +195,9 @@ export function TaskDetailScreen() {
     fromSearch,
     fromCalendar,
     calendarColor: calendarColorParam,
+    dueTimeMinutes: dueTimeMinutesParam,
+    dueDurationMinutes: dueDurationMinutesParam,
+    dueRepeat: dueRepeatParam,
   } = useLocalSearchParams<{
     id: string;
     name?: string;
@@ -196,6 +207,9 @@ export function TaskDetailScreen() {
     fromSearch?: string;
     fromCalendar?: string;
     calendarColor?: string;
+    dueTimeMinutes?: string;
+    dueDurationMinutes?: string;
+    dueRepeat?: string;
   }>();
   const resolvedTaskId = Array.isArray(id) ? id[0] : id;
   const insets = useSafeAreaInsets();
@@ -209,9 +223,22 @@ export function TaskDetailScreen() {
     loadSidebar,
     deleteTask: removeTask,
     setCalendarTaskColor,
+    patchCalendarTask,
+    calendarTasks,
   } = useApp();
   const closingRef = useRef(false);
   const openedFromCalendar = fromCalendar === "1";
+  const calendarTask = useMemo(
+    () => calendarTasks.find((task) => task.id === resolvedTaskId),
+    [calendarTasks, resolvedTaskId],
+  );
+  const calendarTasksRef = useRef(calendarTasks);
+  calendarTasksRef.current = calendarTasks;
+  const routeDueTimeMinutes = parseRouteInt(dueTimeMinutesParam);
+  const routeDueDurationMinutes = parseRouteInt(dueDurationMinutesParam);
+  const routeDueRepeat = normalizeTaskRepeat(
+    Array.isArray(dueRepeatParam) ? dueRepeatParam[0] : dueRepeatParam,
+  );
 
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -222,6 +249,39 @@ export function TaskDetailScreen() {
   const [subtaskDraftOpen, setSubtaskDraftOpen] = useState(false);
   const [subtaskName, setSubtaskName] = useState("");
   const [allLabels, setAllLabels] = useState<TaskLabel[]>([]);
+
+  const pickerSchedule = useMemo(
+    () => ({
+      dueDate:
+        detail?.dueDate ??
+        (typeof dueDate === "string" && dueDate.length > 0 ? dueDate : null),
+      dueTimeMinutes:
+        detail?.dueTimeMinutes ??
+        calendarTask?.dueTimeMinutes ??
+        routeDueTimeMinutes,
+      dueDurationMinutes:
+        detail?.dueDurationMinutes ??
+        calendarTask?.dueDurationMinutes ??
+        routeDueDurationMinutes,
+      dueRepeat:
+        normalizeTaskRepeat(detail?.dueRepeat) ??
+        normalizeTaskRepeat(calendarTask?.dueRepeat) ??
+        routeDueRepeat,
+    }),
+    [
+      calendarTask?.dueDurationMinutes,
+      calendarTask?.dueRepeat,
+      calendarTask?.dueTimeMinutes,
+      detail?.dueDate,
+      detail?.dueDurationMinutes,
+      detail?.dueRepeat,
+      detail?.dueTimeMinutes,
+      dueDate,
+      routeDueDurationMinutes,
+      routeDueRepeat,
+      routeDueTimeMinutes,
+    ],
+  );
 
   const [draftName, setDraftName] = useState(name ?? "");
   const [draftNotes, setDraftNotes] = useState("");
@@ -1016,7 +1076,22 @@ export function TaskDetailScreen() {
 
     void fetchTaskDetail(id)
       .then((loaded) => {
-        setDetail(loaded);
+        const calendarMatch = calendarTasksRef.current.find(
+          (task) => task.id === id,
+        );
+        setDetail({
+          ...loaded,
+          dueTimeMinutes:
+            loaded.dueTimeMinutes ?? calendarMatch?.dueTimeMinutes ?? null,
+          dueDurationMinutes:
+            loaded.dueDurationMinutes ??
+            calendarMatch?.dueDurationMinutes ??
+            null,
+          dueRepeat:
+            normalizeTaskRepeat(loaded.dueRepeat) ??
+            normalizeTaskRepeat(calendarMatch?.dueRepeat) ??
+            null,
+        });
         setCalendarColor(normalizeCalendarColor(loaded.calendarColor));
         setDraftName(loaded.name);
         const html = resolveTaskDetailsHtml(loaded);
@@ -1170,13 +1245,15 @@ export function TaskDetailScreen() {
     const isClearingSchedule =
       selection.dueDate === null &&
       selection.dueTimeMinutes === null &&
-      selection.dueDurationMinutes === null;
+      selection.dueDurationMinutes === null &&
+      !selection.dueRepeat;
     const previousSchedule =
       !options?.skipUndo && isClearingSchedule && detail.dueDate != null
         ? {
             dueDate: detail.dueDate,
             dueTimeMinutes: detail.dueTimeMinutes,
             dueDurationMinutes: detail.dueDurationMinutes,
+            dueRepeat: detail.dueRepeat ?? null,
           }
         : null;
 
@@ -1186,6 +1263,7 @@ export function TaskDetailScreen() {
         dueDate: null,
         dueTimeMinutes: null,
         dueDurationMinutes: null,
+        dueRepeat: null,
       });
       requestAnimationFrame(() => {
         showScheduleUndo(previousSchedule);
@@ -1199,7 +1277,14 @@ export function TaskDetailScreen() {
         dueDate: result.dueDate,
         dueTimeMinutes: result.dueTimeMinutes,
         dueDurationMinutes: result.dueDurationMinutes,
+        dueRepeat: selection.dueRepeat ?? null,
         dueTimeZone: result.dueTimeZone,
+      });
+      patchCalendarTask(detail.id, {
+        dueDate: result.dueDate,
+        dueTimeMinutes: result.dueTimeMinutes,
+        dueDurationMinutes: result.dueDurationMinutes,
+        dueRepeat: selection.dueRepeat ?? null,
       });
       await applyTaskReminder({
         taskId: detail.id,
@@ -1207,6 +1292,7 @@ export function TaskDetailScreen() {
         dueDate: result.dueDate,
         dueTimeMinutes: result.dueTimeMinutes,
         reminderEnabled: selection.reminderEnabled,
+        reminderOffsetMinutes: selection.reminderOffsetMinutes,
       });
       handleTaskCompleted();
     } catch {
@@ -1216,6 +1302,7 @@ export function TaskDetailScreen() {
           dueDate: previousSchedule.dueDate,
           dueTimeMinutes: previousSchedule.dueTimeMinutes,
           dueDurationMinutes: previousSchedule.dueDurationMinutes,
+          dueRepeat: previousSchedule.dueRepeat ?? null,
         });
         dismissScheduleUndo();
       }
@@ -1270,6 +1357,7 @@ export function TaskDetailScreen() {
               dueDate: result.dueDate,
               dueTimeMinutes: result.dueTimeMinutes,
               dueDurationMinutes: result.dueDurationMinutes,
+              dueRepeat: snapshot.dueRepeat ?? null,
               dueTimeZone: result.dueTimeZone,
             }
           : current,
@@ -1280,6 +1368,7 @@ export function TaskDetailScreen() {
         dueDate: result.dueDate,
         dueTimeMinutes: result.dueTimeMinutes,
         reminderEnabled: snapshot.reminderEnabled,
+        reminderOffsetMinutes: snapshot.reminderOffsetMinutes,
       });
       handleTaskCompleted();
     } catch {
@@ -2106,11 +2195,10 @@ export function TaskDetailScreen() {
           ) : null}
           <TaskDatePickerSheet
             visible={datePickerOpen}
-            value={detail != null ? detail.dueDate : (dueDate ?? null)}
-            dueTimeMinutes={detail != null ? detail.dueTimeMinutes : null}
-            dueDurationMinutes={
-              detail != null ? detail.dueDurationMinutes : null
-            }
+            value={pickerSchedule.dueDate}
+            dueTimeMinutes={pickerSchedule.dueTimeMinutes}
+            dueDurationMinutes={pickerSchedule.dueDurationMinutes}
+            dueRepeat={pickerSchedule.dueRepeat}
             onSelect={(selection) => void handleScheduleChange(selection)}
             onClose={() => setDatePickerOpen(false)}
           />

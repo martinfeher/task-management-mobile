@@ -7,7 +7,11 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { Gesture, GestureDetector, ScrollView } from "react-native-gesture-handler";
+import {
+  Gesture,
+  GestureDetector,
+  ScrollView,
+} from "react-native-gesture-handler";
 import { runOnJS, useSharedValue } from "react-native-reanimated";
 
 import {
@@ -29,6 +33,9 @@ import {
 import { toDateKey } from "@/lib/task-dates";
 import type { TaskItem } from "@/types/todo";
 
+const PENDING_BADGE_FONT_SIZE = 10;
+const WEEK_PENDING_BADGE_FONT_SIZE = PENDING_BADGE_FONT_SIZE - 4;
+
 function isSameDay(a: Date, b: Date) {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -41,35 +48,61 @@ function DayHeader({
   day,
   selected,
   pendingCount,
+  columnWidth,
+  isWeekView,
   onPress,
 }: {
   day: Date;
   selected: boolean;
   pendingCount: number;
+  columnWidth: number;
+  isWeekView: boolean;
   onPress: () => void;
 }) {
   const isToday = isSameDay(day, new Date());
   const highlighted = selected || isToday;
 
   return (
-    <Pressable style={styles.dayHeaderCell} onPress={onPress}>
+    <Pressable
+      style={[styles.dayHeaderCell, { width: columnWidth }]}
+      onPress={onPress}
+    >
       <ThemedText
-        style={[styles.dayHeaderWeekday, highlighted && styles.dayHeaderWeekdayActive]}>
+        style={[
+          styles.dayHeaderWeekday,
+          highlighted && styles.dayHeaderWeekdayActive,
+        ]}
+      >
         {day.toLocaleDateString(undefined, { weekday: "short" })}
       </ThemedText>
       <View
         style={[
           styles.dayHeaderNumberWrap,
           highlighted && styles.dayHeaderNumberWrapActive,
-        ]}>
+        ]}
+      >
         <ThemedText
-          style={[styles.dayHeaderNumber, highlighted && styles.dayHeaderNumberActive]}>
+          style={[
+            styles.dayHeaderNumber,
+            highlighted && styles.dayHeaderNumberActive,
+          ]}
+        >
           {day.getDate()}
         </ThemedText>
       </View>
       {selected && pendingCount > 0 ? (
         <View style={styles.pendingBadge}>
-          <ThemedText style={styles.pendingBadgeText}>
+          <ThemedText
+            style={[
+              styles.pendingBadgeText,
+              {
+                lineHeight: 9,
+                fontSize: isWeekView
+                  ? WEEK_PENDING_BADGE_FONT_SIZE
+                  : PENDING_BADGE_FONT_SIZE,
+              },
+            ]}
+          >
             {pendingCount} pending task{pendingCount === 1 ? "" : "s"}
           </ThemedText>
         </View>
@@ -106,6 +139,8 @@ export function CalendarTimeGridView({
   onRefresh,
 }: CalendarTimeGridViewProps) {
   const scrollRef = useRef<ScrollView>(null);
+  const scrollYRef = useRef(0);
+  const lastAutoScrollDaysKeyRef = useRef<string | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const interactionCountRef = useRef(0);
   const taskInteractionActive = useSharedValue(0);
@@ -113,10 +148,9 @@ export function CalendarTimeGridView({
   const hours = useMemo(() => getCalendarDisplayHours(), []);
   const gridHeight = getCalendarGridHeightPx();
   const dayDateKeys = useMemo(() => days.map((day) => toDateKey(day)), [days]);
-  const columnWidth = Math.max(
-    72,
-    (windowWidth - CALENDAR_TIME_LABEL_WIDTH) / Math.max(days.length, 1),
-  );
+  const columnWidth =
+    (windowWidth - CALENDAR_TIME_LABEL_WIDTH) / Math.max(days.length, 1);
+  const isWeekView = days.length === 7;
   const today = useMemo(() => {
     const now = new Date();
     now.setHours(12, 0, 0, 0);
@@ -125,7 +159,8 @@ export function CalendarTimeGridView({
   const nowMinutes = getCurrentMinutesFromMidnight();
   const nowTop = getTopForCalendarMinutes(nowMinutes);
   const showNowLine =
-    nowMinutes >= CALENDAR_HOUR_START * 60 && nowMinutes <= (CALENDAR_HOUR_END + 1) * 60;
+    nowMinutes >= CALENDAR_HOUR_START * 60 &&
+    nowMinutes <= (CALENDAR_HOUR_END + 1) * 60;
 
   const handleInteractionChange = (active: boolean) => {
     interactionCountRef.current = Math.max(
@@ -156,8 +191,7 @@ export function CalendarTimeGridView({
           return;
         }
 
-        const swipedNext =
-          event.translationX <= -56 || event.velocityX <= -650;
+        const swipedNext = event.translationX <= -56 || event.velocityX <= -650;
         const swipedPrevious =
           event.translationX >= 56 || event.velocityX >= 650;
 
@@ -169,102 +203,128 @@ export function CalendarTimeGridView({
       });
   }, [onShiftDay, shiftDay, taskInteractionActive]);
 
+  const daysKey = dayDateKeys.join("|");
+
   useEffect(() => {
     if (loading) return;
     const timeout = setTimeout(() => {
-      scrollRef.current?.scrollTo({
-        y: Math.max(0, nowTop - CALENDAR_HOUR_HEIGHT * 2),
-        animated: false,
-      });
+      const isNewPeriod = lastAutoScrollDaysKeyRef.current !== daysKey;
+
+      if (isNewPeriod) {
+        const initialY = Math.max(0, nowTop - CALENDAR_HOUR_HEIGHT * 2);
+        lastAutoScrollDaysKeyRef.current = daysKey;
+        scrollYRef.current = initialY;
+        scrollRef.current?.scrollTo({ y: initialY, animated: false });
+        return;
+      }
+
+      scrollRef.current?.scrollTo({ y: scrollYRef.current, animated: false });
     }, 0);
     return () => clearTimeout(timeout);
-  }, [days, loading, nowTop]);
+  }, [daysKey, loading, nowTop]);
 
   return (
     <GestureDetector gesture={swipeGesture}>
       <View style={styles.container}>
         <View style={styles.headerRow}>
-        <View style={styles.timeHeaderSpacer} />
-        {days.map((day) => {
-          const key = toDateKey(day);
-          const pendingCount = (tasksByDate.get(key) ?? []).length;
-          return (
-            <DayHeader
-              key={key}
-              day={day}
-              selected={isSameDay(day, selectedDate)}
-              pendingCount={pendingCount}
-              onPress={() => onSelectDate(day)}
-            />
-          );
-        })}
-      </View>
+          <View style={styles.timeHeaderSpacer} />
+          {days.map((day) => {
+            const key = toDateKey(day);
+            const pendingCount = (tasksByDate.get(key) ?? []).length;
+            return (
+              <DayHeader
+                key={key}
+                day={day}
+                selected={isSameDay(day, selectedDate)}
+                pendingCount={pendingCount}
+                columnWidth={columnWidth}
+                isWeekView={isWeekView}
+                onPress={() => onSelectDate(day)}
+              />
+            );
+          })}
+        </View>
 
-      {loading ? (
-        <ActivityIndicator color="#3c87f7" style={styles.loader} />
-      ) : (
-        <ScrollView
-          ref={scrollRef}
-          style={styles.scroll}
-          scrollEnabled={scrollEnabled}
-          contentContainerStyle={{ paddingBottom: 120 }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }>
-          <View style={styles.gridRow}>
-            <View style={[styles.timeColumn, { height: gridHeight }]}>
-              {hours.map((hour) => (
-                <View key={hour} style={styles.timeCell}>
-                  <ThemedText style={styles.timeLabel}>
-                    {formatCalendarHourLabel(hour)}
-                  </ThemedText>
-                </View>
-              ))}
+        {loading ? (
+          <ActivityIndicator color="#3c87f7" style={styles.loader} />
+        ) : (
+          <ScrollView
+            ref={scrollRef}
+            style={styles.scroll}
+            scrollEnabled={scrollEnabled}
+            scrollEventThrottle={16}
+            onScroll={(event) => {
+              scrollYRef.current = event.nativeEvent.contentOffset.y;
+            }}
+            contentContainerStyle={{ paddingBottom: 120 }}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+          >
+            <View style={styles.gridRow}>
+              <View style={[styles.timeColumn, { height: gridHeight }]}>
+                {hours.map((hour) => (
+                  <View key={hour} style={styles.timeCell}>
+                    <ThemedText style={styles.timeLabel}>
+                      {formatCalendarHourLabel(hour)}
+                    </ThemedText>
+                  </View>
+                ))}
+              </View>
+
+              {days.map((day, columnIndex) => {
+                const dateKey = toDateKey(day);
+                const dayTasks = tasksByDate.get(dateKey) ?? [];
+                const isToday = isSameDay(day, today);
+
+                return (
+                  <View
+                    key={dateKey}
+                    style={[
+                      styles.dayColumn,
+                      { height: gridHeight, width: columnWidth },
+                    ]}
+                  >
+                    {hours.map((hour, index) => (
+                      <View
+                        key={hour}
+                        style={[
+                          styles.hourCell,
+                          index === 0 && styles.hourCellFirst,
+                        ]}
+                      />
+                    ))}
+
+                    {isToday && showNowLine ? (
+                      <View
+                        pointerEvents="none"
+                        style={[styles.nowLine, { top: nowTop }]}
+                      >
+                        <View style={styles.nowDot} />
+                        <View style={styles.nowBar} />
+                      </View>
+                    ) : null}
+
+                    {dayTasks.map((task) => (
+                      <CalendarTimedTaskBlock
+                        key={`${task.id}-${dateKey}-${task.calendarColor ?? ""}`}
+                        task={task}
+                        dateKey={dateKey}
+                        columnIndex={columnIndex}
+                        columnWidth={columnWidth}
+                        dayCount={days.length}
+                        dayDateKeys={dayDateKeys}
+                        onPress={() => onPressTask(task)}
+                        onScheduleChange={onScheduleChange}
+                        onInteractionChange={handleInteractionChange}
+                      />
+                    ))}
+                  </View>
+                );
+              })}
             </View>
-
-            {days.map((day, columnIndex) => {
-              const dateKey = toDateKey(day);
-              const dayTasks = tasksByDate.get(dateKey) ?? [];
-              const isToday = isSameDay(day, today);
-
-              return (
-                <View
-                  key={dateKey}
-                  style={[styles.dayColumn, { height: gridHeight, width: columnWidth }]}>
-                  {hours.map((hour, index) => (
-                    <View
-                      key={hour}
-                      style={[styles.hourCell, index === 0 && styles.hourCellFirst]}
-                    />
-                  ))}
-
-                  {isToday && showNowLine ? (
-                    <View pointerEvents="none" style={[styles.nowLine, { top: nowTop }]}>
-                      <View style={styles.nowDot} />
-                      <View style={styles.nowBar} />
-                    </View>
-                  ) : null}
-
-                  {dayTasks.map((task) => (
-                    <CalendarTimedTaskBlock
-                      key={`${task.id}-${dateKey}-${task.calendarColor ?? ""}`}
-                      task={task}
-                      dateKey={dateKey}
-                      columnIndex={columnIndex}
-                      columnWidth={columnWidth}
-                      dayCount={days.length}
-                      dayDateKeys={dayDateKeys}
-                      onPress={() => onPressTask(task)}
-                      onScheduleChange={onScheduleChange}
-                      onInteractionChange={handleInteractionChange}
-                    />
-                  ))}
-                </View>
-              );
-            })}
-          </View>
-        </ScrollView>
-      )}
+          </ScrollView>
+        )}
       </View>
     </GestureDetector>
   );
@@ -284,11 +344,10 @@ const styles = StyleSheet.create({
     width: CALENDAR_TIME_LABEL_WIDTH,
   },
   dayHeaderCell: {
-    flex: 1,
     alignItems: "center",
     paddingTop: 8,
     paddingBottom: 10,
-    minWidth: 0,
+    flexShrink: 0,
   },
   dayHeaderWeekday: {
     fontSize: 12,
@@ -325,7 +384,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#e8f2fc",
   },
   pendingBadgeText: {
-    fontSize: 10,
     fontWeight: "600",
     color: "#2563eb",
   },

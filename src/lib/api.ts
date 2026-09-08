@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/constants/api";
+import { normalizeTaskRepeat } from "@/lib/task-repeat";
 import type {
   SearchTask,
   SelectedView,
@@ -151,7 +152,11 @@ export async function fetchTaskDetail(taskId: string): Promise<TaskDetail> {
     throw new Error(`Failed to load task (${response.status})`);
   }
 
-  return response.json() as Promise<TaskDetail>;
+  const data = (await response.json()) as TaskDetail;
+  return {
+    ...data,
+    dueRepeat: normalizeTaskRepeat(data.dueRepeat),
+  };
 }
 
 export async function fetchLabels(): Promise<TaskLabel[]> {
@@ -350,6 +355,7 @@ export async function updateTaskSchedule(
     dueDate?: string | null;
     dueTimeMinutes?: number | null;
     dueDurationMinutes?: number | null;
+    dueRepeat?: string | null;
   },
 ) {
   const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
@@ -370,6 +376,7 @@ export async function updateTaskSchedule(
     dueDate: string | null;
     dueTimeMinutes: number | null;
     dueDurationMinutes: number | null;
+    dueRepeat?: string | null;
     dueTimeZone: string;
   }>;
 }

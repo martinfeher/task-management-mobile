@@ -1,4 +1,5 @@
 import type { TaskDoc } from "@/lib/task-document";
+import type { TaskRepeatOption } from "@/lib/task-repeat";
 
 export type SidebarListItem = {
   id: string;
@@ -35,6 +36,7 @@ export type TaskItem = {
   dueDate: string | null;
   dueTimeMinutes?: number | null;
   dueDurationMinutes?: number | null;
+  dueRepeat?: TaskRepeatOption | null;
   calendarColor?: string | null;
   pinned: boolean;
   important: boolean;
@@ -86,6 +88,7 @@ export type TaskDetail = {
   dueDate: string | null;
   dueTimeMinutes: number | null;
   dueDurationMinutes: number | null;
+  dueRepeat?: TaskRepeatOption | null;
   dueTimeZone: string;
   important: boolean;
   pinned: boolean;

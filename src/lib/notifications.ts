@@ -70,6 +70,7 @@ export async function scheduleTaskReminder(input: {
   taskName: string;
   dueDate: string | null;
   dueTimeMinutes?: number | null;
+  reminderOffsetMinutes?: number | null;
 }) {
   const Notifications = await getNotifications();
   if (!Notifications) return;
@@ -82,6 +83,11 @@ export async function scheduleTaskReminder(input: {
   if (!granted) return;
 
   const triggerDate = getReminderDate(input.dueDate, input.dueTimeMinutes ?? null);
+  if (input.reminderOffsetMinutes) {
+    triggerDate.setMinutes(
+      triggerDate.getMinutes() - input.reminderOffsetMinutes,
+    );
+  }
   if (triggerDate.getTime() <= Date.now()) return;
 
   if (Platform.OS === "android") {
@@ -112,6 +118,7 @@ export async function applyTaskReminder(input: {
   dueDate: string | null;
   dueTimeMinutes?: number | null;
   reminderEnabled?: boolean;
+  reminderOffsetMinutes?: number | null;
 }) {
   if (input.reminderEnabled && input.dueDate) {
     await scheduleTaskReminder({
@@ -119,6 +126,7 @@ export async function applyTaskReminder(input: {
       taskName: input.taskName,
       dueDate: input.dueDate,
       dueTimeMinutes: input.dueTimeMinutes,
+      reminderOffsetMinutes: input.reminderOffsetMinutes,
     });
     return;
   }

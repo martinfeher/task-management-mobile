@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Dimensions,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -27,12 +28,15 @@ import {
   startOfDay,
   toDateKey,
 } from "@/lib/task-dates";
+import { matchesRepeatPattern, type TaskRepeatOption } from "@/lib/task-repeat";
 
 export type TaskScheduleSelection = {
   dueDate: string | null;
   dueTimeMinutes: number | null;
   dueDurationMinutes: number | null;
+  dueRepeat?: TaskRepeatOption | null;
   reminderEnabled?: boolean;
+  reminderOffsetMinutes?: number | null;
 };
 
 type TaskDatePickerSheetProps = {
@@ -40,18 +44,12 @@ type TaskDatePickerSheetProps = {
   value: string | null;
   dueTimeMinutes?: number | null;
   dueDurationMinutes?: number | null;
+  dueRepeat?: TaskRepeatOption | null;
   onSelect: (selection: TaskScheduleSelection) => void;
   onClose: () => void;
 };
 
-type RepeatOption =
-  | "none"
-  | "daily"
-  | "weekday"
-  | "weekly"
-  | "monthly"
-  | "custom";
-
+type RepeatOption = TaskRepeatOption;
 const ACCENT = "#87a1cb";
 // const ACCENT = "#8caacf";
 // const ACCENT = "#88a4c8";
@@ -101,10 +99,24 @@ const DURATION_PRESET_VALUES = new Set<number>(
 const DEFAULT_DURATION_MINUTES = 60;
 const HOUR_VALUES = Array.from({ length: 12 }, (_, index) => index + 1);
 const MINUTE_VALUES = Array.from({ length: 60 }, (_, index) => index);
-const WHEEL_ITEM_HEIGHT = 44;
 const WHEEL_VISIBLE_ROWS = 3;
+const WHEEL_SHELL_HEIGHT = 112;
+const WHEEL_ITEM_HEIGHT = WHEEL_SHELL_HEIGHT / WHEEL_VISIBLE_ROWS;
 const VISIBLE_MONTH_COUNT = 6;
-const CALENDAR_MONTH_SCROLL_MAX_HEIGHT = 300;
+const CALENDAR_MONTH_SCROLL_MAX_HEIGHT = 261;
+const TIME_SECTION_LIFT_PX = 0;
+const REMINDER_PICKER_OPTIONS = [
+  { id: "on-time", label: "On time", offsetMinutes: 0 },
+  { id: "5-min", label: "5 minutes early", offsetMinutes: 5 },
+  { id: "30-min", label: "30 minutes early", offsetMinutes: 30 },
+  { id: "1-hour", label: "1 hour early", offsetMinutes: 60 },
+  { id: "1-day", label: "1 day early", offsetMinutes: 24 * 60 },
+  { id: "custom", label: "Custom", offsetMinutes: null },
+] as const;
+const REMINDER_PICKER_ROW_HEIGHT = 44;
+const REMINDER_PICKER_MENU_WIDTH = 220;
+const REMINDER_PICKER_ESTIMATED_HEIGHT =
+  REMINDER_PICKER_OPTIONS.length * REMINDER_PICKER_ROW_HEIGHT + 12;
 
 function fromMinutes(minutes: number | null) {
   if (minutes == null) {
@@ -134,7 +146,9 @@ function schedulesEqual(
     left.dueDate === right.dueDate &&
     left.dueTimeMinutes === right.dueTimeMinutes &&
     left.dueDurationMinutes === right.dueDurationMinutes &&
-    (left.reminderEnabled ?? false) === (right.reminderEnabled ?? false)
+    (left.dueRepeat ?? "none") === (right.dueRepeat ?? "none") &&
+    (left.reminderEnabled ?? false) === (right.reminderEnabled ?? false) &&
+    (left.reminderOffsetMinutes ?? 0) === (right.reminderOffsetMinutes ?? 0)
   );
 }
 
@@ -142,6 +156,7 @@ function scheduleFromProps(
   value: string | null,
   dueTimeMinutes: number | null,
   dueDurationMinutes: number | null,
+  dueRepeat: TaskRepeatOption | null = null,
 ): TaskScheduleSelection {
   const parsed = parseDateKey(value);
   const timeEnabled = dueTimeMinutes != null;
@@ -154,7 +169,9 @@ function scheduleFromProps(
       ? toMinutes(time.hour12, time.minute, time.isPm)
       : null,
     dueDurationMinutes: timeEnabled ? duration : null,
+    dueRepeat: dueRepeat && dueRepeat !== "none" ? dueRepeat : null,
     reminderEnabled: false,
+    reminderOffsetMinutes: null,
   };
 }
 
@@ -258,36 +275,6 @@ function getRepeatOptionSubtitle(
       return "Mon - Fri";
     default:
       return null;
-  }
-}
-
-function matchesRepeatPattern(
-  day: Date,
-  anchor: Date,
-  repeat: RepeatOption,
-): boolean {
-  if (repeat === "none" || repeat === "custom") return false;
-
-  const dayStart = startOfDay(day);
-  const anchorStart = startOfDay(anchor);
-
-  switch (repeat) {
-    case "daily":
-      return dayStart >= anchorStart;
-    case "weekday": {
-      const dayOfWeek = dayStart.getDay();
-      return dayOfWeek >= 1 && dayOfWeek <= 5 && dayStart >= anchorStart;
-    }
-    case "weekly":
-      return (
-        dayStart.getDay() === anchorStart.getDay() && dayStart >= anchorStart
-      );
-    case "monthly":
-      return (
-        dayStart.getDate() === anchorStart.getDate() && dayStart >= anchorStart
-      );
-    default:
-      return false;
   }
 }
 
@@ -600,6 +587,7 @@ export function TaskDatePickerSheet({
   value,
   dueTimeMinutes = null,
   dueDurationMinutes = null,
+  dueRepeat = null,
   onSelect,
   onClose,
 }: TaskDatePickerSheetProps) {
@@ -608,10 +596,12 @@ export function TaskDatePickerSheet({
     dueDate: null,
     dueTimeMinutes: null,
     dueDurationMinutes: null,
+    dueRepeat: null,
     reminderEnabled: false,
+    reminderOffsetMinutes: null,
   });
   const userHasEditedRef = useRef(false);
-  const sheetOpenRef = useRef(false);
+  const reminderButtonRef = useRef<View>(null);
   const initialTime = fromMinutes(dueTimeMinutes);
 
   const [monthDate, setMonthDate] = useState(
@@ -626,6 +616,13 @@ export function TaskDatePickerSheet({
   const [draftRepeat, setDraftRepeat] = useState<RepeatOption>("none");
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderOffsetMinutes, setReminderOffsetMinutes] = useState(0);
+  const [reminderPickerAnchor, setReminderPickerAnchor] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const [timeEnabled, setTimeEnabled] = useState(dueTimeMinutes != null);
   const [durationMinutes, setDurationMinutes] = useState<number | null>(
     dueDurationMinutes ?? DEFAULT_DURATION_MINUTES,
@@ -633,36 +630,37 @@ export function TaskDatePickerSheet({
 
   useEffect(() => {
     if (!visible) {
-      sheetOpenRef.current = false;
       userHasEditedRef.current = false;
       return;
     }
 
+    if (userHasEditedRef.current) return;
+
     const parsed = parseDateKey(value);
     const time = fromMinutes(dueTimeMinutes);
     const nextDuration = dueDurationMinutes ?? DEFAULT_DURATION_MINUTES;
-    const isOpening = !sheetOpenRef.current;
-    sheetOpenRef.current = true;
 
-    if (!isOpening) return;
-
-    userHasEditedRef.current = false;
     initialScheduleRef.current = scheduleFromProps(
       value,
       dueTimeMinutes,
       dueDurationMinutes,
+      dueRepeat,
     );
     setSelectedDate(parsed);
     setMonthDate(parsed ?? startOfDay(new Date()));
     setHour12(time.hour12);
     setMinute(time.minute);
     setIsPm(time.isPm);
-    setDraftRepeat("none");
-    setRepeatEnabled(false);
+    const nextRepeat =
+      dueRepeat && dueRepeat !== "none" ? dueRepeat : ("none" as RepeatOption);
+    setDraftRepeat(nextRepeat);
+    setRepeatEnabled(nextRepeat !== "none" || dueTimeMinutes != null);
     setReminderEnabled(false);
+    setReminderOffsetMinutes(0);
+    setReminderPickerAnchor(null);
     setTimeEnabled(dueTimeMinutes != null);
     setDurationMinutes(nextDuration);
-  }, [dueDurationMinutes, dueTimeMinutes, value, visible]);
+  }, [dueDurationMinutes, dueRepeat, dueTimeMinutes, value, visible]);
 
   const monthSequence = useMemo(
     () =>
@@ -684,10 +682,11 @@ export function TaskDatePickerSheet({
     hour12,
     minute,
     isPm,
-    repeatEnabled ? draftRepeat : "none",
+    timeEnabled && draftRepeat !== "none" ? draftRepeat : "none",
     timeEnabled,
   );
-  const effectiveRepeat = repeatEnabled ? draftRepeat : "none";
+  const effectiveRepeat =
+    timeEnabled && draftRepeat !== "none" ? draftRepeat : "none";
 
   function buildScheduleSelection(
     date: Date | null,
@@ -698,6 +697,8 @@ export function TaskDatePickerSheet({
       isPm?: boolean;
       durationMinutes?: number | null;
       reminderEnabled?: boolean;
+      reminderOffsetMinutes?: number | null;
+      dueRepeat?: TaskRepeatOption | null;
     } = {},
   ): TaskScheduleSelection {
     const enabled = overrides.timeEnabled ?? timeEnabled;
@@ -712,6 +713,16 @@ export function TaskDatePickerSheet({
       overrides.reminderEnabled !== undefined
         ? overrides.reminderEnabled
         : reminderEnabled;
+    const nextReminderOffset =
+      overrides.reminderOffsetMinutes !== undefined
+        ? overrides.reminderOffsetMinutes
+        : reminderOffsetMinutes;
+    const nextRepeat =
+      overrides.dueRepeat !== undefined
+        ? overrides.dueRepeat
+        : enabled && draftRepeat !== "none"
+          ? draftRepeat
+          : null;
 
     return {
       dueDate: date ? toDateKey(date) : null,
@@ -719,7 +730,10 @@ export function TaskDatePickerSheet({
         ? toMinutes(nextHour12, nextMinute, nextIsPm)
         : null,
       dueDurationMinutes: enabled ? nextDuration : null,
+      dueRepeat: nextRepeat,
       reminderEnabled: enabled ? nextReminder : false,
+      reminderOffsetMinutes:
+        enabled && nextReminder ? nextReminderOffset : null,
     };
   }
 
@@ -732,6 +746,8 @@ export function TaskDatePickerSheet({
       isPm?: boolean;
       durationMinutes?: number | null;
       reminderEnabled?: boolean;
+      reminderOffsetMinutes?: number | null;
+      dueRepeat?: TaskRepeatOption | null;
     } = {},
   ) {
     onSelect(buildScheduleSelection(date, overrides));
@@ -746,14 +762,22 @@ export function TaskDatePickerSheet({
     setTimeEnabled(nextEnabled);
     if (nextEnabled) {
       setDurationMinutes((current) => current ?? DEFAULT_DURATION_MINUTES);
+      setRepeatEnabled(true);
     } else {
       setReminderEnabled(false);
+      setReminderOffsetMinutes(0);
+      if (repeatEnabled) {
+        setRepeatEnabled(false);
+        setDraftRepeat("none");
+      }
     }
 
     commitSchedule(selectedDate, {
       timeEnabled: nextEnabled,
       durationMinutes: nextEnabled ? nextDuration : null,
       reminderEnabled: nextEnabled ? reminderEnabled : false,
+      reminderOffsetMinutes: nextEnabled ? undefined : null,
+      dueRepeat: nextEnabled ? undefined : null,
     });
   }
 
@@ -785,12 +809,57 @@ export function TaskDatePickerSheet({
     commitSchedule(selectedDate, { durationMinutes: nextDuration });
   }
 
-  function handleReminderToggle() {
+  function openReminderPicker() {
+    reminderButtonRef.current?.measureInWindow((x, y, width, height) => {
+      setReminderPickerAnchor({ x, y, width, height });
+    });
+  }
+
+  function closeReminderPicker() {
+    setReminderPickerAnchor(null);
+  }
+
+  function selectReminderOption(
+    option: (typeof REMINDER_PICKER_OPTIONS)[number],
+  ) {
     markEdited();
-    const nextReminderEnabled = !reminderEnabled;
-    setReminderEnabled(nextReminderEnabled);
+
+    if (option.id === "custom") {
+      closeReminderPicker();
+      Alert.alert(
+        "Custom reminder",
+        "Custom reminder times are not available yet.",
+      );
+      return;
+    }
+
+    setReminderOffsetMinutes(option.offsetMinutes);
+    setReminderEnabled(true);
+    closeReminderPicker();
     if (!timeEnabled) return;
-    commitSchedule(selectedDate, { reminderEnabled: nextReminderEnabled });
+    commitSchedule(selectedDate, {
+      reminderEnabled: true,
+      reminderOffsetMinutes: option.offsetMinutes,
+    });
+  }
+
+  function applyRepeatSelection(next: RepeatOption) {
+    setDraftRepeat(next);
+    setRepeatEnabled(true);
+
+    if (!timeEnabled) {
+      const nextDuration = durationMinutes ?? DEFAULT_DURATION_MINUTES;
+      setTimeEnabled(true);
+      setDurationMinutes(nextDuration);
+      commitSchedule(selectedDate, {
+        timeEnabled: true,
+        durationMinutes: nextDuration,
+        dueRepeat: next,
+      });
+      return;
+    }
+
+    commitSchedule(selectedDate, { dueRepeat: next });
   }
 
   function handleRepeatToggle(nextEnabled: boolean) {
@@ -798,7 +867,28 @@ export function TaskDatePickerSheet({
     setRepeatEnabled(nextEnabled);
     if (!nextEnabled) {
       setDraftRepeat("none");
+      commitSchedule(selectedDate, { dueRepeat: null });
+      return;
     }
+
+    const nextRepeat = draftRepeat !== "none" ? draftRepeat : "daily";
+    if (draftRepeat === "none") {
+      setDraftRepeat(nextRepeat);
+    }
+
+    if (!timeEnabled) {
+      const nextDuration = durationMinutes ?? DEFAULT_DURATION_MINUTES;
+      setTimeEnabled(true);
+      setDurationMinutes(nextDuration);
+      commitSchedule(selectedDate, {
+        timeEnabled: true,
+        durationMinutes: nextDuration,
+        dueRepeat: nextRepeat,
+      });
+      return;
+    }
+
+    commitSchedule(selectedDate, { dueRepeat: nextRepeat });
   }
 
   function handleRepeatSelect(next: RepeatOption) {
@@ -808,7 +898,8 @@ export function TaskDatePickerSheet({
 
     if (next === "none") {
       setDraftRepeat("none");
-      setRepeatEnabled(false);
+      setRepeatEnabled(true);
+      commitSchedule(selectedDate, { dueRepeat: null });
       return;
     }
 
@@ -820,16 +911,17 @@ export function TaskDatePickerSheet({
         repeatConfirmMessage(next),
         [
           { text: "Cancel", style: "cancel" },
-          { text: "Confirm", onPress: () => setDraftRepeat(next) },
+          { text: "Confirm", onPress: () => applyRepeatSelection(next) },
         ],
       );
       return;
     }
 
-    setDraftRepeat(next);
+    applyRepeatSelection(next);
   }
 
   function handleConfirm() {
+    closeReminderPicker();
     commitSchedule(selectedDate);
     onClose();
   }
@@ -846,8 +938,12 @@ export function TaskDatePickerSheet({
   }
 
   function requestDismiss() {
-    const hasChanges =
-      userHasEditedRef.current && hasPendingChanges();
+    if (reminderPickerAnchor) {
+      closeReminderPicker();
+      return;
+    }
+
+    const hasChanges = userHasEditedRef.current && hasPendingChanges();
 
     if (!hasChanges) {
       onClose();
@@ -884,30 +980,48 @@ export function TaskDatePickerSheet({
       dueDate: null,
       dueTimeMinutes: null,
       dueDurationMinutes: null,
+      dueRepeat: null,
       reminderEnabled: false,
+      reminderOffsetMinutes: null,
     });
   }
+
+  const reminderPickerPosition = reminderPickerAnchor
+    ? (() => {
+        const windowWidth = Dimensions.get("window").width;
+        const top = Math.max(
+          insets.top + 8,
+          reminderPickerAnchor.y - REMINDER_PICKER_ESTIMATED_HEIGHT - 8,
+        );
+        const left = Math.min(
+          Math.max(8, reminderPickerAnchor.x),
+          windowWidth - REMINDER_PICKER_MENU_WIDTH - 8,
+        );
+        return { top, left };
+      })()
+    : null;
 
   if (!visible) return null;
 
   return (
-    <Modal transparent animationType="fade" visible onRequestClose={requestDismiss}>
+    <Modal
+      transparent
+      animationType="fade"
+      visible
+      onRequestClose={requestDismiss}
+    >
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={requestDismiss} />
         <View
           style={[
             styles.card,
             {
-              marginTop: 38,
+              marginTop: 51,
               marginBottom: Math.max(insets.bottom, Spacing.three),
             },
           ]}
         >
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.cardContent}
-          >
+          <View style={styles.calendarPane}>
             <View style={styles.header}>
               <Pressable
                 style={styles.headerCloseButton}
@@ -957,7 +1071,6 @@ export function TaskDatePickerSheet({
                     size={MONTH_NAV_ICON_SIZE}
                     tintColor="#c3ccdb"
                   />
-                  {/* <AppSymbol ios="chevron.left" android="chevron-left" size={MONTH_NAV_ICON_SIZE} tintColor="#9ca3af" /> */}
                 </Pressable>
                 <Pressable
                   style={styles.monthNavButton}
@@ -980,7 +1093,6 @@ export function TaskDatePickerSheet({
                     android="chevron-right"
                     size={MONTH_NAV_ICON_SIZE}
                     tintColor="#c3ccdb"
-                    // tintColor="#9ca3af"
                   />
                 </Pressable>
               </View>
@@ -1081,82 +1193,103 @@ export function TaskDatePickerSheet({
                 })}
               </ScrollView>
             </View>
+          </View>
 
+          <ScrollView
+            style={[
+              styles.optionsScroll,
+              timeEnabled && styles.optionsScrollWithTime,
+            ]}
+            contentContainerStyle={[
+              styles.optionsScrollContent,
+              timeEnabled && styles.optionsScrollContentWithTime,
+            ]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+          >
             {timeEnabled ? (
               <>
-                <View style={[styles.sectionHeader, styles.timeSectionHeader]}>
-                  <IoMdTimeIcon size={16} color="#9ca3af" />
-                  <ThemedText style={styles.sectionLabel}>TIME</ThemedText>
-                  <View style={styles.timeSectionHeaderSpacer} />
-                  <Pressable
-                    style={styles.clearTimeButton}
-                    onPress={() => handleTimeToggle(false)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Clear time"
+                <View style={styles.timeSection}>
+                  <View
+                    style={[styles.sectionHeader, styles.timeSectionHeader]}
                   >
-                    <ThemedText style={styles.clearTimeText}>
-                      Clear time
-                    </ThemedText>
-                    <AppSymbol
-                      ios="xmark"
-                      android="close"
-                      size={12}
-                      tintColor={CLOSE_ICON_COLOR}
-                    />
-                  </Pressable>
-                </View>
-
-                <View style={styles.timePickerBar}>
-                  <View style={styles.timeWheels}>
-                    <WheelPicker
-                      values={HOUR_VALUES}
-                      selectedValue={hour12}
-                      onSelect={handleHourSelect}
-                      formatValue={(value) => String(value)}
-                    />
-                    <ThemedText style={styles.timeColon}>:</ThemedText>
-                    <WheelPicker
-                      values={MINUTE_VALUES}
-                      selectedValue={minute}
-                      onSelect={handleMinuteSelect}
-                      formatValue={(value) => String(value).padStart(2, "0")}
-                    />
+                    <IoMdTimeIcon size={16} color="#9ca3af" />
+                    <ThemedText style={styles.sectionLabel}>TIME</ThemedText>
+                    <View style={styles.timeSectionHeaderSpacer} />
+                    <Pressable
+                      style={styles.clearTimeButton}
+                      onPress={() => handleTimeToggle(false)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Clear time"
+                    >
+                      <ThemedText style={styles.clearTimeText}>
+                        Clear time
+                      </ThemedText>
+                      <AppSymbol
+                        ios="xmark"
+                        android="close"
+                        size={12}
+                        tintColor={CLOSE_ICON_COLOR}
+                      />
+                    </Pressable>
                   </View>
 
-                  <View style={styles.ampmColumn}>
-                    <Pressable
-                      style={[
-                        styles.ampmButton,
-                        !isPm && styles.ampmButtonActive,
-                      ]}
-                      onPress={() => handleAmPmSelect(false)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: !isPm }}
-                    >
-                      <ThemedText
+                  <View style={styles.timePickerBar}>
+                    <View style={styles.timeWheels}>
+                      <WheelPicker
+                        values={HOUR_VALUES}
+                        selectedValue={hour12}
+                        onSelect={handleHourSelect}
+                        formatValue={(value) => String(value)}
+                      />
+                      <ThemedText style={styles.timeColon}>:</ThemedText>
+                      <WheelPicker
+                        values={MINUTE_VALUES}
+                        selectedValue={minute}
+                        onSelect={handleMinuteSelect}
+                        formatValue={(value) => String(value).padStart(2, "0")}
+                      />
+                    </View>
+
+                    <View style={styles.ampmColumn}>
+                      <Pressable
                         style={[
-                          styles.ampmText,
-                          !isPm && styles.ampmTextActive,
+                          styles.ampmButton,
+                          !isPm && styles.ampmButtonActive,
                         ]}
+                        onPress={() => handleAmPmSelect(false)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: !isPm }}
                       >
-                        AM
-                      </ThemedText>
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.ampmButton,
-                        isPm && styles.ampmButtonActive,
-                      ]}
-                      onPress={() => handleAmPmSelect(true)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isPm }}
-                    >
-                      <ThemedText
-                        style={[styles.ampmText, isPm && styles.ampmTextActive]}
+                        <ThemedText
+                          style={[
+                            styles.ampmText,
+                            !isPm && styles.ampmTextActive,
+                          ]}
+                        >
+                          AM
+                        </ThemedText>
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.ampmButton,
+                          isPm && styles.ampmButtonActive,
+                        ]}
+                        onPress={() => handleAmPmSelect(true)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isPm }}
                       >
-                        PM
-                      </ThemedText>
-                    </Pressable>
+                        <ThemedText
+                          style={[
+                            styles.ampmText,
+                            isPm && styles.ampmTextActive,
+                          ]}
+                        >
+                          PM
+                        </ThemedText>
+                      </Pressable>
+                    </View>
                   </View>
                 </View>
 
@@ -1172,33 +1305,36 @@ export function TaskDatePickerSheet({
                   onSelectPreset={selectDurationPreset}
                 />
 
-                <Pressable
-                  style={styles.reminderButton}
-                  onPress={handleReminderToggle}
-                  accessibilityRole="button"
-                  accessibilityLabel="Reminder"
-                  accessibilityState={{ selected: reminderEnabled }}
-                >
-                  <View
-                    style={[
-                      styles.reminderIconCircle,
-                      reminderEnabled && styles.reminderIconCircleActive,
-                    ]}
+                <View ref={reminderButtonRef} collapsable={false}>
+                  <Pressable
+                    style={styles.reminderButton}
+                    onPress={openReminderPicker}
+                    accessibilityRole="button"
+                    accessibilityLabel="Reminder"
+                    accessibilityState={{ selected: reminderEnabled }}
                   >
-                    <TimeReminderIcon
-                      size={14}
-                      color={reminderEnabled ? "#ffffff" : "#393939"}
-                    />
-                  </View>
-                  <ThemedText
-                    style={[
-                      styles.reminderButtonText,
-                      reminderEnabled && styles.reminderButtonTextActive,
-                    ]}
-                  >
-                    Reminder
-                  </ThemedText>
-                </Pressable>
+                    <View
+                      style={[
+                        styles.reminderIconCircle,
+                        reminderEnabled && styles.reminderIconCircleActive,
+                      ]}
+                    >
+                      <TimeReminderIcon
+                        size={14}
+                        color={reminderEnabled ? "#ffffff" : "#393939"}
+                      />
+                    </View>
+                    <ThemedText
+                      style={[
+                        styles.reminderButtonText,
+                        (reminderEnabled || reminderPickerAnchor) &&
+                          styles.reminderButtonTextActive,
+                      ]}
+                    >
+                      Reminder
+                    </ThemedText>
+                  </Pressable>
+                </View>
               </>
             ) : (
               <View style={[styles.timeToggleRow, styles.timeOffToggleRow]}>
@@ -1219,7 +1355,7 @@ export function TaskDatePickerSheet({
 
             <View style={styles.sectionDivider} />
 
-            {repeatEnabled ? (
+            {timeEnabled ? (
               <>
                 <View
                   style={[styles.sectionHeader, styles.repeatSectionHeader]}
@@ -1293,6 +1429,51 @@ export function TaskDatePickerSheet({
             </View>
           </ScrollView>
         </View>
+
+        {reminderPickerAnchor && reminderPickerPosition ? (
+          <View style={styles.reminderPickerOverlay} pointerEvents="box-none">
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={closeReminderPicker}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss reminder options"
+            />
+            <View
+              style={[
+                styles.reminderPickerMenu,
+                {
+                  top: reminderPickerPosition.top,
+                  left: reminderPickerPosition.left,
+                  width: REMINDER_PICKER_MENU_WIDTH,
+                },
+              ]}
+            >
+              {REMINDER_PICKER_OPTIONS.map((option) => {
+                const selected =
+                  reminderEnabled &&
+                  option.offsetMinutes != null &&
+                  option.offsetMinutes === reminderOffsetMinutes;
+
+                return (
+                  <Pressable
+                    key={option.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={option.label}
+                    onPress={() => selectReminderOption(option)}
+                    style={({ pressed }) => [
+                      styles.reminderPickerRow,
+                      (pressed || selected) && styles.reminderPickerRowPressed,
+                    ]}
+                  >
+                    <ThemedText style={styles.reminderPickerRowLabel}>
+                      {option.label}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
       </View>
     </Modal>
   );
@@ -1313,6 +1494,24 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     maxHeight: "90%",
     overflow: "hidden",
+  },
+  calendarPane: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+  },
+  optionsScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  optionsScrollWithTime: {
+    marginTop: -TIME_SECTION_LIFT_PX,
+  },
+  optionsScrollContent: {
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.three,
+  },
+  optionsScrollContentWithTime: {
+    paddingTop: TIME_SECTION_LIFT_PX,
   },
   cardContent: {
     paddingHorizontal: Spacing.three,
@@ -1359,16 +1558,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: Spacing.three,
+    marginTop: Spacing.two,
   },
   footerActionsLeft: {
     minHeight: 33,
     justifyContent: "center",
   },
   footerConfirmButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: ACCENT,
     alignItems: "center",
     justifyContent: "center",
@@ -1383,7 +1582,7 @@ const styles = StyleSheet.create({
     fontSize: 19,
     fontWeight: "700",
     color: MONTH_LABEL_COLOR,
-    marginTop: -15,
+    marginTop: -12,
   },
   monthNavGroup: {
     flexDirection: "row",
@@ -1484,13 +1683,11 @@ const styles = StyleSheet.create({
     gap: 4,
     marginBottom: Spacing.one,
   },
+  timeSection: {
+    marginTop: -2,
+  },
   timeSectionHeader: {
-    marginTop: Spacing.one - 40,
-    marginHorizontal: -Spacing.three,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.92)",
-    zIndex: 1,
+    marginBottom: Spacing.one,
   },
   timeSectionHeaderSpacer: {
     flex: 1,
@@ -1502,7 +1699,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   clearTimeText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "500",
     color: TIME_TOGGLE_STATUS_COLOR,
   },
@@ -1510,12 +1707,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: Spacing.one - 6,
     paddingRight: 14,
     height: TIME_TOGGLE_ROW_HEIGHT,
   },
   timeOffToggleRow: {
-    marginTop: Spacing.one - 27,
+    marginTop: 0,
+    paddingTop: 6,
     paddingBottom: 6,
   },
   repeatOffToggleRow: {
@@ -1560,7 +1757,7 @@ const styles = StyleSheet.create({
     color: TIME_TOGGLE_STATUS_COLOR,
   },
   durationSectionHeader: {
-    marginTop: Spacing.two,
+    marginTop: Spacing.two - 2,
   },
   repeatSectionHeader: {
     paddingTop: 3,
@@ -1588,7 +1785,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   timeColon: {
-    fontSize: 23,
+    fontSize: 21.5,
     fontWeight: "500",
     color: "#475569",
     marginHorizontal: 2,
@@ -1597,7 +1794,7 @@ const styles = StyleSheet.create({
   },
   wheelShell: {
     width: 72,
-    height: WHEEL_ITEM_HEIGHT * WHEEL_VISIBLE_ROWS,
+    height: WHEEL_SHELL_HEIGHT,
     overflow: "hidden",
     position: "relative",
   },
@@ -1609,7 +1806,7 @@ const styles = StyleSheet.create({
   },
   wheelItemText: {
     width: "100%",
-    fontSize: 20.5,
+    fontSize: 19,
     fontWeight: "500",
     color: "#cbd5e1",
     textAlign: "center",
@@ -1618,7 +1815,7 @@ const styles = StyleSheet.create({
   wheelItemTextActive: {
     color: "#393939",
     fontWeight: "500",
-    fontSize: 20,
+    fontSize: 18.5,
     textAlign: "center",
     lineHeight: WHEEL_ITEM_HEIGHT,
   },
@@ -1653,7 +1850,7 @@ const styles = StyleSheet.create({
   ampmButton: {
     minWidth: 54,
     paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingVertical: 7,
     borderRadius: 12,
     backgroundColor: "#e8edf3",
     alignItems: "center",
@@ -1662,7 +1859,7 @@ const styles = StyleSheet.create({
     backgroundColor: TIME_PICKER_BLUE,
   },
   ampmText: {
-    fontSize: 12.5,
+    fontSize: 11,
     fontWeight: "700",
     color: "#64748b",
   },
@@ -1709,6 +1906,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
     marginBottom: 6,
+    marginLeft: 6,
   },
   reminderIconCircle: {
     width: 32,
@@ -1735,6 +1933,34 @@ const styles = StyleSheet.create({
   },
   reminderButtonTextActive: {
     color: TIME_PICKER_BLUE,
+  },
+  reminderPickerOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 2,
+  },
+  reminderPickerMenu: {
+    position: "absolute",
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+  reminderPickerRow: {
+    minHeight: REMINDER_PICKER_ROW_HEIGHT,
+    paddingHorizontal: 18,
+    justifyContent: "center",
+  },
+  reminderPickerRowPressed: {
+    backgroundColor: "#f4f4f5",
+  },
+  reminderPickerRowLabel: {
+    fontSize: 16,
+    color: "#393939",
+    fontWeight: "400",
   },
   repeatSection: {
     gap: 8,
@@ -1797,7 +2023,7 @@ const styles = StyleSheet.create({
   },
   clearScheduleButton: {
     borderRadius: 10,
-    backgroundColor: "#5e95e7",
+    backgroundColor: "#b5b5d0",
     width: 76,
     height: 33,
     alignItems: "center",

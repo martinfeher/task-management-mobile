@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -25,7 +25,7 @@ import {
   TaskContextMenu,
   type TaskContextMenuAnchor,
 } from "@/components/task-context-menu";
-import { TaskDatePickerSheet } from "@/components/task-date-picker-sheet";
+import { TaskDatePickerSheet, type TaskScheduleSelection } from "@/components/task-date-picker-sheet";
 import { TaskLabelPicker } from "@/components/task-label-picker";
 import {
   getListContentStyle,
@@ -127,6 +127,7 @@ export function TaskListPanel({
   const [activeTask, setActiveTask] = useState<TaskItem | null>(null);
   const contextTask = activeTask;
   const contextMenuTaskIdRef = useRef<string | null>(null);
+  const isDraggingRef = useRef(isDragging);
   const backdropReadyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -140,6 +141,10 @@ export function TaskListPanel({
     onRetry,
     onOpenListsDrawer: openListsDrawer,
   });
+
+  useEffect(() => {
+    isDraggingRef.current = isDragging;
+  }, [isDragging]);
 
   const patchTaskLocally = useCallback(() => {
     if (selectedView) {
@@ -184,6 +189,8 @@ export function TaskListPanel({
 
   const openContextMenu = useCallback(
     (task: TaskItem, anchor: TaskContextMenuAnchor) => {
+      if (isDraggingRef.current) return;
+
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       if (backdropReadyTimerRef.current) {
         clearTimeout(backdropReadyTimerRef.current);
@@ -192,6 +199,8 @@ export function TaskListPanel({
       contextMenuGestureActiveRef.current = true;
       setContextMenuBackdropReady(false);
       panelRef.current?.measureInWindow((panelX, panelY) => {
+        if (isDraggingRef.current) return;
+
         const left = Math.max(
           8,
           Math.min(
@@ -223,9 +232,11 @@ export function TaskListPanel({
   );
 
   const handleDragBegin = useCallback(() => {
+    isDraggingRef.current = true;
+    closeContextMenu();
     setIsDragging(true);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, []);
+  }, [closeContextMenu]);
 
   const dismissContextMenuForTask = useCallback(
     (task: TaskItem) => {
@@ -295,11 +306,7 @@ export function TaskListPanel({
     setDatePickerOpen(true);
   }
 
-  async function handleScheduleChange(selection: {
-    dueDate: string | null;
-    dueTimeMinutes: number | null;
-    dueDurationMinutes: number | null;
-  }) {
+  async function handleScheduleChange(selection: TaskScheduleSelection) {
     if (!contextTask) return;
     closeContextMenu();
     try {
@@ -419,6 +426,9 @@ export function TaskListPanel({
             style={{ flex: 1 }}
             contentContainerStyle={getListContentStyle(listBottomPadding)}
             keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+            scrollEnabled={!isDragging}
+            showsVerticalScrollIndicator
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
@@ -429,13 +439,16 @@ export function TaskListPanel({
                 <NestableDraggableFlatList
                   data={pinnedBlocks}
                   keyExtractor={(item) => `pinned-${item.id}`}
+                  style={styles.nestedList}
+                  contentContainerStyle={styles.nestedListContent}
                   onDragBegin={handleDragBegin}
                   onDragEnd={({ data }) => {
+                    isDraggingRef.current = false;
                     setIsDragging(false);
                     onReorderTasks?.("pinned", blocksToTasks(data));
                   }}
                   renderItem={renderBlockItem}
-                  activationDistance={15}
+                  activationDistance={8}
                   animationConfig={DROP_ANIMATION_CONFIG}
                   scrollEnabled={false}
                 />
@@ -446,13 +459,16 @@ export function TaskListPanel({
               <NestableDraggableFlatList
                 data={taskBlocks}
                 keyExtractor={(item) => item.id}
+                style={styles.nestedList}
+                contentContainerStyle={styles.nestedListContent}
                 onDragBegin={handleDragBegin}
                 onDragEnd={({ data }) => {
+                  isDraggingRef.current = false;
                   setIsDragging(false);
                   onReorderTasks?.("tasks", blocksToTasks(data));
                 }}
                 renderItem={renderBlockItem}
-                activationDistance={15}
+                activationDistance={8}
                 animationConfig={DROP_ANIMATION_CONFIG}
                 scrollEnabled={false}
               />
@@ -492,6 +508,7 @@ export function TaskListPanel({
           value={contextTask.dueDate}
           dueTimeMinutes={contextTask.dueTimeMinutes ?? null}
           dueDurationMinutes={contextTask.dueDurationMinutes ?? null}
+          dueRepeat={contextTask.dueRepeat ?? null}
           onSelect={(selection) => void handleScheduleChange(selection)}
           onClose={closeContextMenu}
         />
@@ -541,6 +558,13 @@ export function TaskListPanel({
 }
 
 const styles = StyleSheet.create({
+  nestedList: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  nestedListContent: {
+    flexGrow: 0,
+  },
   renameBackdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.25)",

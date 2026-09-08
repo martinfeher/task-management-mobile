@@ -5,6 +5,7 @@ import * as Haptics from "expo-haptics";
 
 import { createTask as createTaskRequest, deleteTask as deleteTaskRequest, fetchSidebarData, fetchTasks, reorderLists as reorderListsRequest, reorderTasks as reorderTasksRequest, toggleTaskCompleted as toggleTaskCompletedRequest } from "@/lib/api";
 import { findInboxList, listsWithoutInbox } from "@/lib/inbox-list";
+import { normalizeTaskRepeat } from "@/lib/task-repeat";
 import { cancelTaskReminder, scheduleTaskReminder } from "@/lib/notifications";
 import type {
   SelectedView,
@@ -201,6 +202,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ? {
               fromCalendar: "1",
               calendarColor: task.calendarColor ?? "",
+              dueTimeMinutes:
+                task.dueTimeMinutes != null ? String(task.dueTimeMinutes) : "",
+              dueDurationMinutes:
+                task.dueDurationMinutes != null
+                  ? String(task.dueDurationMinutes)
+                  : "",
+              dueRepeat: task.dueRepeat ?? "",
             }
           : null),
       },
@@ -532,7 +540,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       const data = await fetchTasks({ type: "calendar" });
-      setCalendarTasks(data.tasks);
+      setCalendarTasks((current) => {
+        const previousById = new Map(current.map((task) => [task.id, task]));
+        return data.tasks.map((task) => ({
+          ...task,
+          dueRepeat:
+            normalizeTaskRepeat(task.dueRepeat) ??
+            previousById.get(task.id)?.dueRepeat ??
+            null,
+        }));
+      });
     } catch {
       setCalendarTasks([]);
     } finally {

@@ -1,8 +1,10 @@
 import { AppSymbol } from "@/components/app-symbol";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -20,7 +22,7 @@ import {
   type CalendarViewMode,
 } from "@/components/calendar-view-picker-sheet";
 import { TaskContextMenu, type TaskContextMenuAnchor } from "@/components/task-context-menu";
-import { TaskDatePickerSheet } from "@/components/task-date-picker-sheet";
+import { TaskDatePickerSheet, type TaskScheduleSelection } from "@/components/task-date-picker-sheet";
 import { TaskLabelPicker } from "@/components/task-label-picker";
 import { TaskListPicker } from "@/components/task-list-picker";
 import { TaskRow } from "@/components/task-row";
@@ -31,17 +33,22 @@ import {
   moveTaskToList,
   toggleTaskImportant,
   toggleTaskLabel,
-  updateTaskDueDate,
   updateTaskSchedule,
   updateTaskPinned,
   updateTaskPriority,
 } from "@/lib/api";
-import { scheduleTaskReminder } from "@/lib/notifications";
+import { applyTaskReminder } from "@/lib/notifications";
 import { addDays, startOfDay, startOfWeek, toDateKey } from "@/lib/task-dates";
+import { buildTasksByDate } from "@/lib/task-repeat";
 import { useApp } from "@/contexts/app-context";
 import type { TaskItem, TaskLabel } from "@/types/todo";
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MONTHS_INITIAL_AFTER = 6;
+const MONTHS_LOAD_BATCH = 6;
+const MONTH_SCROLL_MAX_HEIGHT = 320;
+const MONTH_BLOCK_ESTIMATED_HEIGHT = 296;
+const MONTH_SCROLL_LOAD_THRESHOLD = 72;
 
 function isSameDay(a: Date, b: Date) {
   return (
@@ -111,7 +118,7 @@ function formatPeriodLabel(viewMode: CalendarViewMode, selectedDate: Date, month
   return `${startLabel} – ${endLabel}`;
 }
 
-export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
+export function CalendarPanel() {
   const {
     openTask,
     startAddingTask,
@@ -134,7 +141,13 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
   const [viewMode, setViewMode] = useState<CalendarViewMode>("threeDay");
   const [viewPickerOpen, setViewPickerOpen] = useState(false);
   const [monthDate, setMonthDate] = useState(() => startOfDay(new Date()));
+  const [monthsBefore, setMonthsBefore] = useState(0);
+  const [monthsAfter, setMonthsAfter] = useState(MONTHS_INITIAL_AFTER);
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
+  const monthScrollRef = useRef<ScrollView>(null);
+  const prependScrollRestoreRef = useRef<number | null>(null);
+  const loadingMonthsRef = useRef(false);
+  const canLoadPreviousMonthsRef = useRef(false);
   const [contextMenu, setContextMenu] = useState<{
     task: TaskItem;
     anchor: TaskContextMenuAnchor;
@@ -148,24 +161,35 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
 
   useEffect(() => {
     void loadCalendarTasks();
-  }, [loadCalendarTasks, refreshNonce]);
-
-  const tasksByDate = useMemo(() => {
-    const map = new Map<string, TaskItem[]>();
-    for (const task of calendarTasks) {
-      if (!task.dueDate) continue;
-      const key = task.dueDate.slice(0, 10);
-      const existing = map.get(key) ?? [];
-      existing.push(task);
-      map.set(key, existing);
-    }
-    return map;
-  }, [calendarTasks]);
+  }, [loadCalendarTasks]);
 
   const monthDays = useMemo(
     () => getMonthGrid(monthDate.getFullYear(), monthDate.getMonth()),
     [monthDate],
   );
+
+  const monthSequence = useMemo(() => {
+    const anchor = startOfDay(
+      new Date(monthDate.getFullYear(), monthDate.getMonth(), 1),
+    );
+
+    return Array.from({ length: monthsBefore + monthsAfter + 1 }, (_, index) => {
+      const offset = index - monthsBefore;
+      return startOfDay(
+        new Date(anchor.getFullYear(), anchor.getMonth() + offset, 1),
+      );
+    });
+  }, [monthDate, monthsAfter, monthsBefore]);
+
+  useEffect(() => {
+    if (prependScrollRestoreRef.current == null) return;
+
+    const restoreOffset = prependScrollRestoreRef.current;
+    prependScrollRestoreRef.current = null;
+    requestAnimationFrame(() => {
+      monthScrollRef.current?.scrollTo({ y: restoreOffset, animated: false });
+    });
+  }, [monthsBefore]);
 
   const gridDays = useMemo(() => {
     if (viewMode === "day") {
@@ -183,16 +207,102 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
     return [];
   }, [selectedDate, viewMode]);
 
+  const tasksByDate = useMemo(() => {
+    let rangeStart = startOfDay(selectedDate);
+    let rangeEnd = startOfDay(selectedDate);
+
+    if (viewMode === "month") {
+      const firstMonth = monthSequence[0];
+      const lastMonth = monthSequence[monthSequence.length - 1];
+      if (firstMonth && lastMonth) {
+        const firstMonthDays = getMonthGrid(
+          firstMonth.getFullYear(),
+          firstMonth.getMonth(),
+        );
+        const lastMonthDays = getMonthGrid(
+          lastMonth.getFullYear(),
+          lastMonth.getMonth(),
+        );
+        rangeStart = firstMonthDays[0] ?? rangeStart;
+        rangeEnd = lastMonthDays[lastMonthDays.length - 1] ?? rangeEnd;
+      } else {
+        rangeStart = monthDays[0] ?? rangeStart;
+        rangeEnd = monthDays[monthDays.length - 1] ?? rangeEnd;
+      }
+    } else if (gridDays.length > 0) {
+      rangeStart = gridDays[0] ?? rangeStart;
+      rangeEnd = gridDays[gridDays.length - 1] ?? rangeEnd;
+    }
+
+    return buildTasksByDate(calendarTasks, rangeStart, rangeEnd);
+  }, [calendarTasks, gridDays, monthDays, monthSequence, selectedDate, viewMode]);
+
   const selectedDateKey = toDateKey(selectedDate);
   const selectedDayTasks = tasksByDate.get(selectedDateKey) ?? [];
   const periodLabel = formatPeriodLabel(viewMode, selectedDate, monthDate);
   const isTimeGridView = viewMode !== "month";
 
+  function resetMonthScrollRange() {
+    setMonthsBefore(0);
+    setMonthsAfter(MONTHS_INITIAL_AFTER);
+    prependScrollRestoreRef.current = null;
+    canLoadPreviousMonthsRef.current = false;
+    monthScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }
+
+  function loadMoreMonths(direction: "before" | "after") {
+    if (loadingMonthsRef.current) return;
+    loadingMonthsRef.current = true;
+
+    if (direction === "before") {
+      prependScrollRestoreRef.current =
+        MONTH_BLOCK_ESTIMATED_HEIGHT * MONTHS_LOAD_BATCH;
+      setMonthsBefore((current) => current + MONTHS_LOAD_BATCH);
+    } else {
+      setMonthsAfter((current) => current + MONTHS_LOAD_BATCH);
+    }
+
+    requestAnimationFrame(() => {
+      loadingMonthsRef.current = false;
+    });
+  }
+
+  const handleMonthScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, layoutMeasurement, contentSize } =
+        event.nativeEvent;
+
+      if (contentOffset.y > MONTH_SCROLL_LOAD_THRESHOLD) {
+        canLoadPreviousMonthsRef.current = true;
+      }
+
+      if (
+        canLoadPreviousMonthsRef.current &&
+        contentOffset.y <= MONTH_SCROLL_LOAD_THRESHOLD
+      ) {
+        loadMoreMonths("before");
+      }
+
+      if (
+        contentOffset.y + layoutMeasurement.height >=
+        contentSize.height - MONTH_SCROLL_LOAD_THRESHOLD
+      ) {
+        loadMoreMonths("after");
+      }
+    },
+    [],
+  );
+
   function handlePreviousPeriod() {
     if (viewMode === "month") {
-      setMonthDate(
-        startOfDay(new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1)),
+      const nextMonth = startOfDay(
+        new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1),
       );
+      setMonthDate(nextMonth);
+      const firstVisibleMonth = monthSequence[0];
+      if (firstVisibleMonth && nextMonth < firstVisibleMonth) {
+        setMonthsBefore((current) => current + 1);
+      }
       return;
     }
 
@@ -202,9 +312,14 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
 
   function handleNextPeriod() {
     if (viewMode === "month") {
-      setMonthDate(
-        startOfDay(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1)),
+      const nextMonth = startOfDay(
+        new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1),
       );
+      setMonthDate(nextMonth);
+      const lastVisibleMonth = monthSequence[monthSequence.length - 1];
+      if (lastVisibleMonth && nextMonth > lastVisibleMonth) {
+        setMonthsAfter((current) => current + 1);
+      }
       return;
     }
 
@@ -215,7 +330,12 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
   function handleSelectViewMode(nextView: CalendarViewMode) {
     setViewMode(nextView);
     if (nextView === "month") {
-      setMonthDate(startOfDay(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)));
+      setMonthDate(
+        startOfDay(
+          new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1),
+        ),
+      );
+      resetMonthScrollRange();
     }
   }
 
@@ -231,16 +351,18 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
   }, []);
 
   async function handleUpdateTaskSchedule(task: TaskItem, update: TaskScheduleUpdate) {
+    const original = calendarTasks.find((item) => item.id === task.id);
     const previousTasks = calendarTasks;
     patchCalendarTask(task.id, {
       dueDate: update.dueDate,
       dueTimeMinutes: update.dueTimeMinutes,
       dueDurationMinutes: update.dueDurationMinutes,
+      dueRepeat: original?.dueRepeat ?? null,
     });
 
     try {
       const result = await updateTaskSchedule(task.id, update);
-      await scheduleTaskReminder({
+      await applyTaskReminder({
         taskId: task.id,
         taskName: task.name,
         dueDate: result.dueDate,
@@ -250,6 +372,7 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
         dueDate: result.dueDate,
         dueTimeMinutes: result.dueTimeMinutes,
         dueDurationMinutes: result.dueDurationMinutes,
+        dueRepeat: original?.dueRepeat ?? null,
       });
     } catch {
       replaceCalendarTasks(previousTasks);
@@ -257,15 +380,23 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
     }
   }
 
-  async function handleReschedule(nextDueDate: string | null) {
+  async function handleReschedule(selection: TaskScheduleSelection) {
     if (!rescheduleTask) return;
     try {
-      const result = await updateTaskDueDate(rescheduleTask.id, nextDueDate);
-      await scheduleTaskReminder({
+      const result = await updateTaskSchedule(rescheduleTask.id, selection);
+      await applyTaskReminder({
         taskId: rescheduleTask.id,
         taskName: rescheduleTask.name,
         dueDate: result.dueDate,
         dueTimeMinutes: result.dueTimeMinutes,
+        reminderEnabled: selection.reminderEnabled,
+        reminderOffsetMinutes: selection.reminderOffsetMinutes,
+      });
+      patchCalendarTask(rescheduleTask.id, {
+        dueDate: result.dueDate,
+        dueTimeMinutes: result.dueTimeMinutes,
+        dueDurationMinutes: result.dueDurationMinutes,
+        dueRepeat: selection.dueRepeat ?? null,
       });
       await loadCalendarTasks(true);
     } catch {
@@ -414,33 +545,76 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
               ))}
             </View>
 
-            <View style={styles.monthGrid}>
-              {monthDays.map((day) => {
-                const key = toDateKey(day);
-                const inMonth = day.getMonth() === monthDate.getMonth();
-                const selected = isSameDay(day, selectedDate);
-                const isToday = isSameDay(day, new Date());
-                const count = tasksByDate.get(key)?.length ?? 0;
+            <ScrollView
+              ref={monthScrollRef}
+              style={styles.monthScroll}
+              contentContainerStyle={styles.monthScrollContent}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              scrollEventThrottle={16}
+              onScroll={handleMonthScroll}
+            >
+              {monthSequence.map((visibleMonth, monthIndex) => {
+                const visibleMonthDays = getMonthGrid(
+                  visibleMonth.getFullYear(),
+                  visibleMonth.getMonth(),
+                );
+                const visibleMonthLabel = visibleMonth.toLocaleDateString(
+                  undefined,
+                  {
+                    month: "long",
+                    year: "numeric",
+                  },
+                );
 
                 return (
-                  <Pressable
-                    key={key}
-                    style={[styles.dayCell, selected && styles.dayCellSelected]}
-                    onPress={() => setSelectedDate(day)}>
-                    <ThemedText
-                      style={[
-                        styles.dayNumber,
-                        !inMonth && styles.dayNumberMuted,
-                        isToday && styles.dayNumberToday,
-                        selected && styles.dayNumberSelected,
-                      ]}>
-                      {day.getDate()}
-                    </ThemedText>
-                    {count > 0 ? <View style={styles.taskDot} /> : null}
-                  </Pressable>
+                  <View
+                    key={toDateKey(visibleMonth)}
+                    style={styles.monthBlock}
+                  >
+                    {monthIndex > 0 ? (
+                      <ThemedText style={styles.monthBlockLabel}>
+                        {visibleMonthLabel}
+                      </ThemedText>
+                    ) : null}
+                    <View style={styles.monthGrid}>
+                      {visibleMonthDays.map((day) => {
+                        const key = toDateKey(day);
+                        const inMonth = day.getMonth() === visibleMonth.getMonth();
+                        const selected = isSameDay(day, selectedDate);
+                        const isToday = isSameDay(day, new Date());
+                        const count = tasksByDate.get(key)?.length ?? 0;
+
+                        return (
+                          <Pressable
+                            key={`${toDateKey(visibleMonth)}-${key}`}
+                            style={[
+                              styles.dayCell,
+                              selected && styles.dayCellSelected,
+                            ]}
+                            onPress={() => setSelectedDate(day)}
+                          >
+                            <ThemedText
+                              style={[
+                                styles.dayNumber,
+                                !inMonth && styles.dayNumberMuted,
+                                isToday && styles.dayNumberToday,
+                                selected && styles.dayNumberSelected,
+                              ]}
+                            >
+                              {day.getDate()}
+                            </ThemedText>
+                            {count > 0 && !selected ? (
+                              <View style={styles.taskDot} />
+                            ) : null}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
                 );
               })}
-            </View>
+            </ScrollView>
           </>
         ) : null}
 
@@ -544,7 +718,10 @@ export function CalendarPanel({ refreshNonce = 0 }: { refreshNonce?: number }) {
       <TaskDatePickerSheet
         visible={rescheduleTask != null}
         value={rescheduleTask?.dueDate ?? null}
-        onSelect={(selection) => void handleReschedule(selection.dueDate)}
+        dueTimeMinutes={rescheduleTask?.dueTimeMinutes ?? null}
+        dueDurationMinutes={rescheduleTask?.dueDurationMinutes ?? null}
+        dueRepeat={rescheduleTask?.dueRepeat ?? null}
+        onSelect={(selection) => void handleReschedule(selection)}
         onClose={() => setRescheduleTask(null)}
       />
 
@@ -637,11 +814,26 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#9ca3af",
   },
+  monthScroll: {
+    maxHeight: MONTH_SCROLL_MAX_HEIGHT,
+  },
+  monthScrollContent: {
+    paddingBottom: Spacing.one,
+  },
+  monthBlock: {
+    marginBottom: Spacing.two,
+  },
+  monthBlockLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#6b7280",
+    paddingHorizontal: Spacing.two,
+    marginBottom: Spacing.one,
+  },
   monthGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     paddingHorizontal: Spacing.two,
-    marginBottom: Spacing.two,
   },
   dayCell: {
     width: `${100 / 7}%`,
@@ -672,7 +864,7 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: "#3c87f7",
+    backgroundColor: "#afafaf",
     marginTop: 3,
   },
   dayTasks: {

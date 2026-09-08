@@ -11,16 +11,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppSymbol } from "@/components/app-symbol";
 import { IoChevronBackIcon } from "@/components/io-chevron-back-icon";
-import { TASK_ROW_DEFAULT_LONG_PRESS_MS, TaskRow } from "@/components/task-row";
+import { TaskRow } from "@/components/task-row";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import type { SelectedView, TaskItem, TaskListData } from "@/types/todo";
 
-/** Hold duration before drag/reorder activates in the task list panel. */
-export const TASK_LIST_DRAG_DELAY_MS = TASK_ROW_DEFAULT_LONG_PRESS_MS * 1;
+/** Hold duration before drag/reorder can start in the task list panel. */
+export const TASK_LIST_DRAG_DELAY_MS = 125;
 
 /** Hold duration before the task context menu opens in the task list panel. */
-export const TASK_LIST_CONTEXT_MENU_DELAY_MS = TASK_LIST_DRAG_DELAY_MS * 3;
+export const TASK_LIST_CONTEXT_MENU_DELAY_MS = 800;
 
 /** @deprecated Use `TASK_LIST_DRAG_DELAY_MS`. */
 export const TASK_LIST_LONG_PRESS_MS = TASK_LIST_DRAG_DELAY_MS;
@@ -236,8 +236,7 @@ export function TaskSectionTitle({ title }: { title: string }) {
 
 export const taskListStyles = StyleSheet.create({
   listContent: {
-    flexGrow: 1,
-    justifyContent: "flex-start",
+    flexGrow: 0,
   } as ViewStyle,
 });
 

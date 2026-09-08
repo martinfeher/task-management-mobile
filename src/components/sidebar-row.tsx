@@ -37,7 +37,7 @@ export function SidebarRow({
     <View
       className={`mb-px ml-[3px] mr-1.5 min-h-[45px] flex-row items-center gap-2 rounded-[3px] border-l-2 px-3 ${
         selected
-          ? "border-l-lists-accentBorder bg-lists-selected/50"
+          ? "border-l-lists-accent-border bg-lists-selected/50"
           : "border-l-transparent"
       }`}
     >
