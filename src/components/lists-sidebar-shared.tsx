@@ -21,8 +21,8 @@ import { TodayCalendarIcon } from "@/components/today-calendar-icon";
 import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/hooks/use-theme";
 import { fetchLabels } from "@/lib/api";
-import { getLabelDotColor } from "@/lib/label-colors";
 import { findInboxList } from "@/lib/inbox-list";
+import { getLabelDotColor } from "@/lib/label-colors";
 import type {
   SelectedView,
   SidebarData,
@@ -110,7 +110,8 @@ export function ListsSidebarShell({
                 accessibilityRole="button"
                 accessibilityLabel="Settings"
                 hitSlop={8}
-                onPress={() => setSettingsOpen(true)}>
+                onPress={() => setSettingsOpen(true)}
+              >
                 <AppSymbol
                   ios="gearshape"
                   android="settings"
@@ -136,7 +137,8 @@ export function ListsSidebarShell({
               </Text>
               <Pressable
                 className="mt-2 rounded-lg bg-lists-accent px-4 py-2 active:opacity-85"
-                onPress={onRetry}>
+                onPress={onRetry}
+              >
                 <Text className="font-semibold text-white">Retry</Text>
               </Pressable>
             </View>
@@ -151,7 +153,10 @@ export function ListsSidebarShell({
           onCreateLabel={onCreateLabel}
         />
       ) : null}
-      <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal
+        visible={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
     </View>
   );
 }
@@ -180,7 +185,7 @@ export function ListsPinnedRows({
       <SidebarRow
         title="Today"
         count={data?.counts.today}
-        countNudgeLeft={14}
+        countNudgeLeft={36}
         selected={todaySelected}
         icon={
           <TodayCalendarIcon
@@ -194,7 +199,7 @@ export function ListsPinnedRows({
         <SidebarRow
           title="Inbox"
           count={inboxList.taskCount}
-          countNudgeLeft={14}
+          countNudgeLeft={36}
           selected={inboxSelected}
           icon={
             <AppSymbol
@@ -210,7 +215,7 @@ export function ListsPinnedRows({
       <SidebarRow
         title="Important"
         count={data?.counts.important}
-        countNudgeLeft={14}
+        countNudgeLeft={36}
         selected={importantSelected}
         icon={
           <AppSymbol
@@ -225,7 +230,9 @@ export function ListsPinnedRows({
 
       <View className="mx-4 my-2 h-px bg-lists-divider" />
 
-      <Text className="px-4 pb-1 text-xs font-medium text-lists-muted">Lists</Text>
+      <Text className="px-4 pb-1 text-xs font-medium text-lists-muted">
+        Lists
+      </Text>
     </>
   );
 }
@@ -248,6 +255,9 @@ export function ListsLabelsSection({
 }) {
   const [apiLabels, setApiLabels] = useState<SidebarLabelItem[] | null>(null);
   const [labelsLoading, setLabelsLoading] = useState(false);
+  const [labelsExpanded, setLabelsExpanded] = useState(false);
+  const showLabelItems =
+    labelsExpanded || selectedView?.type === "label";
 
   useEffect(() => {
     let cancelled = false;
@@ -292,12 +302,15 @@ export function ListsLabelsSection({
   if (labelsLoading && labels.length === 0) {
     return (
       <>
-        <Text className="mt-3 px-4 pb-1 text-xs font-medium text-lists-muted">
-          Labels
-        </Text>
-        <View className="items-center py-3">
-          <ActivityIndicator size="small" color="#4873c7" />
-        </View>
+        <LabelsSectionHeader
+          expanded={showLabelItems}
+          onPress={() => setLabelsExpanded((current) => !current)}
+        />
+        {showLabelItems ? (
+          <View className="items-center py-3">
+            <ActivityIndicator size="small" color="#4873c7" />
+          </View>
+        ) : null}
       </>
     );
   }
@@ -342,31 +355,65 @@ export function ListsLabelsSection({
 
   return (
     <>
-      <Text className="mt-3 px-4 pb-1 text-xs font-medium text-lists-muted">
-        Labels
-      </Text>
-      {labels.map((label) => {
-        const selected =
-          selectedView?.type === "label" && selectedView.id === label.id;
-        const colorDot = getLabelDotColor(label);
+      <LabelsSectionHeader
+        expanded={showLabelItems}
+        onPress={() => setLabelsExpanded((current) => !current)}
+      />
+      {showLabelItems
+        ? labels.map((label) => {
+            const selected =
+              selectedView?.type === "label" && selectedView.id === label.id;
+            const colorDot = getLabelDotColor(label);
 
-        return (
-          <SidebarRow
-            key={label.id}
-            title={label.label}
-            count={label.taskCount}
-            alwaysShowCount
-            colorDot={colorDot}
-            selected={selected}
-            showMenu={
-              Boolean(onRenameLabel || onDeleteLabel || onChangeLabelColor)
-            }
-            onPress={() => onSelectView({ type: "label", id: label.id })}
-            onPressMenu={() => openLabelMenu(label)}
-          />
-        );
-      })}
+            return (
+              <SidebarRow
+                key={label.id}
+                title={label.label}
+                count={label.taskCount}
+                alwaysShowCount
+                colorDot={colorDot}
+                selected={selected}
+                showMenu={Boolean(
+                  onRenameLabel || onDeleteLabel || onChangeLabelColor,
+                )}
+                onPress={() => onSelectView({ type: "label", id: label.id })}
+                onPressMenu={() => openLabelMenu(label)}
+              />
+            );
+          })
+        : null}
     </>
   );
 }
 
+function LabelsSectionHeader({
+  expanded,
+  onPress,
+}: {
+  expanded: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      className="mt-3 flex-row items-center gap-1.5 px-4 pb-1 active:opacity-70"
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ expanded }}
+      accessibilityLabel="Labels"
+    >
+      <View
+        style={{
+          transform: [{ rotate: expanded ? "90deg" : "0deg" }],
+        }}
+      >
+        <AppSymbol
+          ios="chevron.right"
+          android="chevron-right"
+          size={12}
+          tintColor="#9ca3af"
+        />
+      </View>
+      <Text className="text-xs font-medium text-lists-muted">Labels</Text>
+    </Pressable>
+  );
+}

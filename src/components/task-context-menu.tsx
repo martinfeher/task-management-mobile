@@ -1,5 +1,5 @@
 import { BlurView } from "expo-blur";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { AppSymbol } from "@/components/app-symbol";
 import { ThemedText } from "@/components/themed-text";
@@ -61,7 +61,16 @@ export function TaskContextMenu({
   const isCalendar = variant === "calendar";
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <Modal
+      transparent
+      visible
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View
+        style={[StyleSheet.absoluteFill, styles.overlay]}
+        pointerEvents="box-none"
+      >
       <BlurView
         intensity={Platform.OS === "ios" ? 28 : 48}
         tint="dark"
@@ -73,15 +82,20 @@ export function TaskContextMenu({
         style={[StyleSheet.absoluteFill, styles.backdropTint]}
         pointerEvents="none"
       />
-      {backdropEnabled ? (
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={onClose}
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss menu"
-        />
-      ) : null}
-      <View style={[styles.menu, { top, left, width: MENU_WIDTH }]}>
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={() => {
+          if (backdropEnabled) {
+            onClose();
+          }
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss menu"
+      />
+      <View
+        style={[styles.menu, { top, left, width: MENU_WIDTH }]}
+        pointerEvents="box-none"
+      >
         {isCalendar ? (
           <>
             {onRename ? (
@@ -164,7 +178,8 @@ export function TaskContextMenu({
           </>
         )}
       </View>
-    </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -197,6 +212,10 @@ function MenuRow({
 }
 
 const styles = StyleSheet.create({
+  overlay: {
+    zIndex: 1000,
+    elevation: 1000,
+  },
   backdropTint: {
     backgroundColor: "rgba(15, 23, 42, 0.18)",
   },
@@ -210,6 +229,7 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
     elevation: 12,
+    zIndex: 1001,
   },
   row: {
     minHeight: 44,

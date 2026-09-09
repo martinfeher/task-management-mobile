@@ -99,7 +99,6 @@ export function TaskListPanel({
   const listBottomPadding = getAddTaskFabReservedHeight(insets.bottom);
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView | null>(null);
-  const panelRef = useRef<View>(null);
   const showListName = selectedView?.type !== "list";
   const handleToggleComplete = useToggleComplete(
     onTaskCompleted,
@@ -173,10 +172,8 @@ export function TaskListPanel({
     }
     backdropReadyTimerRef.current = setTimeout(() => {
       backdropReadyTimerRef.current = null;
-      if (
-        !contextMenuGestureActiveRef.current &&
-        contextMenuTaskIdRef.current
-      ) {
+      contextMenuGestureActiveRef.current = false;
+      if (contextMenuTaskIdRef.current) {
         setContextMenuBackdropReady(true);
       }
     }, 300);
@@ -198,37 +195,31 @@ export function TaskListPanel({
       }
       contextMenuGestureActiveRef.current = true;
       setContextMenuBackdropReady(false);
-      panelRef.current?.measureInWindow((panelX, panelY) => {
-        if (isDraggingRef.current) return;
 
-        const left = Math.max(
-          8,
-          Math.min(
-            anchor.x - panelX + 8,
-            windowWidth - panelX - TASK_CONTEXT_MENU_WIDTH - 8,
-          ),
-        );
-        const belowTop = anchor.y - panelY + anchor.height + 6;
-        const aboveTop =
-          anchor.y - panelY - TASK_CONTEXT_MENU_ESTIMATED_HEIGHT - 6;
-        const anchorCenterY = anchor.y + anchor.height / 2;
-        const openAbove = anchorCenterY >= windowHeight / 2;
-        const top = openAbove
-          ? Math.max(8, aboveTop)
-          : Math.min(
-              belowTop,
-              windowHeight - panelY - TASK_CONTEXT_MENU_ESTIMATED_HEIGHT - 8,
-            );
+      const left = Math.max(
+        8,
+        Math.min(anchor.x + 8, windowWidth - TASK_CONTEXT_MENU_WIDTH - 8),
+      );
+      const belowTop = anchor.y + anchor.height + 6;
+      const aboveTop = anchor.y - TASK_CONTEXT_MENU_ESTIMATED_HEIGHT - 6;
+      const anchorCenterY = anchor.y + anchor.height / 2;
+      const openAbove = anchorCenterY >= windowHeight / 2;
+      const top = openAbove
+        ? Math.max(8, aboveTop)
+        : Math.min(
+            belowTop,
+            windowHeight - TASK_CONTEXT_MENU_ESTIMATED_HEIGHT - 8,
+          );
 
-        contextMenuTaskIdRef.current = task.id;
-        setActiveTask(task);
-        setContextMenu({ task, top, left });
-        setMovePickerOpen(false);
-        setLabelPickerOpen(false);
-        setDatePickerOpen(false);
-      });
+      contextMenuTaskIdRef.current = task.id;
+      setActiveTask(task);
+      setContextMenu({ task, top, left });
+      setMovePickerOpen(false);
+      setLabelPickerOpen(false);
+      setDatePickerOpen(false);
+      scheduleBackdropReady();
     },
-    [windowHeight, windowWidth],
+    [scheduleBackdropReady, windowHeight, windowWidth],
   );
 
   const handleDragBegin = useCallback(() => {
@@ -247,6 +238,17 @@ export function TaskListPanel({
     [closeContextMenu],
   );
 
+  const handleTaskPress = useCallback(
+    (task: TaskItem) => {
+      if (contextMenu) {
+        closeContextMenu();
+        return;
+      }
+      onOpenTask(task);
+    },
+    [closeContextMenu, contextMenu, onOpenTask],
+  );
+
   const renderBlockItem = useCallback(
     ({ item, drag, isActive }: RenderItemParams<TaskBlock>) => (
       <ScaleDecorator activeScale={0.975}>
@@ -254,7 +256,7 @@ export function TaskListPanel({
           task={item.root}
           showListName={showListName}
           onToggleComplete={handleToggleComplete}
-          onPress={onOpenTask}
+          onPress={handleTaskPress}
           onOpenContextMenu={openContextMenu}
           onContextMenuGestureEnd={handleContextMenuGestureEnd}
           onMovePastThreshold={dismissContextMenuForTask}
@@ -270,7 +272,7 @@ export function TaskListPanel({
             task={child}
             showListName={showListName}
             onToggleComplete={handleToggleComplete}
-            onPress={onOpenTask}
+            onPress={handleTaskPress}
             onOpenContextMenu={openContextMenu}
             onContextMenuGestureEnd={handleContextMenuGestureEnd}
             onMovePastThreshold={dismissContextMenuForTask}
@@ -282,8 +284,8 @@ export function TaskListPanel({
     [
       dismissContextMenuForTask,
       handleContextMenuGestureEnd,
+      handleTaskPress,
       handleToggleComplete,
-      onOpenTask,
       openContextMenu,
       showListName,
     ],
@@ -415,7 +417,7 @@ export function TaskListPanel({
   );
 
   return (
-    <View ref={panelRef} collapsable={false} style={{ flex: 1 }}>
+    <View collapsable={false} style={{ flex: 1 }}>
       <TaskListShell
         title={getPanelTitle(selectedView, taskData)}
         onOpenLists={openListsDrawer}

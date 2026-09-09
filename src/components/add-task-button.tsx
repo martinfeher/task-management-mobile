@@ -1,4 +1,5 @@
 import { BlurView } from "expo-blur";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -7,12 +8,20 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { FAB_RIGHT_INSET, ADD_TASK_FAB_SIZE, FAB_BOTTOM_NUDGE, getFabBottomOffset } from "@/constants/tab-bar";
+import {
+  ADD_TASK_FAB_SIZE,
+  FAB_BOTTOM_NUDGE,
+  FAB_RIGHT_INSET,
+  getFabBottomOffset,
+} from "@/constants/tab-bar";
 import { useApp } from "@/contexts/app-context";
 
 const FAB_SIZE = ADD_TASK_FAB_SIZE;
 const FAB_RADIUS = FAB_SIZE / 2;
-const FAB_OPACITY = 0.93;
+const FAB_TINT = "#6c82dc";
+
+const USE_NATIVE_LIQUID_GLASS =
+  Platform.OS === "ios" && isLiquidGlassAvailable();
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -23,7 +32,7 @@ type AddTaskButtonProps = {
 };
 
 /**
- * Circular blurred FAB. Render inside Lists / Tasks screens (not under NativeTabs root).
+ * Circular liquid-glass FAB. Render inside Lists / Tasks screens (not under NativeTabs root).
  */
 export function AddTaskButton({
   onPress,
@@ -62,33 +71,34 @@ export function AddTaskButton({
         style={[
           styles.fab,
           { bottom: fabBottom - FAB_BOTTOM_NUDGE, right: FAB_RIGHT_INSET },
-          { opacity: FAB_OPACITY },
           animatedStyle,
         ]}
       >
-        <View style={styles.fabSurface}>
-          <BlurView
-            intensity={60}
-            tint="systemChromeMaterial"
-            experimentalBlurMethod="dimezisBlurView"
-            style={styles.blur}
+        {USE_NATIVE_LIQUID_GLASS ? (
+          <GlassView
+            glassEffectStyle="regular"
+            isInteractive
+            tintColor={FAB_TINT}
+            style={styles.glass}
           >
-            <View className="absolute inset-0 items-center justify-center bg-[#6c82dc]">
-              <View className="flex-1 justify-center">
-                <Text
-                  className="text-white text-[34px] font-light leading-[38px] text-center mb-[1px]"
-                  style={{
-                    includeFontPadding: false,
-                    marginTop: Platform.OS === "android" ? -2 : -1,
-                  }}
-                  allowFontScaling={false}
-                >
-                  +
-                </Text>
-              </View>
-            </View>
-          </BlurView>
-        </View>
+            <Text style={styles.plus} allowFontScaling={false}>
+              +
+            </Text>
+          </GlassView>
+        ) : (
+          <View style={styles.glass}>
+            <BlurView
+              intensity={60}
+              tint="systemChromeMaterial"
+              experimentalBlurMethod="dimezisBlurView"
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.fallbackTint} pointerEvents="none" />
+            <Text style={styles.plus} allowFontScaling={false}>
+              +
+            </Text>
+          </View>
+        )}
       </AnimatedPressable>
     </View>
   );
@@ -106,10 +116,6 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    height: FAB_SIZE,
-    width: FAB_SIZE,
-    borderRadius: FAB_RADIUS,
-    backgroundColor: "#6c82dc",
     ...Platform.select({
       ios: {
         shadowColor: "#000000",
@@ -125,29 +131,23 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  fabSurface: {
-    flex: 1,
+  glass: {
+    height: FAB_SIZE,
+    width: FAB_SIZE,
     borderRadius: FAB_RADIUS,
-    overflow: "hidden",
-  },
-  blur: {
-    flex: 1,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
-    borderRadius: FAB_RADIUS,
   },
-  plusWrap: {
+  fallbackTint: {
     ...StyleSheet.absoluteFill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#6c82dc",
+    backgroundColor: "rgba(108, 130, 220, 0.88)",
   },
   plus: {
     color: "#ffffff",
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: "300",
-    lineHeight: 40,
+    lineHeight: 38,
     includeFontPadding: false,
     textAlign: "center",
     marginTop: Platform.OS === "android" ? -2 : -1,

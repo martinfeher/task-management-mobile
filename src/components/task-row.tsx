@@ -427,6 +427,7 @@ export function TaskRow({
   }
 
   function handleTouchEnd() {
+    const menuWasOpen = menuOpenedThisGestureRef.current;
     pressActiveRef.current = false;
     pressOriginRef.current = null;
     lastTouchRef.current = null;
@@ -435,6 +436,10 @@ export function TaskRow({
     dragIntentRef.current = false;
     clearHoldTimers();
     resetHoldShadow();
+    if (menuWasOpen) {
+      onContextMenuGestureEnd?.();
+      clearMenuOpenedFlagSoon();
+    }
   }
 
   function clearMenuOpenedFlagSoon() {
