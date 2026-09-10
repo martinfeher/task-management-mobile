@@ -87,6 +87,8 @@ type AppContextValue = {
   listsDrawerOpen: boolean;
   setListsDrawerOpen: (open: boolean) => void;
   closeListsDrawer: (options?: { goToTasksTab?: boolean }) => void;
+  /** Close the lists drawer and open Tasks for the current drawer selection. */
+  openTasksForDrawerSelection: () => void;
   /** Navigate to Lists tab (drawer opens from there). */
   openListsDrawer: () => void;
   reorderLists: (lists: SidebarListItem[]) => void;
@@ -503,6 +505,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     router.navigate("/");
   }, []);
 
+  const openTasksForDrawerSelection = useCallback(() => {
+    const view = selectedViewRef.current;
+    if (view) {
+      selectViewFromDrawer(view);
+      return;
+    }
+
+    const firstList = sidebarDataRef.current?.lists[0];
+    if (firstList) {
+      selectViewFromDrawer({ type: "list", id: firstList.id });
+      return;
+    }
+
+    pendingAfterDrawerCloseRef.current = null;
+    setListsDrawerOpen(false);
+    router.navigate("/tasks");
+  }, [selectViewFromDrawer]);
+
   const startAddingTask = useCallback(
     (options?: { stayOnPage?: boolean; draft?: ComposerDraft }) => {
       const stayOnPage = options?.stayOnPage === true;
@@ -686,6 +706,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       listsDrawerOpen,
       setListsDrawerOpen,
       closeListsDrawer,
+      openTasksForDrawerSelection,
       openListsDrawer,
       reorderLists,
       reorderTasks,
@@ -734,6 +755,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       listsDrawerOpen,
       setListsDrawerOpen,
       closeListsDrawer,
+      openTasksForDrawerSelection,
       openListsDrawer,
       reorderLists,
       reorderTasks,

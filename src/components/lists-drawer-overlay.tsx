@@ -17,7 +17,7 @@ export function ListsDrawerOverlay() {
   const {
     listsDrawerOpen,
     setListsDrawerOpen,
-    closeListsDrawer,
+    openTasksForDrawerSelection,
     flushDrawerCloseAction,
   } = useApp();
 
@@ -44,7 +44,7 @@ export function ListsDrawerOverlay() {
       <ListsDrawerShell
         open={listsDrawerOpen}
         onOpen={() => setListsDrawerOpen(true)}
-        onClose={() => closeListsDrawer()}
+        onClose={openTasksForDrawerSelection}
         style={styles.drawerHost}>
         <View pointerEvents="none" style={styles.backdropContent} />
       </ListsDrawerShell>

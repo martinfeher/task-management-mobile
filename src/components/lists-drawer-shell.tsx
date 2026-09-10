@@ -40,6 +40,7 @@ export function ListsDrawerShell({
       swipeEdgeWidth={swipeEdgeWidth}
       drawerStyle={{ width: drawerWidth }}
       overlayStyle={styles.overlay}
+      overlayAccessibilityLabel="Open tasks for selected list"
       style={style}
       renderDrawerContent={() => <ListsDrawerContent />}>
       {children}

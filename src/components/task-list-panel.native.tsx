@@ -96,7 +96,7 @@ export function TaskListPanel({
     listsDrawerOpen,
     openListsDrawer,
     setListsDrawerOpen,
-    closeListsDrawer,
+    openTasksForDrawerSelection,
     deleteTask,
   } = useApp();
   const insets = useSafeAreaInsets();
@@ -423,7 +423,7 @@ export function TaskListPanel({
     <ListsDrawerShell
       open={listsDrawerOpen}
       onOpen={() => setListsDrawerOpen(true)}
-      onClose={() => closeListsDrawer({ goToTasksTab: false })}
+      onClose={openTasksForDrawerSelection}
       style={styles.drawerHost}
     >
       <View collapsable={false} style={{ flex: 1 }}>
