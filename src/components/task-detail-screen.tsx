@@ -14,7 +14,6 @@ import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -37,7 +36,9 @@ import {
   FormattedNotesInput,
   type NotesInputHandle,
 } from "@/components/formatted-notes-input";
+import { IoAddIcon } from "@/components/io-add-icon";
 import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
+import { TaskCheckbox } from "@/components/task-checkbox";
 import {
   TaskDatePickerSheet,
   type TaskScheduleSelection,
@@ -48,7 +49,6 @@ import {
   getTaskPriorityColor,
   TaskPriorityFlagPopup,
 } from "@/components/task-priority-flag-popup";
-import { TbSubtaskIcon } from "@/components/tb-subtask-icon";
 import { TEXT_FORMAT_TOOLBAR_HEIGHT } from "@/components/text-format-toolbar";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
@@ -59,6 +59,7 @@ import {
   createSubtask,
   fetchLabels,
   fetchTaskDetail,
+  fetchTasks,
   moveTaskToList,
   toggleTaskCompleted,
   toggleTaskLabel,
@@ -77,7 +78,6 @@ import {
 } from "@/lib/html-to-text-runs";
 import { getLabelDotColor } from "@/lib/label-colors";
 import { applyTaskReminder } from "@/lib/notifications";
-import { normalizeTaskRepeat } from "@/lib/task-repeat";
 import {
   parseTaskDetails,
   type ParsedDetailBlock,
@@ -102,6 +102,7 @@ import {
   resolveTaskDoc,
   taskDocToPreviewText,
 } from "@/lib/task-doc";
+import { normalizeTaskRepeat } from "@/lib/task-repeat";
 import {
   applyTextFormat,
   getEffectiveSelection,
@@ -114,7 +115,12 @@ import {
   type TextBlockType,
   type TextFormatAction,
 } from "@/lib/text-format";
-import type { SidebarListItem, TaskDetail, TaskLabel } from "@/types/todo";
+import type {
+  SidebarListItem,
+  TaskDetail,
+  TaskItem,
+  TaskLabel,
+} from "@/types/todo";
 
 function parseRouteInt(value: string | string[] | undefined): number | null {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -246,8 +252,13 @@ export function TaskDetailScreen() {
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [listPickerOpen, setListPickerOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const [subtaskDraftOpen, setSubtaskDraftOpen] = useState(false);
+  const [subtasksSectionOpen, setSubtasksSectionOpen] = useState(false);
+  const [subtasksExpanded, setSubtasksExpanded] = useState(true);
+  const [subtasks, setSubtasks] = useState<TaskItem[]>([]);
+  const [subtasksLoading, setSubtasksLoading] = useState(false);
+  const [subtaskInputOpen, setSubtaskInputOpen] = useState(false);
   const [subtaskName, setSubtaskName] = useState("");
+  const subtaskInputRef = useRef<TextInput>(null);
   const [allLabels, setAllLabels] = useState<TaskLabel[]>([]);
 
   const pickerSchedule = useMemo(
@@ -1059,6 +1070,11 @@ export function TaskDetailScreen() {
     notesSaveEnabledRef.current = false;
     setLoading(true);
     setDetail(null);
+    setSubtasksSectionOpen(false);
+    setSubtasksExpanded(true);
+    setSubtasks([]);
+    setSubtaskInputOpen(false);
+    setSubtaskName("");
     setPriorityMenuOpen(false);
     setLabelPickerOpen(false);
     setCalendarColorPickerOpen(false);
@@ -1412,20 +1428,70 @@ export function TaskDetailScreen() {
     [calendarColor, setCalendarTaskColor],
   );
 
+  const loadSubtasks = useCallback(async () => {
+    if (!detail) return;
+    setSubtasksLoading(true);
+    try {
+      const data = await fetchTasks({ type: "list", id: detail.listId });
+      const items = [...data.pinned, ...data.tasks].filter(
+        (task) => task.parentId === detail.id,
+      );
+      setSubtasks(items);
+    } catch {
+      setSubtasks([]);
+    } finally {
+      setSubtasksLoading(false);
+    }
+  }, [detail]);
+
+  const openSubtasksSection = useCallback(() => {
+    setSubtasksSectionOpen(true);
+    setSubtasksExpanded(true);
+    setSubtaskInputOpen(true);
+    setSubtaskName("");
+    void loadSubtasks();
+  }, [loadSubtasks]);
+
+  useEffect(() => {
+    if (!subtaskInputOpen || !subtasksSectionOpen || !subtasksExpanded) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      subtaskInputRef.current?.focus();
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [subtaskInputOpen, subtasksExpanded, subtasksSectionOpen]);
+
   const handleAddSubtask = async () => {
     if (!detail) return;
     const trimmed = subtaskName.trim();
-    if (!trimmed) {
-      setSubtaskDraftOpen(false);
-      return;
-    }
+    if (!trimmed) return;
     try {
       await createSubtask(detail.id, trimmed);
       setSubtaskName("");
-      setSubtaskDraftOpen(false);
+      await loadSubtasks();
       handleTaskCompleted();
+      subtaskInputRef.current?.focus();
     } catch {
       Alert.alert("Couldn't add subtask");
+    }
+  };
+
+  const handleToggleSubtaskComplete = async (
+    subtask: TaskItem,
+    completed: boolean,
+  ) => {
+    try {
+      await toggleTaskCompleted(subtask.id, completed);
+      setSubtasks((current) =>
+        current.map((item) =>
+          item.id === subtask.id ? { ...item, completed } : item,
+        ),
+      );
+      handleTaskCompleted();
+    } catch {
+      Alert.alert("Couldn't update subtask");
     }
   };
 
@@ -1445,7 +1511,7 @@ export function TaskDetailScreen() {
     Alert.alert("Task options", undefined, [
       {
         text: "Add subtask",
-        onPress: () => setSubtaskDraftOpen(true),
+        onPress: openSubtasksSection,
       },
       {
         text: expandedFullscreen ? "Exit full screen" : "Full screen",
@@ -2016,6 +2082,95 @@ export function TaskDetailScreen() {
                   ) : null}
                 </View>
 
+                {subtasksSectionOpen ? (
+                  <View style={styles.subtasksSection}>
+                    <Pressable
+                      style={styles.subtasksHeader}
+                      onPress={() =>
+                        setSubtasksExpanded((expanded) => !expanded)
+                      }
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: subtasksExpanded }}
+                      accessibilityLabel="Sub-tasks"
+                    >
+                      <View
+                        style={[
+                          styles.subtasksChevron,
+                          subtasksExpanded && styles.subtasksChevronExpanded,
+                        ]}
+                      >
+                        <AppSymbol
+                          ios="chevron.right"
+                          android="chevron-right"
+                          size={11}
+                          tintColor="#9ca3af"
+                        />
+                      </View>
+                      <ThemedText style={styles.subtasksHeaderText}>
+                        sub-tasks
+                      </ThemedText>
+                    </Pressable>
+                    {subtasksExpanded ? (
+                      <View style={styles.subtasksContent}>
+                        {subtasksLoading ? (
+                          <ActivityIndicator
+                            size="small"
+                            color="#4873c7"
+                            style={styles.subtasksLoader}
+                          />
+                        ) : null}
+                        {subtasks.map((subtask) => (
+                          <View key={subtask.id} style={styles.subtaskRow}>
+                            <TaskCheckbox
+                              checked={subtask.completed}
+                              accessibilityLabel={
+                                subtask.completed
+                                  ? `Mark ${subtask.name} incomplete`
+                                  : `Mark ${subtask.name} complete`
+                              }
+                              onPress={() =>
+                                void handleToggleSubtaskComplete(
+                                  subtask,
+                                  !subtask.completed,
+                                )
+                              }
+                            />
+                            <ThemedText
+                              style={[
+                                styles.subtaskName,
+                                subtask.completed && styles.subtaskNameDone,
+                              ]}
+                              numberOfLines={2}
+                            >
+                              {subtask.name}
+                            </ThemedText>
+                          </View>
+                        ))}
+                        {subtaskInputOpen ? (
+                          <View style={styles.subtaskRow}>
+                            <View style={styles.subtaskDraftCheckbox} />
+                            <TextInput
+                              ref={subtaskInputRef}
+                              value={subtaskName}
+                              onChangeText={setSubtaskName}
+                              autoFocus
+                              style={styles.subtaskAddInput}
+                              returnKeyType="done"
+                              blurOnSubmit={false}
+                              onSubmitEditing={() => void handleAddSubtask()}
+                              onBlur={() => {
+                                if (!subtaskName.trim()) {
+                                  setSubtaskInputOpen(false);
+                                }
+                              }}
+                            />
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+
                 {mediaBlocks.map((block, index) => {
                   if (block.type === "image") {
                     return (
@@ -2126,22 +2281,21 @@ export function TaskDetailScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Subtask"
                     hitSlop={8}
-                    onPress={() => setSubtaskDraftOpen(true)}
+                    onPress={openSubtasksSection}
                     style={({ pressed }) => [
                       detailToolbarStyles.toolbarIconSlot,
                       pressed && detailToolbarStyles.toolbarIconPressed,
                     ]}
                   >
-                    <TbSubtaskIcon
-                      size={TOOLBAR_LABELED_ICON_SIZE}
-                      color={TOOLBAR_ICON_COLOR}
-                    />
+                    <View style={detailToolbarStyles.subtaskIconCircle}>
+                      <IoAddIcon size={14} color="#b2d0c2" />
+                    </View>
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Subtask"
                     hitSlop={6}
-                    onPress={() => setSubtaskDraftOpen(true)}
+                    onPress={openSubtasksSection}
                   >
                     <ThemedText style={styles.toolbarCaption}>
                       subtask
@@ -2202,37 +2356,6 @@ export function TaskDetailScreen() {
             onSelect={(selection) => void handleScheduleChange(selection)}
             onClose={() => setDatePickerOpen(false)}
           />
-
-          <Modal
-            transparent
-            visible={subtaskDraftOpen}
-            animationType="fade"
-            onRequestClose={() => setSubtaskDraftOpen(false)}
-          >
-            <Pressable
-              style={styles.subtaskBackdrop}
-              onPress={() => setSubtaskDraftOpen(false)}
-            />
-            <View style={styles.subtaskCard}>
-              <ThemedText style={styles.subtaskTitle}>Add subtask</ThemedText>
-              <TextInput
-                value={subtaskName}
-                onChangeText={setSubtaskName}
-                placeholder="Subtask name"
-                autoFocus
-                style={styles.subtaskInput}
-                onSubmitEditing={() => void handleAddSubtask()}
-              />
-              <View style={styles.subtaskActions}>
-                <Pressable onPress={() => setSubtaskDraftOpen(false)}>
-                  <ThemedText>Cancel</ThemedText>
-                </Pressable>
-                <Pressable onPress={() => void handleAddSubtask()}>
-                  <ThemedText style={styles.subtaskSave}>Add</ThemedText>
-                </Pressable>
-              </View>
-            </View>
-          </Modal>
 
           <TaskListPicker
             visible={listPickerOpen}
@@ -2321,6 +2444,16 @@ const detailToolbarStyles = StyleSheet.create({
   },
   toolbarIconPressed: {
     opacity: 0.55,
+  },
+  subtaskIconCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#b2d0c2",
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 
@@ -2581,39 +2714,65 @@ const styles = StyleSheet.create({
   voiceIconSlot: {
     marginLeft: 39,
   },
-  subtaskBackdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(0,0,0,0.25)",
+  subtasksSection: {
+    marginTop: 18,
+    paddingHorizontal: Spacing.three,
   },
-  subtaskCard: {
-    position: "absolute",
-    left: 28,
-    right: 28,
-    top: "35%",
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 16,
-    gap: 12,
-  },
-  subtaskTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-  },
-  subtaskInput: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#d4d4d8",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  subtaskActions: {
+  subtasksHeader: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 16,
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 4,
   },
-  subtaskSave: {
-    color: "#2563eb",
-    fontWeight: "600",
+  subtasksChevron: {
+    transform: [{ rotate: "0deg" }],
+  },
+  subtasksChevronExpanded: {
+    transform: [{ rotate: "90deg" }],
+  },
+  subtasksHeaderText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: "#9ca3af",
+    fontWeight: "500",
+  },
+  subtasksContent: {
+    marginTop: 6,
+    gap: 8,
+  },
+  subtasksLoader: {
+    alignSelf: "flex-start",
+    marginBottom: 4,
+  },
+  subtaskRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 34,
+  },
+  subtaskName: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 22,
+    color: "#626b83",
+  },
+  subtaskNameDone: {
+    color: "#9ca3af",
+    textDecorationLine: "line-through",
+  },
+  subtaskDraftCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#dad4d5",
+    backgroundColor: "#ffffff",
+  },
+  subtaskAddInput: {
+    flex: 1,
+    fontSize: 16,
+    lineHeight: 22,
+    color: "#111827",
+    paddingVertical: 4,
   },
 });

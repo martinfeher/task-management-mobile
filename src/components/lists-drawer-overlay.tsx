@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Drawer } from "react-native-drawer-layout";
@@ -10,6 +11,7 @@ const DRAWER_WIDTH_RATIO = 0.84;
 const MAX_DRAWER_WIDTH = 320;
 /** Keep 35% of the base right gap — drawer sits 65% closer to the screen edge. */
 const DRAWER_RIGHT_GAP_FACTOR = 0.35;
+const DRAWER_CLOSE_FALLBACK_MS = 420;
 
 function computeDrawerWidth(windowWidth: number) {
   const baseWidth = Math.min(windowWidth * DRAWER_WIDTH_RATIO, MAX_DRAWER_WIDTH);
@@ -21,9 +23,47 @@ export function ListsDrawerOverlay() {
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const drawerWidth = computeDrawerWidth(windowWidth);
-  const { listsDrawerOpen, setListsDrawerOpen, closeListsDrawer } = useApp();
+  const {
+    listsDrawerOpen,
+    setListsDrawerOpen,
+    closeListsDrawer,
+    flushDrawerCloseAction,
+  } = useApp();
+  const [drawerMounted, setDrawerMounted] = useState(listsDrawerOpen);
 
-  if (!listsDrawerOpen) {
+  useEffect(() => {
+    if (listsDrawerOpen) {
+      setDrawerMounted(true);
+    }
+  }, [listsDrawerOpen]);
+
+  const finishDrawerClose = useCallback(() => {
+    if (listsDrawerOpen) {
+      return;
+    }
+    flushDrawerCloseAction();
+    setDrawerMounted(false);
+  }, [flushDrawerCloseAction, listsDrawerOpen]);
+
+  useEffect(() => {
+    if (listsDrawerOpen || !drawerMounted) {
+      return;
+    }
+
+    const timer = setTimeout(finishDrawerClose, DRAWER_CLOSE_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [drawerMounted, finishDrawerClose, listsDrawerOpen]);
+
+  const handleDrawerTransitionEnd = useCallback(
+    (closing: boolean) => {
+      if (closing) {
+        finishDrawerClose();
+      }
+    },
+    [finishDrawerClose],
+  );
+
+  if (!drawerMounted) {
     return null;
   }
 
@@ -37,6 +77,7 @@ export function ListsDrawerOverlay() {
         open={listsDrawerOpen}
         onOpen={() => setListsDrawerOpen(true)}
         onClose={() => closeListsDrawer()}
+        onTransitionEnd={handleDrawerTransitionEnd}
         drawerPosition="left"
         drawerType="front"
         swipeEnabled={false}
@@ -55,6 +96,6 @@ const styles = StyleSheet.create({
   },
   backdropContent: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "transparent",
   },
 });

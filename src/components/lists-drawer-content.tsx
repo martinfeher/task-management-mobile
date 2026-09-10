@@ -30,9 +30,8 @@ export function ListsDrawerContent() {
     sidebarError,
     selectedView,
     loadSidebar,
-    selectView,
+    selectViewFromDrawer,
     reorderLists,
-    closeListsDrawer,
   } = useApp();
   const [namePrompt, setNamePrompt] = useState<NamePromptState | null>(null);
   const [nameDraft, setNameDraft] = useState("");
@@ -41,8 +40,7 @@ export function ListsDrawerContent() {
   );
 
   function handleSelectView(view: SelectedView) {
-    selectView(view, { goToTasks: true });
-    closeListsDrawer({ goToTasksTab: false });
+    selectViewFromDrawer(view);
   }
 
   function openCreatePrompt() {

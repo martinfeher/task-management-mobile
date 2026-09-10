@@ -11,6 +11,9 @@ export default function ListsScreen() {
   useFocusEffect(
     useCallback(() => {
       setListsDrawerOpen(true);
+      return () => {
+        setListsDrawerOpen(false);
+      };
     }, [setListsDrawerOpen]),
   );
 

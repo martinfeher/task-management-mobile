@@ -15,6 +15,14 @@ import type {
   TaskListData,
 } from "@/types/todo";
 
+function isSameSelectedView(a: SelectedView | null, b: SelectedView) {
+  if (!a || a.type !== b.type) return false;
+  if (a.type === "list" || a.type === "label") {
+    return b.type === a.type && a.id === b.id;
+  }
+  return true;
+}
+
 function getTodayDateValue() {
   const now = new Date();
   const year = now.getFullYear();
@@ -57,6 +65,9 @@ type AppContextValue = {
   lastTabHref: string;
   loadSidebar: (isRefresh?: boolean) => Promise<void>;
   selectView: (view: SelectedView, options?: { goToTasks?: boolean }) => void;
+  /** Select a sidebar view, animate the lists drawer closed, then open Tasks. */
+  selectViewFromDrawer: (view: SelectedView) => void;
+  flushDrawerCloseAction: () => void;
   loadTasksForView: (view: SelectedView, isRefresh?: boolean) => Promise<void>;
   openTask: (task: TaskItem, options?: { fromCalendar?: boolean }) => void;
   handleTaskCompleted: (taskId?: string) => void;
@@ -108,6 +119,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [taskAddedToast, setTaskAddedToast] = useState<string | null>(null);
   const [addTaskComposerHeight, setAddTaskComposerHeight] = useState(0);
   const [lastTabHref, setLastTabHref] = useState("/");
+  const lastTabHrefRef = useRef("/");
   const selectedViewRef = useRef<SelectedView | null>(null);
   const sidebarDataRef = useRef<SidebarData | null>(null);
   const taskDataRef = useRef<TaskListData | null>(null);
@@ -117,6 +129,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [listsDrawerOpen, setListsDrawerOpen] = useState(false);
+  const pendingAfterDrawerCloseRef = useRef<(() => void) | null>(null);
+  const skipNextSelectedViewLoadRef = useRef(false);
   const [calendarTasks, setCalendarTasks] = useState<TaskItem[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarRefreshing, setCalendarRefreshing] = useState(false);
@@ -124,6 +138,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   selectedViewRef.current = selectedView;
   sidebarDataRef.current = sidebarData;
   taskDataRef.current = taskData;
+  lastTabHrefRef.current = lastTabHref;
 
   const loadSidebar = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
@@ -176,6 +191,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!selectedView) return;
+    if (skipNextSelectedViewLoadRef.current) {
+      skipNextSelectedViewLoadRef.current = false;
+      return;
+    }
     void loadTasksForView(selectedView);
   }, [loadTasksForView, selectedView]);
 
@@ -440,12 +459,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return true;
   }, []);
 
-  const closeListsDrawer = useCallback((options?: { goToTasksTab?: boolean }) => {
-    setListsDrawerOpen(false);
-    if (options?.goToTasksTab !== false) {
-      router.navigate("/tasks");
+  const flushDrawerCloseAction = useCallback(() => {
+    const action = pendingAfterDrawerCloseRef.current;
+    pendingAfterDrawerCloseRef.current = null;
+    if (!action) return;
+
+    const href = lastTabHrefRef.current;
+    if (
+      href.includes("/tasks") ||
+      href.includes("/calendar") ||
+      href.includes("/search")
+    ) {
+      return;
     }
+
+    action();
   }, []);
+
+  const closeListsDrawer = useCallback((options?: { goToTasksTab?: boolean }) => {
+    if (options?.goToTasksTab === false) {
+      pendingAfterDrawerCloseRef.current = null;
+    } else {
+      pendingAfterDrawerCloseRef.current = () => router.navigate("/tasks");
+    }
+    setListsDrawerOpen(false);
+  }, []);
+
+  const selectViewFromDrawer = useCallback(
+    (view: SelectedView) => {
+      void loadTasksForView(view);
+      skipNextSelectedViewLoadRef.current = true;
+      if (!isSameSelectedView(selectedViewRef.current, view)) {
+        setTaskData(null);
+      }
+      setSelectedView(view);
+      router.navigate("/tasks");
+      setListsDrawerOpen(false);
+    },
+    [loadTasksForView],
+  );
 
   const openListsDrawer = useCallback(() => {
     router.navigate("/");
@@ -613,6 +665,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lastTabHref,
       loadSidebar,
       selectView,
+      selectViewFromDrawer,
+      flushDrawerCloseAction,
       loadTasksForView,
       openTask,
       handleTaskCompleted,
@@ -661,6 +715,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lastTabHref,
       loadSidebar,
       selectView,
+      selectViewFromDrawer,
+      flushDrawerCloseAction,
       loadTasksForView,
       openTask,
       handleTaskCompleted,
