@@ -19,6 +19,7 @@ import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTaskButton } from "@/components/add-task-button";
+import { ListsDrawerShell } from "@/components/lists-drawer-shell";
 import {
   TASK_CONTEXT_MENU_ESTIMATED_HEIGHT,
   TASK_CONTEXT_MENU_WIDTH,
@@ -92,7 +93,10 @@ export function TaskListPanel({
     sidebarData,
     loadTasksForView,
     loadSidebar,
+    listsDrawerOpen,
     openListsDrawer,
+    setListsDrawerOpen,
+    closeListsDrawer,
     deleteTask,
   } = useApp();
   const insets = useSafeAreaInsets();
@@ -416,11 +420,17 @@ export function TaskListPanel({
   );
 
   return (
-    <View collapsable={false} style={{ flex: 1 }}>
-      <TaskListShell
-        title={getPanelTitle(selectedView, taskData)}
-        onOpenLists={openListsDrawer}
-      >
+    <ListsDrawerShell
+      open={listsDrawerOpen}
+      onOpen={() => setListsDrawerOpen(true)}
+      onClose={() => closeListsDrawer({ goToTasksTab: false })}
+      style={styles.drawerHost}
+    >
+      <View collapsable={false} style={{ flex: 1 }}>
+        <TaskListShell
+          title={getPanelTitle(selectedView, taskData)}
+          onOpenLists={openListsDrawer}
+        >
         {blockingState ?? (
           <NestableScrollContainer
             ref={scrollRef as never}
@@ -548,11 +558,15 @@ export function TaskListPanel({
           onClose={closeContextMenu}
         />
       ) : null}
-    </View>
+      </View>
+    </ListsDrawerShell>
   );
 }
 
 const styles = StyleSheet.create({
+  drawerHost: {
+    flex: 1,
+  },
   scrollContainer: {
     flex: 1,
   },
