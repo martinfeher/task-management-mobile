@@ -36,9 +36,9 @@ import {
   FormattedNotesInput,
   type NotesInputHandle,
 } from "@/components/formatted-notes-input";
-import { IoAddIcon } from "@/components/io-add-icon";
 import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
 import { TaskCheckbox } from "@/components/task-checkbox";
+import { TbSubtaskIcon } from "@/components/tb-subtask-icon";
 import {
   TaskDatePickerSheet,
   type TaskScheduleSelection,
@@ -2279,7 +2279,7 @@ export function TaskDetailScreen() {
                 <View style={styles.toolbarLabeledItem}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Subtask"
+                    accessibilityLabel="Subtasks"
                     hitSlop={8}
                     onPress={openSubtasksSection}
                     style={({ pressed }) => [
@@ -2287,18 +2287,19 @@ export function TaskDetailScreen() {
                       pressed && detailToolbarStyles.toolbarIconPressed,
                     ]}
                   >
-                    <View style={detailToolbarStyles.subtaskIconCircle}>
-                      <IoAddIcon size={14} color="#b2d0c2" />
-                    </View>
+                    <TbSubtaskIcon
+                      size={TOOLBAR_LABELED_ICON_SIZE}
+                      color={TOOLBAR_ICON_COLOR}
+                    />
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Subtask"
+                    accessibilityLabel="Subtasks"
                     hitSlop={6}
                     onPress={openSubtasksSection}
                   >
                     <ThemedText style={styles.toolbarCaption}>
-                      subtask
+                      subtasks
                     </ThemedText>
                   </Pressable>
                 </View>
@@ -2444,16 +2445,6 @@ const detailToolbarStyles = StyleSheet.create({
   },
   toolbarIconPressed: {
     opacity: 0.55,
-  },
-  subtaskIconCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: "#b2d0c2",
-    borderStyle: "dashed",
-    alignItems: "center",
-    justifyContent: "center",
   },
 });
 

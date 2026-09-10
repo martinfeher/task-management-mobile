@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+import { TbSubtask } from "react-icons/tb";
 import Svg, { Path } from "react-native-svg";
 
 const SUBTASK_PATHS = [
@@ -14,6 +16,10 @@ type TbSubtaskIconProps = {
 };
 
 export function TbSubtaskIcon({ size = 22, color = "#5a6578" }: TbSubtaskIconProps) {
+  if (Platform.OS === "web") {
+    return <TbSubtask size={size} color={color} />;
+  }
+
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       {SUBTASK_PATHS.map((path) => (

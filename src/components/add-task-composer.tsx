@@ -502,7 +502,7 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                             style={styles.moreMenuRow}
                             onPress={handleToolbarSubtask}>
                             <TbSubtaskIcon size={18} color={ICON_COLOR} />
-                            <ThemedText style={styles.moreMenuRowText}>subtask</ThemedText>
+                            <ThemedText style={styles.moreMenuRowText}>subtasks</ThemedText>
                           </Pressable>
                           <Pressable
                             style={styles.moreMenuRow}
