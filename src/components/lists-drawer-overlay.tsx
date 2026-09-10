@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Drawer } from "react-native-drawer-layout";
@@ -11,7 +11,6 @@ const DRAWER_WIDTH_RATIO = 0.84;
 const MAX_DRAWER_WIDTH = 320;
 /** Keep 35% of the base right gap — drawer sits 65% closer to the screen edge. */
 const DRAWER_RIGHT_GAP_FACTOR = 0.35;
-const DRAWER_CLOSE_FALLBACK_MS = 420;
 
 function computeDrawerWidth(windowWidth: number) {
   const baseWidth = Math.min(windowWidth * DRAWER_WIDTH_RATIO, MAX_DRAWER_WIDTH);
@@ -29,41 +28,14 @@ export function ListsDrawerOverlay() {
     closeListsDrawer,
     flushDrawerCloseAction,
   } = useApp();
-  const [drawerMounted, setDrawerMounted] = useState(listsDrawerOpen);
 
   useEffect(() => {
-    if (listsDrawerOpen) {
-      setDrawerMounted(true);
+    if (!listsDrawerOpen) {
+      flushDrawerCloseAction();
     }
-  }, [listsDrawerOpen]);
-
-  const finishDrawerClose = useCallback(() => {
-    if (listsDrawerOpen) {
-      return;
-    }
-    flushDrawerCloseAction();
-    setDrawerMounted(false);
   }, [flushDrawerCloseAction, listsDrawerOpen]);
 
-  useEffect(() => {
-    if (listsDrawerOpen || !drawerMounted) {
-      return;
-    }
-
-    const timer = setTimeout(finishDrawerClose, DRAWER_CLOSE_FALLBACK_MS);
-    return () => clearTimeout(timer);
-  }, [drawerMounted, finishDrawerClose, listsDrawerOpen]);
-
-  const handleDrawerTransitionEnd = useCallback(
-    (closing: boolean) => {
-      if (closing) {
-        finishDrawerClose();
-      }
-    },
-    [finishDrawerClose],
-  );
-
-  if (!drawerMounted) {
+  if (!listsDrawerOpen) {
     return null;
   }
 
@@ -77,14 +49,13 @@ export function ListsDrawerOverlay() {
         open={listsDrawerOpen}
         onOpen={() => setListsDrawerOpen(true)}
         onClose={() => closeListsDrawer()}
-        onTransitionEnd={handleDrawerTransitionEnd}
         drawerPosition="left"
         drawerType="front"
         swipeEnabled={false}
         drawerStyle={{ width: drawerWidth }}
         overlayStyle={{ backgroundColor: "rgba(0, 0, 0, 0.45)" }}
         renderDrawerContent={() => <ListsDrawerContent />}>
-        <View style={styles.backdropContent} />
+        <View pointerEvents="none" style={styles.backdropContent} />
       </Drawer>
     </View>
   );

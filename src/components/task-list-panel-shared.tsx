@@ -17,7 +17,7 @@ import { Spacing } from "@/constants/theme";
 import type { SelectedView, TaskItem, TaskListData } from "@/types/todo";
 
 /** Hold duration before drag/reorder can start in the task list panel. */
-export const TASK_LIST_DRAG_DELAY_MS = 125;
+export const TASK_LIST_DRAG_DELAY_MS = 130;
 
 /** Hold duration before the task context menu opens in the task list panel. */
 export const TASK_LIST_CONTEXT_MENU_DELAY_MS = 800;
@@ -103,7 +103,7 @@ export function TaskListShell({
             {title}
           </ThemedText>
         </View>
-        {children}
+        <View style={styles.listBody}>{children}</View>
       </SafeAreaView>
     </View>
   );
@@ -235,9 +235,7 @@ export function TaskSectionTitle({ title }: { title: string }) {
 }
 
 export const taskListStyles = StyleSheet.create({
-  listContent: {
-    flexGrow: 0,
-  } as ViewStyle,
+  listContent: {} as ViewStyle,
 });
 
 export function getListContentStyle(bottomPadding = 115): StyleProp<ViewStyle> {
@@ -251,6 +249,9 @@ const styles = StyleSheet.create({
     overflow: "visible",
   },
   safeArea: {
+    flex: 1,
+  },
+  listBody: {
     flex: 1,
   },
   header: {

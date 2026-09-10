@@ -117,6 +117,7 @@ export function TaskRow({
   const pressActiveRef = useRef(false);
   const holdProgress = useSharedValue(0);
   const isDraggingSv = useSharedValue(isDragging);
+  const pressDelayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contextMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -246,6 +247,10 @@ export function TaskRow({
   }
 
   function clearHoldTimers() {
+    if (pressDelayTimerRef.current) {
+      clearTimeout(pressDelayTimerRef.current);
+      pressDelayTimerRef.current = null;
+    }
     if (dragTimerRef.current) {
       clearTimeout(dragTimerRef.current);
       dragTimerRef.current = null;
@@ -333,22 +338,14 @@ export function TaskRow({
     dragArmedRef.current = false;
 
     if (onDrag) {
-      dragTimerRef.current = setTimeout(() => {
-        dragTimerRef.current = null;
-        if (!pressActiveRef.current || menuOpenedThisGestureRef.current) return;
-        dragArmedRef.current = true;
-        if (dragIntentRef.current) {
-          cancelContextMenuTimer();
-          if (!dragActivatedRef.current) {
-            triggerDrag();
-          }
-        }
-      }, longPressDelayMs);
+      dragArmedRef.current = true;
+      cancelContextMenuTimer();
+      triggerDrag();
     }
 
     if (onOpenContextMenu) {
       const menuDelay = usesSplitHoldTiming
-        ? contextMenuDelayMs
+        ? Math.max(0, contextMenuDelayMs - longPressDelayMs)
         : longPressDelayMs;
       contextMenuTimerRef.current = setTimeout(() => {
         contextMenuTimerRef.current = null;
@@ -483,8 +480,16 @@ export function TaskRow({
           styles.contentPressable,
           !hasDueDate && styles.contentPressableNoDueDate,
         ]}
-        onPressIn={() => {
+        onPressIn={(event) => {
           menuOpenedThisGestureRef.current = false;
+          if (!usesSplitHoldTiming) return;
+
+          const { pageX, pageY } = event.nativeEvent;
+          clearHoldTimers();
+          pressDelayTimerRef.current = setTimeout(() => {
+            pressDelayTimerRef.current = null;
+            handleTouchStart(pageX, pageY);
+          }, longPressDelayMs);
         }}
         onPress={() => {
           if (menuOpenedThisGestureRef.current) return;
@@ -494,7 +499,8 @@ export function TaskRow({
           canLongPress && !usesSplitHoldTiming ? handleLongPress : undefined
         }
         onPressOut={() => {
-          if (usesSplitHoldTiming && pressActiveRef.current) {
+          if (usesSplitHoldTiming) {
+            handleTouchEnd();
             return;
           }
           clearHoldTimers();
@@ -506,11 +512,6 @@ export function TaskRow({
             clearMenuOpenedFlagSoon();
           }
         }}
-        pressRetentionOffset={
-          usesSplitHoldTiming
-            ? { top: 40, right: 40, bottom: 40, left: 40 }
-            : undefined
-        }
         delayLongPress={
           canLongPress && !usesSplitHoldTiming ? longPressDelayMs : undefined
         }
@@ -603,14 +604,6 @@ export function TaskRow({
     <AnimatedView
       ref={rowRef}
       collapsable={false}
-      onTouchStart={(event) => {
-        handleTouchStart(event.nativeEvent.pageX, event.nativeEvent.pageY);
-      }}
-      onTouchMove={(event) => {
-        handleTouchMove(event.nativeEvent.pageX, event.nativeEvent.pageY);
-      }}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
       style={
         enableHoldShadow
           ? [styles.rowHost, styles.rowHoldShadowHost]

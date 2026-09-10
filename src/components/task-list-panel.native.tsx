@@ -114,7 +114,6 @@ export function TaskListPanel({
     () => tasksToBlocks(taskData?.tasks ?? []),
     [taskData?.tasks],
   );
-
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [contextMenuBackdropReady, setContextMenuBackdropReady] =
     useState(false);
@@ -425,7 +424,7 @@ export function TaskListPanel({
         {blockingState ?? (
           <NestableScrollContainer
             ref={scrollRef as never}
-            style={{ flex: 1 }}
+            style={styles.scrollContainer}
             contentContainerStyle={getListContentStyle(listBottomPadding)}
             keyboardShouldPersistTaps="handled"
             nestedScrollEnabled
@@ -441,8 +440,6 @@ export function TaskListPanel({
                 <NestableDraggableFlatList
                   data={pinnedBlocks}
                   keyExtractor={(item) => `pinned-${item.id}`}
-                  style={styles.nestedList}
-                  contentContainerStyle={styles.nestedListContent}
                   onDragBegin={handleDragBegin}
                   onDragEnd={({ data }) => {
                     isDraggingRef.current = false;
@@ -450,7 +447,6 @@ export function TaskListPanel({
                     onReorderTasks?.("pinned", blocksToTasks(data));
                   }}
                   renderItem={renderBlockItem}
-                  activationDistance={8}
                   animationConfig={DROP_ANIMATION_CONFIG}
                   scrollEnabled={false}
                 />
@@ -461,8 +457,6 @@ export function TaskListPanel({
               <NestableDraggableFlatList
                 data={taskBlocks}
                 keyExtractor={(item) => item.id}
-                style={styles.nestedList}
-                contentContainerStyle={styles.nestedListContent}
                 onDragBegin={handleDragBegin}
                 onDragEnd={({ data }) => {
                   isDraggingRef.current = false;
@@ -470,7 +464,6 @@ export function TaskListPanel({
                   onReorderTasks?.("tasks", blocksToTasks(data));
                 }}
                 renderItem={renderBlockItem}
-                activationDistance={8}
                 animationConfig={DROP_ANIMATION_CONFIG}
                 scrollEnabled={false}
               />
@@ -560,12 +553,8 @@ export function TaskListPanel({
 }
 
 const styles = StyleSheet.create({
-  nestedList: {
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  nestedListContent: {
-    flexGrow: 0,
+  scrollContainer: {
+    flex: 1,
   },
   renameBackdrop: {
     ...StyleSheet.absoluteFill,
