@@ -3,6 +3,13 @@ import type { ReactNode } from "react";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 
+import {
+  readSidebarSession,
+  readTasksSession,
+  writeSidebarSession,
+  writeTasksSession,
+  getSelectedViewKey,
+} from "@/lib/app-data-session";
 import { createTask as createTaskRequest, deleteTask as deleteTaskRequest, fetchSidebarData, fetchTasks, reorderLists as reorderListsRequest, reorderTasks as reorderTasksRequest, toggleTaskCompleted as toggleTaskCompletedRequest } from "@/lib/api";
 import { findInboxList, listsWithoutInbox } from "@/lib/inbox-list";
 import { normalizeTaskRepeat } from "@/lib/task-repeat";
@@ -86,6 +93,8 @@ type AppContextValue = {
   setLastTabHref: (href: string) => void;
   listsDrawerOpen: boolean;
   setListsDrawerOpen: (open: boolean) => void;
+  /** Stable handler for drawer swipe-open; must not be recreated each render. */
+  openListsDrawerPanel: () => void;
   closeListsDrawer: (options?: { goToTasksTab?: boolean }) => void;
   /** Close the lists drawer and open Tasks for the current drawer selection. */
   openTasksForDrawerSelection: () => void;
@@ -131,6 +140,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [listsDrawerOpen, setListsDrawerOpen] = useState(false);
+  const listsDrawerOpenRef = useRef(false);
   const pendingAfterDrawerCloseRef = useRef<(() => void) | null>(null);
   const skipNextSelectedViewLoadRef = useRef(false);
   const [calendarTasks, setCalendarTasks] = useState<TaskItem[]>([]);
@@ -141,8 +151,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   sidebarDataRef.current = sidebarData;
   taskDataRef.current = taskData;
   lastTabHrefRef.current = lastTabHref;
+  listsDrawerOpenRef.current = listsDrawerOpen;
+
+  const selectedViewKey = useMemo(
+    () => getSelectedViewKey(selectedView),
+    [selectedView],
+  );
 
   const loadSidebar = useCallback(async (isRefresh = false) => {
+    const cachedSidebar = !isRefresh ? readSidebarSession() : null;
+    if (cachedSidebar) {
+      setSidebarData(cachedSidebar);
+      setSidebarError(null);
+      setSidebarLoading(false);
+      setSidebarRefreshing(false);
+      return;
+    }
+
     if (isRefresh) {
       setSidebarRefreshing(true);
     } else {
@@ -152,7 +177,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSidebarError(null);
 
     try {
-      const sidebar = await fetchSidebarData();
+      const sidebar = await fetchSidebarData({ force: isRefresh });
+      writeSidebarSession(sidebar);
       setSidebarData(sidebar);
     } catch (loadError) {
       const message =
@@ -165,6 +191,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadTasksForView = useCallback(async (view: SelectedView, isRefresh = false) => {
+    const cachedTasks = !isRefresh ? readTasksSession(view) : null;
+    if (cachedTasks) {
+      setTaskData(cachedTasks);
+      setTaskError(null);
+      setTaskLoading(false);
+      setTaskRefreshing(false);
+      return;
+    }
+
     if (isRefresh) {
       setTaskRefreshing(true);
     } else {
@@ -174,7 +209,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setTaskError(null);
 
     try {
-      const tasks = await fetchTasks(view);
+      const tasks = await fetchTasks(view, { force: isRefresh });
+      writeTasksSession(view, tasks);
       setTaskData(tasks);
     } catch (loadError) {
       const message =
@@ -192,17 +228,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [loadSidebar]);
 
   useEffect(() => {
-    if (!selectedView) return;
+    const view = selectedViewRef.current;
+    if (!view || !selectedViewKey) return;
     if (skipNextSelectedViewLoadRef.current) {
       skipNextSelectedViewLoadRef.current = false;
       return;
     }
-    void loadTasksForView(selectedView);
-  }, [loadTasksForView, selectedView]);
+    void loadTasksForView(view);
+  }, [loadTasksForView, selectedViewKey]);
 
   const selectView = useCallback(
     (view: SelectedView, options?: { goToTasks?: boolean }) => {
-      setSelectedView(view);
+      let viewChanged = false;
+      setSelectedView((current) => {
+        if (isSameSelectedView(current, view)) {
+          return current;
+        }
+        viewChanged = true;
+        return view;
+      });
+
+      if (!viewChanged) {
+        if (options?.goToTasks !== false) {
+          router.navigate("/tasks");
+        }
+        return;
+      }
+
       setTaskData(null);
       if (options?.goToTasks !== false) {
         router.navigate("/tasks");
@@ -489,12 +541,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const selectViewFromDrawer = useCallback(
     (view: SelectedView) => {
-      void loadTasksForView(view);
       skipNextSelectedViewLoadRef.current = true;
-      if (!isSameSelectedView(selectedViewRef.current, view)) {
+      const viewChanged = !isSameSelectedView(selectedViewRef.current, view);
+      if (viewChanged) {
         setTaskData(null);
+        setSelectedView(view);
+        void loadTasksForView(view);
       }
-      setSelectedView(view);
       router.navigate("/tasks");
       setListsDrawerOpen(false);
     },
@@ -505,10 +558,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     router.navigate("/");
   }, []);
 
+  const openListsDrawerPanel = useCallback(() => {
+    setListsDrawerOpen(true);
+  }, []);
+
   const openTasksForDrawerSelection = useCallback(() => {
+    if (!listsDrawerOpenRef.current) {
+      return;
+    }
+
+    listsDrawerOpenRef.current = false;
+    setListsDrawerOpen(false);
+
     const view = selectedViewRef.current;
     if (view) {
-      selectViewFromDrawer(view);
+      router.navigate("/tasks");
       return;
     }
 
@@ -519,7 +583,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     pendingAfterDrawerCloseRef.current = null;
-    setListsDrawerOpen(false);
     router.navigate("/tasks");
   }, [selectViewFromDrawer]);
 
@@ -560,7 +623,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const inbox = findInboxList(lists);
         if (!inbox) return;
 
-        setSelectedView({ type: "list", id: inbox.id });
+        setSelectedView((current) =>
+          isSameSelectedView(current, { type: "list", id: inbox.id })
+            ? current
+            : { type: "list", id: inbox.id },
+        );
       })();
     },
     [],
@@ -611,7 +678,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const data = await fetchTasks({ type: "calendar" });
+      const data = await fetchTasks(
+        { type: "calendar" },
+        { force: isRefresh },
+      );
       setCalendarTasks((current) => {
         const previousById = new Map(current.map((task) => [task.id, task]));
         return data.tasks.map((task) => ({
@@ -705,6 +775,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLastTabHref,
       listsDrawerOpen,
       setListsDrawerOpen,
+      openListsDrawerPanel,
       closeListsDrawer,
       openTasksForDrawerSelection,
       openListsDrawer,
@@ -754,6 +825,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       consumeSearchOpenSuppressed,
       listsDrawerOpen,
       setListsDrawerOpen,
+      openListsDrawerPanel,
       closeListsDrawer,
       openTasksForDrawerSelection,
       openListsDrawer,

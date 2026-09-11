@@ -16,7 +16,7 @@ export function ListsDrawerOverlay() {
   const insets = useSafeAreaInsets();
   const {
     listsDrawerOpen,
-    setListsDrawerOpen,
+    openListsDrawerPanel,
     openTasksForDrawerSelection,
     flushDrawerCloseAction,
   } = useApp();
@@ -43,7 +43,7 @@ export function ListsDrawerOverlay() {
       style={[StyleSheet.absoluteFill, styles.overlayHost, { bottom: tabBarOffset }]}>
       <ListsDrawerShell
         open={listsDrawerOpen}
-        onOpen={() => setListsDrawerOpen(true)}
+        onOpen={openListsDrawerPanel}
         onClose={openTasksForDrawerSelection}
         style={styles.drawerHost}>
         <View pointerEvents="none" style={styles.backdropContent} />

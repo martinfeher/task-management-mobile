@@ -1,4 +1,6 @@
 import { API_BASE_URL } from "@/constants/api";
+import { clearAllTaskSessions } from "@/lib/app-data-session";
+import { clearDedupeCache, dedupeRequest } from "@/lib/request-dedupe";
 import { normalizeTaskRepeat } from "@/lib/task-repeat";
 import type {
   SearchTask,
@@ -11,18 +13,42 @@ import type {
   TaskListData,
 } from "@/types/todo";
 
-export async function fetchSidebarData(): Promise<SidebarData> {
-  const response = await fetch(`${API_BASE_URL}/api/lists`, {
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to load lists (${response.status})`);
+function getTasksCacheKey(view: SelectedView) {
+  if (view.type === "list") {
+    return `tasks:list:${view.id}`;
   }
+  if (view.type === "label") {
+    return `tasks:label:${view.id}`;
+  }
+  return `tasks:view:${view.type}`;
+}
 
-  return response.json() as Promise<SidebarData>;
+function invalidateTaskCaches() {
+  clearDedupeCache("tasks:");
+  clearDedupeCache("sidebar:");
+  clearAllTaskSessions();
+}
+
+export async function fetchSidebarData(options?: {
+  force?: boolean;
+}): Promise<SidebarData> {
+  return dedupeRequest(
+    "sidebar:lists",
+    async () => {
+      const response = await fetch(`${API_BASE_URL}/api/lists`, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load lists (${response.status})`);
+      }
+
+      return response.json() as Promise<SidebarData>;
+    },
+    options,
+  );
 }
 
 function getTasksUrl(view: SelectedView) {
@@ -40,18 +66,27 @@ function getTasksUrl(view: SelectedView) {
   return `${API_BASE_URL}/api/tasks?${params.toString()}`;
 }
 
-export async function fetchTasks(view: SelectedView): Promise<TaskListData> {
-  const response = await fetch(getTasksUrl(view), {
-    headers: {
-      Accept: "application/json",
+export async function fetchTasks(
+  view: SelectedView,
+  options?: { force?: boolean },
+): Promise<TaskListData> {
+  return dedupeRequest(
+    getTasksCacheKey(view),
+    async () => {
+      const response = await fetch(getTasksUrl(view), {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load tasks (${response.status})`);
+      }
+
+      return response.json() as Promise<TaskListData>;
     },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to load tasks (${response.status})`);
-  }
-
-  return response.json() as Promise<TaskListData>;
+    options,
+  );
 }
 
 export async function fetchSearchTasks(): Promise<SearchTask[]> {
@@ -125,6 +160,8 @@ export async function createTask(input: {
     throw new Error(`Failed to create task (${response.status})`);
   }
 
+  invalidateTaskCaches();
+
   return response.json() as Promise<TaskItem>;
 }
 
@@ -141,6 +178,8 @@ export async function toggleTaskCompleted(taskId: string, completed: boolean) {
   if (!response.ok) {
     throw new Error(`Failed to update task (${response.status})`);
   }
+
+  invalidateTaskCaches();
 }
 
 export async function fetchTaskDetail(taskId: string): Promise<TaskDetail> {
@@ -329,6 +368,8 @@ export async function reorderTasks(input: {
   if (!response.ok) {
     throw new Error(`Failed to reorder tasks (${response.status})`);
   }
+
+  invalidateTaskCaches();
 }
 
 export async function deleteTask(taskId: string) {
@@ -340,6 +381,8 @@ export async function deleteTask(taskId: string) {
   if (!response.ok) {
     throw new Error(`Failed to delete task (${response.status})`);
   }
+
+  invalidateTaskCaches();
 }
 
 export async function updateTaskDueDate(

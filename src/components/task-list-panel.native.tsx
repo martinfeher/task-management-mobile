@@ -95,7 +95,7 @@ export function TaskListPanel({
     loadSidebar,
     listsDrawerOpen,
     openListsDrawer,
-    setListsDrawerOpen,
+    openListsDrawerPanel,
     openTasksForDrawerSelection,
     deleteTask,
   } = useApp();
@@ -422,7 +422,7 @@ export function TaskListPanel({
   return (
     <ListsDrawerShell
       open={listsDrawerOpen}
-      onOpen={() => setListsDrawerOpen(true)}
+      onOpen={openListsDrawerPanel}
       onClose={openTasksForDrawerSelection}
       style={styles.drawerHost}
     >
