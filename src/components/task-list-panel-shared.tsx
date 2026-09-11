@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppSymbol } from "@/components/app-symbol";
 import { IoChevronBackIcon } from "@/components/io-chevron-back-icon";
+import { PiArrowBendDownRightBoldIcon } from "@/components/pi-arrow-bend-down-right-bold-icon";
 import { TaskRow } from "@/components/task-row";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
@@ -193,6 +194,14 @@ export function TaskListStateView(props: {
   return getTaskListBlockingState(props);
 }
 
+export function SubtaskBranchMarker() {
+  return (
+    <View style={styles.subtaskBranchIcon}>
+      <PiArrowBendDownRightBoldIcon size={16} color="#b4b4b4" />
+    </View>
+  );
+}
+
 export function StaticTaskSection({
   title,
   tasks,
@@ -213,15 +222,22 @@ export function StaticTaskSection({
       {title ? (
         <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
       ) : null}
-      {tasks.map((task) => (
-        <TaskRow
-          key={task.id}
-          task={task}
-          showListName={showListName}
-          onToggleComplete={onToggleComplete}
-          onPress={onPressTask}
-        />
-      ))}
+      {tasks.map((task, index) => {
+        const nextTask = tasks[index + 1];
+        const hasSubtasks = nextTask?.parentId === task.id;
+
+        return (
+          <View key={task.id}>
+            <TaskRow
+              task={task}
+              showListName={showListName}
+              onToggleComplete={onToggleComplete}
+              onPress={onPressTask}
+            />
+            {hasSubtasks ? <SubtaskBranchMarker /> : null}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -287,6 +303,13 @@ const styles = StyleSheet.create({
     color: "#cbd5e1",
     textTransform: "uppercase",
     letterSpacing: 0.6,
+  },
+  subtaskBranchIcon: {
+    paddingLeft: 33,
+    // paddingLeft: 16,
+    paddingBottom: 2,
+    marginTop: 3,
+    marginBottom: -7,
   },
   centerState: {
     flex: 1,

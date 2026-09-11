@@ -405,7 +405,10 @@ export function TaskRow({
       if (hasVerticalDragIntent(pageY)) {
         tryStartDragFromVerticalMove(pageY);
 
-        if (menuOpenedThisGestureRef.current && !moveThresholdFiredRef.current) {
+        if (
+          menuOpenedThisGestureRef.current &&
+          !moveThresholdFiredRef.current
+        ) {
           moveThresholdFiredRef.current = true;
           menuOpenedThisGestureRef.current = false;
           onMovePastThreshold?.(task);
@@ -478,6 +481,7 @@ export function TaskRow({
       <Pressable
         style={[
           styles.contentPressable,
+          task.depth > 0 && styles.subtaskContentPressable,
           !hasDueDate && styles.contentPressableNoDueDate,
         ]}
         onPressIn={(event) => {
@@ -530,6 +534,7 @@ export function TaskRow({
             <ThemedText
               style={[
                 styles.title,
+                task.depth > 0 && styles.subtaskTitle,
                 !hasDueDate && styles.titleNoDueDate,
                 checked && styles.titleCompleted,
               ]}
@@ -653,6 +658,10 @@ const styles = StyleSheet.create({
   },
   subtaskRow: {
     paddingLeft: TASK_ROW_HORIZONTAL_INSET + 20,
+    minHeight: 46,
+  },
+  subtaskContentPressable: {
+    paddingVertical: 4,
   },
   checkboxHit: {
     paddingVertical: 7,
@@ -702,6 +711,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
     color: "#545454",
     fontWeight: "400",
+  },
+  subtaskTitle: {
+    fontSize: 17,
+    lineHeight: 20.5,
+    color: "#7c7d8f",
   },
   titleCompleted: {
     textDecorationLine: "line-through",

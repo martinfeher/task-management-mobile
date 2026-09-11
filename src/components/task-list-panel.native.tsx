@@ -32,6 +32,7 @@ import {
   getListContentStyle,
   getPanelTitle,
   getTaskListBlockingState,
+  SubtaskBranchMarker,
   TaskListShell,
   TaskSectionTitle,
   TASK_LIST_CONTEXT_MENU_DELAY_MS,
@@ -269,6 +270,7 @@ export function TaskListPanel({
           contextMenuDelayMs={TASK_LIST_CONTEXT_MENU_DELAY_MS}
           enableHoldShadow
         />
+        {item.children.length > 0 ? <SubtaskBranchMarker /> : null}
         {item.children.map((child) => (
           <TaskRow
             key={child.id}
