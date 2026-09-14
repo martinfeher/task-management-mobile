@@ -2,7 +2,7 @@ export const TASK_NAME_PLACEHOLDERS = [
   "Choose what to do next",
   "What would you like to do?",
   "Where to start?",
-  "What would you like to accomplish next?",
+  // "What would you like to accomplish next?",
 ] as const;
 
 let shuffledIndices: number[] = [];

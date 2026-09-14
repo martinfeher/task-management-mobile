@@ -97,6 +97,7 @@ export function ListsSidebar({
             selectedView={selectedView}
             onSelectView={onSelectView}
             navIconColor={navIconColor}
+            onCreateLabel={onCreateLabel}
             onRenameLabel={onRenameLabel}
             onDeleteLabel={onDeleteLabel}
             onChangeLabelColor={onChangeLabelColor}

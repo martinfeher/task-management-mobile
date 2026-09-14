@@ -32,7 +32,6 @@ import {
   getListContentStyle,
   getPanelTitle,
   getTaskListBlockingState,
-  SubtaskBranchMarker,
   TaskListShell,
   TaskSectionTitle,
   TASK_LIST_CONTEXT_MENU_DELAY_MS,
@@ -54,11 +53,13 @@ import {
 } from "@/lib/api";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
 import { getTaskShareUrl } from "@/lib/task-link";
+import { useTaskListSubtasksExpanded } from "@/hooks/use-task-list-subtasks-expanded";
 import {
   blocksToTasks,
   tasksToBlocks,
   type TaskBlock,
 } from "@/lib/task-blocks";
+import { getVisibleSubtasks } from "@/lib/task-subtasks";
 import type { SidebarListItem, TaskItem, TaskLabel } from "@/types/todo";
 
 const DROP_ANIMATION_CONFIG = {
@@ -119,6 +120,12 @@ export function TaskListPanel({
     () => tasksToBlocks(taskData?.tasks ?? []),
     [taskData?.tasks],
   );
+  const allListTasks = useMemo(
+    () => [...pinned, ...tasks],
+    [pinned, tasks],
+  );
+  const { subtaskCountByParentId, isSubtasksExpanded, toggleSubtasksExpanded } =
+    useTaskListSubtasksExpanded(allListTasks);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [contextMenuBackdropReady, setContextMenuBackdropReady] =
     useState(false);
@@ -254,45 +261,63 @@ export function TaskListPanel({
   );
 
   const renderBlockItem = useCallback(
-    ({ item, drag, isActive }: RenderItemParams<TaskBlock>) => (
-      <ScaleDecorator activeScale={0.975}>
-        <TaskRow
-          task={item.root}
-          showListName={showListName}
-          onToggleComplete={handleToggleComplete}
-          onPress={handleTaskPress}
-          onOpenContextMenu={openContextMenu}
-          onContextMenuGestureEnd={handleContextMenuGestureEnd}
-          onMovePastThreshold={dismissContextMenuForTask}
-          onDrag={drag}
-          isDragging={isActive}
-          longPressDelayMs={TASK_LIST_DRAG_DELAY_MS}
-          contextMenuDelayMs={TASK_LIST_CONTEXT_MENU_DELAY_MS}
-          enableHoldShadow
-        />
-        {item.children.length > 0 ? <SubtaskBranchMarker /> : null}
-        {item.children.map((child) => (
+    ({ item, drag, isActive }: RenderItemParams<TaskBlock>) => {
+      const subtaskCount = subtaskCountByParentId.get(item.root.id) ?? 0;
+      const subtasksExpanded = isSubtasksExpanded(item.root.id, subtaskCount);
+      const visibleChildren = subtasksExpanded
+        ? getVisibleSubtasks(item.children)
+        : [];
+
+      return (
+        <ScaleDecorator activeScale={0.975}>
           <TaskRow
-            key={child.id}
-            task={child}
+            task={item.root}
             showListName={showListName}
             onToggleComplete={handleToggleComplete}
             onPress={handleTaskPress}
             onOpenContextMenu={openContextMenu}
             onContextMenuGestureEnd={handleContextMenuGestureEnd}
             onMovePastThreshold={dismissContextMenuForTask}
+            onDrag={drag}
+            isDragging={isActive}
+            longPressDelayMs={TASK_LIST_DRAG_DELAY_MS}
             contextMenuDelayMs={TASK_LIST_CONTEXT_MENU_DELAY_MS}
+            enableHoldShadow
+            subtaskCount={subtaskCount}
+            subtasksExpanded={subtasksExpanded}
+            onToggleSubtasksExpanded={
+              subtaskCount > 0
+                ? () => toggleSubtasksExpanded(item.root.id, subtaskCount)
+                : undefined
+            }
+            showSubtaskCollapseToggle
           />
-        ))}
-      </ScaleDecorator>
-    ),
+          {visibleChildren.map((child) => (
+            <TaskRow
+              key={child.id}
+              task={child}
+              showListName={showListName}
+              onToggleComplete={handleToggleComplete}
+              onPress={handleTaskPress}
+              onOpenContextMenu={openContextMenu}
+              onContextMenuGestureEnd={handleContextMenuGestureEnd}
+              onMovePastThreshold={dismissContextMenuForTask}
+              contextMenuDelayMs={TASK_LIST_CONTEXT_MENU_DELAY_MS}
+            />
+          ))}
+        </ScaleDecorator>
+      );
+    },
     [
       dismissContextMenuForTask,
       handleContextMenuGestureEnd,
       handleTaskPress,
       handleToggleComplete,
+      isSubtasksExpanded,
       openContextMenu,
       showListName,
+      subtaskCountByParentId,
+      toggleSubtasksExpanded,
     ],
   );
 

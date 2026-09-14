@@ -1559,7 +1559,7 @@ export function TaskDetailScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      sheetAllowedDetents: "fitToContents",
+      sheetAllowedDetents: expandedFullscreen ? [1] : "fitToContents",
       sheetExpandsWhenScrolledToEdge: !expandedFullscreen,
       contentStyle: {
         backgroundColor: "#ffffff",
@@ -2052,6 +2052,7 @@ export function TaskDetailScreen() {
                         if (linkEditorOpenRef.current) {
                           dismissLinkEditor();
                         }
+                        setExpandedFullscreen(true);
                         setNotesFocused(true);
                         lastCaretIndexRef.current =
                           notesSelectionRef.current.start;

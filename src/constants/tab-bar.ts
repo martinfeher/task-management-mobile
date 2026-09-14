@@ -9,7 +9,7 @@ export const FAB_GAP_ABOVE_TAB_BAR = 7;
 /** Gap between the add-task FAB and the screen's right edge. */
 export const FAB_RIGHT_INSET = 10;
 
-export const ADD_TASK_FAB_SIZE = 55;
+export const ADD_TASK_FAB_SIZE = 57;
 
 /** Matches `add-task-button.tsx` bottom offset adjustment. */
 export const FAB_BOTTOM_NUDGE = 42;

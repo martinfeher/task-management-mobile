@@ -14,7 +14,11 @@ import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
 import { withUniwind } from "uniwind";
 
 import { AppSymbol } from "@/components/app-symbol";
+import { BiChevronDownIcon } from "@/components/bi-chevron-down-icon";
 import { ListsCreateButton } from "@/components/lists-create-button";
+import { LuInboxIcon } from "@/components/lu-inbox-icon";
+import { LuPlusIcon } from "@/components/lu-plus-icon";
+import { LuStarIcon } from "@/components/lu-star-icon";
 import { SettingsModal } from "@/components/settings-modal";
 import { SidebarRow } from "@/components/sidebar-row";
 import { TodayCalendarIcon } from "@/components/today-calendar-icon";
@@ -189,7 +193,8 @@ export function ListsPinnedRows({
         selected={todaySelected}
         icon={
           <TodayCalendarIcon
-            size={19}
+            size={17}
+            strokeWidth={1}
             color={todaySelected ? "#111111" : navIconColor}
           />
         }
@@ -202,11 +207,10 @@ export function ListsPinnedRows({
           countNudgeLeft={36}
           selected={inboxSelected}
           icon={
-            <AppSymbol
-              ios="tray"
-              android="inbox"
-              size={16}
-              tintColor={inboxSelected ? "#111111" : navIconColor}
+            <LuInboxIcon
+              size={17}
+              strokeWidth={1}
+              color={inboxSelected ? "#111111" : navIconColor}
             />
           }
           onPress={() => onSelectView({ type: "list", id: inboxList.id })}
@@ -218,11 +222,10 @@ export function ListsPinnedRows({
         countNudgeLeft={36}
         selected={importantSelected}
         icon={
-          <AppSymbol
-            ios="star"
-            android="star"
-            size={15}
-            tintColor={importantSelected ? "#111111" : navIconColor}
+          <LuStarIcon
+            size={18}
+            strokeWidth={1}
+            color={importantSelected ? "#111111" : navIconColor}
           />
         }
         onPress={() => onSelectView({ type: "important" })}
@@ -241,6 +244,7 @@ export function ListsLabelsSection({
   data,
   selectedView,
   onSelectView,
+  onCreateLabel,
   onRenameLabel,
   onDeleteLabel,
   onChangeLabelColor,
@@ -249,15 +253,15 @@ export function ListsLabelsSection({
   selectedView: SelectedView | null;
   onSelectView: (view: SelectedView) => void;
   navIconColor: string;
+  onCreateLabel?: () => void;
   onRenameLabel?: (label: SidebarLabelItem) => void;
   onDeleteLabel?: (label: SidebarLabelItem) => void;
   onChangeLabelColor?: (label: SidebarLabelItem) => void;
 }) {
   const [apiLabels, setApiLabels] = useState<SidebarLabelItem[] | null>(null);
   const [labelsLoading, setLabelsLoading] = useState(false);
-  const [labelsExpanded, setLabelsExpanded] = useState(false);
-  const showLabelItems =
-    labelsExpanded || selectedView?.type === "label";
+  const [labelsExpanded, setLabelsExpanded] = useState(true);
+  const showLabelItems = labelsExpanded || selectedView?.type === "label";
 
   useEffect(() => {
     let cancelled = false;
@@ -304,7 +308,8 @@ export function ListsLabelsSection({
       <>
         <LabelsSectionHeader
           expanded={showLabelItems}
-          onPress={() => setLabelsExpanded((current) => !current)}
+          onToggle={() => setLabelsExpanded((current) => !current)}
+          onAddLabel={onCreateLabel}
         />
         {showLabelItems ? (
           <View className="items-center py-3">
@@ -314,8 +319,6 @@ export function ListsLabelsSection({
       </>
     );
   }
-
-  if (labels.length === 0) return null;
 
   function openLabelMenu(label: SidebarLabelItem) {
     const actions: {
@@ -357,10 +360,14 @@ export function ListsLabelsSection({
     <>
       <LabelsSectionHeader
         expanded={showLabelItems}
-        onPress={() => setLabelsExpanded((current) => !current)}
+        onToggle={() => setLabelsExpanded((current) => !current)}
+        onAddLabel={onCreateLabel}
       />
-      {showLabelItems
-        ? labels.map((label) => {
+      {showLabelItems ? (
+        labels.length === 0 ? (
+          <Text className="px-4 pb-1 text-xs text-lists-muted">No labels</Text>
+        ) : (
+          labels.map((label) => {
             const selected =
               selectedView?.type === "label" && selectedView.id === label.id;
             const colorDot = getLabelDotColor(label);
@@ -381,39 +388,61 @@ export function ListsLabelsSection({
               />
             );
           })
-        : null}
+        )
+      ) : null}
     </>
   );
 }
 
 function LabelsSectionHeader({
   expanded,
-  onPress,
+  onToggle,
+  onAddLabel,
 }: {
   expanded: boolean;
-  onPress: () => void;
+  onToggle: () => void;
+  onAddLabel?: () => void;
 }) {
   return (
-    <Pressable
-      className="mt-3 flex-row items-center gap-1.5 px-4 pb-1 active:opacity-70"
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ expanded }}
-      accessibilityLabel="Labels"
-    >
-      <View
-        style={{
-          transform: [{ rotate: expanded ? "90deg" : "0deg" }],
-        }}
+    <View className="mt-3 flex-row items-center px-4 pb-1.5">
+      <Pressable
+        className="min-w-0 flex-1 active:opacity-70"
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel="Labels"
       >
-        <AppSymbol
-          ios="chevron.right"
-          android="chevron-right"
-          size={12}
-          tintColor="#9ca3af"
-        />
-      </View>
-      <Text className="text-xs font-medium text-lists-muted">Labels</Text>
-    </Pressable>
+        <Text className="text-[11px] font-semibold uppercase tracking-[0.06em] text-lists-muted">
+          Labels
+        </Text>
+      </Pressable>
+      {onAddLabel ? (
+        <Pressable
+          className="h-6 w-6 items-center justify-center active:opacity-70"
+          onPress={onAddLabel}
+          accessibilityRole="button"
+          accessibilityLabel="Add label"
+          hitSlop={6}
+        >
+          <LuPlusIcon size={14} color="#acadb2" />
+        </Pressable>
+      ) : null}
+      <Pressable
+        className="-mr-3 h-6 w-6 items-center justify-center active:opacity-70"
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel={expanded ? "Collapse labels" : "Expand labels"}
+        hitSlop={6}
+      >
+        <View
+          style={{
+            transform: [{ rotate: expanded ? "0deg" : "-90deg" }],
+          }}
+        >
+          <BiChevronDownIcon size={16} color="#c0c5e0" />
+        </View>
+      </Pressable>
+    </View>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -11,10 +11,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppSymbol } from "@/components/app-symbol";
 import { IoChevronBackIcon } from "@/components/io-chevron-back-icon";
-import { PiArrowBendDownRightBoldIcon } from "@/components/pi-arrow-bend-down-right-bold-icon";
 import { TaskRow } from "@/components/task-row";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
+import { useTaskListSubtasksExpanded } from "@/hooks/use-task-list-subtasks-expanded";
+import { tasksToBlocks } from "@/lib/task-blocks";
+import { getVisibleSubtasks } from "@/lib/task-subtasks";
 import type { SelectedView, TaskItem, TaskListData } from "@/types/todo";
 
 /** Hold duration before drag/reorder can start in the task list panel. */
@@ -194,14 +196,6 @@ export function TaskListStateView(props: {
   return getTaskListBlockingState(props);
 }
 
-export function SubtaskBranchMarker() {
-  return (
-    <View style={styles.subtaskBranchIcon}>
-      <PiArrowBendDownRightBoldIcon size={16} color="#b4b4b4" />
-    </View>
-  );
-}
-
 export function StaticTaskSection({
   title,
   tasks,
@@ -215,6 +209,10 @@ export function StaticTaskSection({
   onToggleComplete: (taskId: string, completed?: boolean) => void;
   onPressTask: (task: TaskItem) => void;
 }) {
+  const blocks = useMemo(() => tasksToBlocks(tasks), [tasks]);
+  const { subtaskCountByParentId, isSubtasksExpanded, toggleSubtasksExpanded } =
+    useTaskListSubtasksExpanded(tasks);
+
   if (tasks.length === 0) return null;
 
   return (
@@ -222,19 +220,38 @@ export function StaticTaskSection({
       {title ? (
         <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
       ) : null}
-      {tasks.map((task, index) => {
-        const nextTask = tasks[index + 1];
-        const hasSubtasks = nextTask?.parentId === task.id;
+      {blocks.map((block) => {
+        const subtaskCount = subtaskCountByParentId.get(block.root.id) ?? 0;
+        const subtasksExpanded = isSubtasksExpanded(block.root.id, subtaskCount);
+        const visibleChildren = subtasksExpanded
+          ? getVisibleSubtasks(block.children)
+          : [];
 
         return (
-          <View key={task.id}>
+          <View key={block.id}>
             <TaskRow
-              task={task}
+              task={block.root}
               showListName={showListName}
               onToggleComplete={onToggleComplete}
               onPress={onPressTask}
+              subtaskCount={subtaskCount}
+              subtasksExpanded={subtasksExpanded}
+              onToggleSubtasksExpanded={
+                subtaskCount > 0
+                  ? () => toggleSubtasksExpanded(block.root.id, subtaskCount)
+                  : undefined
+              }
+              showSubtaskCollapseToggle
             />
-            {hasSubtasks ? <SubtaskBranchMarker /> : null}
+            {visibleChildren.map((child) => (
+              <TaskRow
+                key={child.id}
+                task={child}
+                showListName={showListName}
+                onToggleComplete={onToggleComplete}
+                onPress={onPressTask}
+              />
+            ))}
           </View>
         );
       })}
@@ -303,13 +320,6 @@ const styles = StyleSheet.create({
     color: "#cbd5e1",
     textTransform: "uppercase",
     letterSpacing: 0.6,
-  },
-  subtaskBranchIcon: {
-    paddingLeft: 33,
-    // paddingLeft: 16,
-    paddingBottom: 2,
-    marginTop: 3,
-    marginBottom: -7,
   },
   centerState: {
     flex: 1,

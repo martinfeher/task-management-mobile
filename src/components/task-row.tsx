@@ -1,5 +1,8 @@
 import { AppSymbol } from "@/components/app-symbol";
+import { MdKeyboardArrowDownIcon } from "@/components/md-keyboard-arrow-down-icon";
+import { RiArrowDropRightLineIcon } from "@/components/ri-arrow-drop-right-line-icon";
 import { TaskCheckbox } from "@/components/task-checkbox";
+import { TaskListSubtaskIcon } from "@/components/task-list-subtask-icon";
 import type { TaskContextMenuAnchor } from "@/components/task-context-menu";
 import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
 import { ThemedText } from "@/components/themed-text";
@@ -73,6 +76,10 @@ type TaskRowProps = {
   contextMenuDelayMs?: number;
   /** Grow a lift shadow while the finger is held before long-press completes. */
   enableHoldShadow?: boolean;
+  subtaskCount?: number;
+  subtasksExpanded?: boolean;
+  onToggleSubtasksExpanded?: () => void;
+  showSubtaskCollapseToggle?: boolean;
 };
 
 function TaskLabelChip({ label }: { label: TaskLabel }) {
@@ -101,12 +108,23 @@ export function TaskRow({
   longPressDelayMs = TASK_ROW_DEFAULT_LONG_PRESS_MS,
   contextMenuDelayMs,
   enableHoldShadow = false,
+  subtaskCount = 0,
+  subtasksExpanded = false,
+  onToggleSubtasksExpanded,
+  showSubtaskCollapseToggle = false,
 }: TaskRowProps) {
   const dueDateParts = formatTaskDueDateParts(
     task.dueDate,
     task.dueTimeMinutes,
   );
   const hasDueDate = dueDateParts != null;
+  const showSubtaskCollapse =
+    showSubtaskCollapseToggle &&
+    task.depth === 0 &&
+    subtaskCount > 0 &&
+    Boolean(onToggleSubtasksExpanded);
+  const showSublineRow = showSubtaskCollapse || hasDueDate;
+  const useCompactRowLayout = !hasDueDate && !showSubtaskCollapse;
   const [optimisticChecked, setOptimisticChecked] = useState(false);
   const checked = task.completed || optimisticChecked;
   const rowRef = useRef<View>(null);
@@ -457,7 +475,10 @@ export function TaskRow({
   const rowContents = (
     <>
       <View
-        style={[styles.checkboxHit, !hasDueDate && styles.checkboxHitNoDueDate]}
+        style={[
+          styles.checkboxHit,
+          useCompactRowLayout && styles.checkboxHitNoDueDate,
+        ]}
       >
         <TaskCheckbox
           checked={checked}
@@ -478,11 +499,17 @@ export function TaskRow({
         />
       </View>
 
+      <View
+        style={[
+          styles.contentColumn,
+          task.depth > 0 && styles.subtaskContentPressable,
+          useCompactRowLayout && styles.contentPressableNoDueDate,
+        ]}
+      >
       <Pressable
         style={[
           styles.contentPressable,
-          task.depth > 0 && styles.subtaskContentPressable,
-          !hasDueDate && styles.contentPressableNoDueDate,
+          useCompactRowLayout && styles.contentPressableNoDueDate,
         ]}
         onPressIn={(event) => {
           menuOpenedThisGestureRef.current = false;
@@ -528,14 +555,17 @@ export function TaskRow({
         }
       >
         <View
-          style={[styles.textBlock, !hasDueDate && styles.textBlockNoDueDate]}
+          style={[
+            styles.textBlock,
+            useCompactRowLayout && styles.textBlockNoDueDate,
+          ]}
         >
           <View style={styles.mainRow}>
             <ThemedText
               style={[
                 styles.title,
                 task.depth > 0 && styles.subtaskTitle,
-                !hasDueDate && styles.titleNoDueDate,
+                useCompactRowLayout && styles.titleNoDueDate,
                 checked && styles.titleCompleted,
               ]}
               numberOfLines={1}
@@ -573,6 +603,41 @@ export function TaskRow({
               ) : null}
             </View>
           </View>
+        </View>
+      </Pressable>
+
+      {showSublineRow ? (
+        <View style={styles.sublineRow}>
+          {showSubtaskCollapse ? (
+            <View style={styles.subtaskCollapseGroup}>
+              <Pressable
+                style={styles.subtaskCollapseButton}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  subtasksExpanded ? "Collapse subtasks" : "Show subtasks"
+                }
+                accessibilityState={{ expanded: subtasksExpanded }}
+                onPress={() => onToggleSubtasksExpanded?.()}
+              >
+                {subtasksExpanded ? (
+                  <MdKeyboardArrowDownIcon size={15} color="#a4a5a8" />
+                ) : (
+                  <RiArrowDropRightLineIcon size={21} color="#babbbd" />
+                )}
+              </Pressable>
+              {!subtasksExpanded ? (
+                <Pressable
+                  style={styles.subtaskBranchButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Show subtasks"
+                  accessibilityState={{ expanded: false }}
+                  onPress={() => onToggleSubtasksExpanded?.()}
+                >
+                  <TaskListSubtaskIcon size={13} color="#afafaf" />
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
 
           {dueDateParts ? (
             <View style={styles.dueDateRow}>
@@ -598,7 +663,8 @@ export function TaskRow({
             </View>
           ) : null}
         </View>
-      </Pressable>
+      ) : null}
+      </View>
       {!isDragging ? (
         <View pointerEvents="none" style={styles.separator} />
       ) : null}
@@ -618,7 +684,7 @@ export function TaskRow({
       <AnimatedView
         style={[
           styles.row,
-          !hasDueDate && styles.rowNoDueDate,
+          useCompactRowLayout && styles.rowNoDueDate,
           task.depth > 0 && styles.subtaskRow,
           NO_SURFACE_SHADOW,
           dragSurfaceStyle,
@@ -657,23 +723,52 @@ const styles = StyleSheet.create({
     backgroundColor: "#d9d9d9",
   },
   subtaskRow: {
-    paddingLeft: TASK_ROW_HORIZONTAL_INSET + 20,
+    paddingLeft: 44,
     minHeight: 46,
   },
   subtaskContentPressable: {
     paddingVertical: 4,
+  },
+  sublineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginTop: 2,
+    maxWidth: "100%",
+  },
+  subtaskCollapseGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  subtaskCollapseButton: {
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  subtaskBranchButton: {
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: -9,
+    marginRight: 2,
   },
   checkboxHit: {
     paddingVertical: 7,
     paddingRight: 9,
     justifyContent: "center",
   },
-  contentPressable: {
+  contentColumn: {
     flex: 1,
     alignSelf: "stretch",
     minWidth: 0,
     paddingVertical: 6,
     justifyContent: "center",
+  },
+  contentPressable: {
+    alignSelf: "stretch",
+    minWidth: 0,
   },
   textBlock: {
     flex: 1,
