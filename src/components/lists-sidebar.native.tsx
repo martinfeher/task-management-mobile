@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import {
   NestableDraggableFlatList,
   NestableScrollContainer,
@@ -8,14 +8,17 @@ import {
 } from "react-native-draggable-flatlist";
 
 import {
-  ListIcon,
+  ListsSidebarTopLevelBlock,
+  type SidebarDraggableTopLevelItem,
+  useSidebarExpandedFolders,
+  useSidebarTopLevelItems,
+} from "@/components/lists-sidebar-lists-section";
+import {
   ListsLabelsSection,
   ListsPinnedRows,
   ListsSidebarShell,
   type ListsSidebarProps,
 } from "@/components/lists-sidebar-shared";
-import { SidebarRow } from "@/components/sidebar-row";
-import { listsWithoutInbox } from "@/lib/inbox-list";
 
 export function ListsSidebar({
   data,
@@ -26,7 +29,7 @@ export function ListsSidebar({
   onSelectView,
   onRefresh,
   onRetry,
-  onReorderLists,
+  onReorderSidebarTopLevel,
   onCreateList,
   onCreateLabel,
   onRenameList,
@@ -36,43 +39,45 @@ export function ListsSidebar({
   onChangeLabelColor,
 }: ListsSidebarProps) {
   const navIconColor = "#7c92a0";
-  const lists = listsWithoutInbox(data?.lists ?? []);
+  const topLevelItems = useSidebarTopLevelItems(data);
+  const { expandedFolderIds, toggleFolderExpanded } = useSidebarExpandedFolders(
+    data,
+    selectedView,
+  );
 
-  const renderListItem = useCallback(
-    ({ item, drag, isActive }: RenderItemParams<SidebarListItem>) => {
-      const selected =
-        selectedView?.type === "list" && selectedView.id === item.id;
-      return (
-        <ScaleDecorator activeScale={1.03}>
-          <View style={isActive ? styles.activeItem : undefined}>
-            <SidebarRow
-              title={item.name}
-              count={item.taskCount}
-              selected={selected}
-              icon={<ListIcon color={selected ? "#111111" : navIconColor} />}
-              showMenu
-              onPress={() => onSelectView({ type: "list", id: item.id })}
-              onLongPress={drag}
-              onPressMenu={() => {
-                Alert.alert(item.name, undefined, [
-                  {
-                    text: "Rename",
-                    onPress: () => onRenameList?.(item),
-                  },
-                  {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: () => onDeleteList?.(item),
-                  },
-                  { text: "Cancel", style: "cancel" },
-                ]);
-              }}
-            />
-          </View>
-        </ScaleDecorator>
-      );
-    },
-    [navIconColor, onDeleteList, onRenameList, onSelectView, selectedView],
+  const renderTopLevelItem = useCallback(
+    ({
+      item,
+      drag,
+      isActive,
+    }: RenderItemParams<SidebarDraggableTopLevelItem>) => (
+      <ScaleDecorator activeScale={1.02}>
+        <View style={isActive ? styles.activeItem : undefined}>
+          <ListsSidebarTopLevelBlock
+            item={item}
+            data={data}
+            selectedView={selectedView}
+            navIconColor={navIconColor}
+            expandedFolderIds={expandedFolderIds}
+            onToggleFolder={toggleFolderExpanded}
+            onSelectView={onSelectView}
+            onRenameList={onRenameList}
+            onDeleteList={onDeleteList}
+            onLongPress={drag}
+          />
+        </View>
+      </ScaleDecorator>
+    ),
+    [
+      data,
+      expandedFolderIds,
+      navIconColor,
+      onDeleteList,
+      onRenameList,
+      onSelectView,
+      selectedView,
+      toggleFolderExpanded,
+    ],
   );
 
   return (
@@ -84,12 +89,14 @@ export function ListsSidebar({
       onRefresh={onRefresh}
       onRetry={onRetry}
       onCreateList={onCreateList}
-      onCreateLabel={onCreateLabel}>
+      onCreateLabel={onCreateLabel}
+    >
       {(refreshControl) => (
         <NestableScrollContainer
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
-          refreshControl={refreshControl as never}>
+          refreshControl={refreshControl as never}
+        >
           <ListsPinnedRows
             data={data}
             selectedView={selectedView}
@@ -97,14 +104,19 @@ export function ListsSidebar({
             navIconColor={navIconColor}
           />
 
-          {lists.length === 0 ? (
-            <Text style={styles.emptyLists}>No lists yet. Use Create to add one.</Text>
+          {topLevelItems.length === 0 ? (
+            <Text style={styles.emptyLists}>
+              No lists yet. Use Create to add one.
+            </Text>
           ) : (
             <NestableDraggableFlatList
-              data={lists}
-              keyExtractor={(item) => item.id}
-              onDragEnd={({ data: nextLists }) => onReorderLists?.(nextLists)}
-              renderItem={renderListItem}
+              data={topLevelItems}
+              keyExtractor={(item) => item.key}
+              onDragEnd={({ from, to }) => {
+                if (from === to) return;
+                onReorderSidebarTopLevel?.(from, to);
+              }}
+              renderItem={renderTopLevelItem}
               activationDistance={12}
               scrollEnabled={false}
             />

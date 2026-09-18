@@ -14,11 +14,16 @@ import {
 } from "react-native-gesture-handler";
 import { runOnJS, useSharedValue } from "react-native-reanimated";
 
+import { CalendarAllDayTaskRow } from "@/components/calendar-all-day-task-row";
 import {
   CalendarTimedTaskBlock,
   type TaskScheduleUpdate,
 } from "@/components/calendar-timed-task-block";
 import { ThemedText } from "@/components/themed-text";
+import {
+  getCalendarAllDayRowHeight,
+  splitCalendarDayTasks,
+} from "@/lib/calendar-all-day";
 import {
   CALENDAR_HOUR_END,
   CALENDAR_HOUR_HEIGHT,
@@ -162,6 +167,24 @@ export function CalendarTimeGridView({
     nowMinutes >= CALENDAR_HOUR_START * 60 &&
     nowMinutes <= (CALENDAR_HOUR_END + 1) * 60;
 
+  const allDayTasksByDate = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof splitCalendarDayTasks>>();
+    for (const dateKey of dayDateKeys) {
+      map.set(dateKey, splitCalendarDayTasks(tasksByDate.get(dateKey) ?? []));
+    }
+    return map;
+  }, [dayDateKeys, tasksByDate]);
+
+  const allDayRowHeight = useMemo(() => {
+    const maxCount = Math.max(
+      0,
+      ...dayDateKeys.map(
+        (dateKey) => allDayTasksByDate.get(dateKey)?.allDay.length ?? 0,
+      ),
+    );
+    return getCalendarAllDayRowHeight(maxCount);
+  }, [allDayTasksByDate, dayDateKeys]);
+
   const handleInteractionChange = (active: boolean) => {
     interactionCountRef.current = Math.max(
       0,
@@ -245,6 +268,40 @@ export function CalendarTimeGridView({
           })}
         </View>
 
+        <View style={[styles.allDayRow, { minHeight: allDayRowHeight }]}>
+            <View
+              style={[
+                styles.allDayLabelCell,
+                { height: allDayRowHeight },
+              ]}
+            >
+              <ThemedText style={styles.allDayLabel}>All day</ThemedText>
+            </View>
+            {days.map((day) => {
+              const dateKey = toDateKey(day);
+              const allDayTasks =
+                allDayTasksByDate.get(dateKey)?.allDay ?? [];
+
+              return (
+                <View
+                  key={`allday-${dateKey}`}
+                  style={[
+                    styles.allDayDayCell,
+                    { width: columnWidth, minHeight: allDayRowHeight },
+                  ]}
+                >
+                  {allDayTasks.map((task) => (
+                    <CalendarAllDayTaskRow
+                      key={`${task.id}-${dateKey}`}
+                      task={task}
+                      onPress={() => onPressTask(task)}
+                    />
+                  ))}
+                </View>
+              );
+            })}
+        </View>
+
         {loading ? (
           <ActivityIndicator color="#3c87f7" style={styles.loader} />
         ) : (
@@ -274,7 +331,10 @@ export function CalendarTimeGridView({
 
               {days.map((day, columnIndex) => {
                 const dateKey = toDateKey(day);
-                const dayTasks = tasksByDate.get(dateKey) ?? [];
+                const dayTasks =
+                  allDayTasksByDate.get(dateKey)?.timed ??
+                  tasksByDate.get(dateKey) ??
+                  [];
                 const isToday = isSameDay(day, today);
 
                 return (
@@ -352,6 +412,7 @@ const styles = StyleSheet.create({
   dayHeaderWeekday: {
     fontSize: 12,
     color: "#6b7280",
+    marginTop: -3,
     marginBottom: 4,
   },
   dayHeaderWeekdayActive: {
@@ -389,6 +450,33 @@ const styles = StyleSheet.create({
   },
   pendingBadgeSpacer: {
     height: 24,
+  },
+  allDayRow: {
+    flexDirection: "row",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+  },
+  allDayLabelCell: {
+    width: CALENDAR_TIME_LABEL_WIDTH,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: "#e5e7eb",
+  },
+  allDayLabel: {
+    fontSize: 11,
+    color: "#9ca3af",
+    textAlign: "center",
+  },
+  allDayDayCell: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: "#e5e7eb",
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    gap: 4,
+    flexShrink: 0,
   },
   scroll: {
     flex: 1,

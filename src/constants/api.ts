@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 
-const API_URL = "http://192.168.0.2:3000";
+const API_URL = "http://192.168.0.5:3000";
 
 function getDefaultApiUrl() {
   if (Platform.OS === "android") {

@@ -12,9 +12,11 @@ type SidebarRowProps = {
   alwaysShowCount?: boolean;
   colorDot?: string;
   selected?: boolean;
+  selectedColor?: string;
   icon?: ReactNode;
   showMenu?: boolean;
   countNudgeLeft?: number;
+  nested?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
   onPressMenu?: () => void;
@@ -26,16 +28,18 @@ export function SidebarRow({
   alwaysShowCount = false,
   colorDot,
   selected = false,
+  selectedColor = "#111111",
   icon,
   showMenu = false,
   countNudgeLeft,
+  nested = false,
   onPress,
   onLongPress,
   onPressMenu,
 }: SidebarRowProps) {
   return (
     <View
-      className={`mb-px ml-[3px] mr-1.5 min-h-[45px] flex-row items-center gap-2 rounded-[3px] border-l-2 px-3 ${
+      className={`mb-px ${nested ? "ml-[13px]" : "ml-[3px]"} mr-1.5 min-h-[45px] flex-row items-center gap-2 rounded-[3px] border-l-2 px-3 ${
         selected
           ? "border-l-lists-accent-border bg-lists-selected/50"
           : "border-l-transparent"
@@ -66,9 +70,12 @@ export function SidebarRow({
         <Text
           className={`flex-1 shrink text-[17px] mb-[1px] leading-[22px] ${
             selected
-              ? "font-medium text-[#111111]"
-              : "font-normal text-zinc-700"
+              ? "font-medium"
+              : nested
+                ? "font-normal text-[#676a6f]"
+                : "font-normal text-zinc-700"
           }`}
+          style={selected ? { color: selectedColor } : undefined}
           numberOfLines={1}
           {...(Platform.OS === "android"
             ? {

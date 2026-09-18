@@ -31,7 +31,7 @@ export function ListsDrawerContent() {
     selectedView,
     loadSidebar,
     selectViewFromDrawer,
-    reorderLists,
+    reorderSidebarTopLevel,
   } = useApp();
   const [namePrompt, setNamePrompt] = useState<NamePromptState | null>(null);
   const [nameDraft, setNameDraft] = useState("");
@@ -270,7 +270,7 @@ export function ListsDrawerContent() {
         onSelectView={handleSelectView}
         onRefresh={() => void loadSidebar(true)}
         onRetry={() => void loadSidebar()}
-        onReorderLists={reorderLists}
+        onReorderSidebarTopLevel={reorderSidebarTopLevel}
         onCreateList={() => promptForListName("create")}
         onCreateLabel={promptForLabelCreate}
         onRenameList={(list) => promptForListName("rename", list)}

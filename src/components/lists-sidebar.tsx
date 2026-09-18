@@ -1,14 +1,16 @@
-import { Alert, ScrollView, Text } from "react-native";
+import { ScrollView, Text } from "react-native";
 
 import {
-  ListIcon,
+  ListsSidebarTopLevelBlock,
+  useSidebarExpandedFolders,
+  useSidebarTopLevelItems,
+} from "@/components/lists-sidebar-lists-section";
+import {
   ListsLabelsSection,
   ListsPinnedRows,
   ListsSidebarShell,
   type ListsSidebarProps,
 } from "@/components/lists-sidebar-shared";
-import { listsWithoutInbox } from "@/lib/inbox-list";
-import { SidebarRow } from "@/components/sidebar-row";
 
 export function ListsSidebar({
   data,
@@ -28,7 +30,11 @@ export function ListsSidebar({
   onChangeLabelColor,
 }: ListsSidebarProps) {
   const navIconColor = "#7c92a0";
-  const lists = listsWithoutInbox(data?.lists ?? []);
+  const topLevelItems = useSidebarTopLevelItems(data);
+  const { expandedFolderIds, toggleFolderExpanded } = useSidebarExpandedFolders(
+    data,
+    selectedView,
+  );
 
   return (
     <ListsSidebarShell
@@ -54,42 +60,25 @@ export function ListsSidebar({
             navIconColor={navIconColor}
           />
 
-          {lists.length === 0 ? (
+          {topLevelItems.length === 0 ? (
             <Text className="px-4 pt-2 text-sm text-zinc-500">
               No lists yet. Use Create to add one.
             </Text>
           ) : (
-            lists.map((list) => {
-              const selected =
-                selectedView?.type === "list" && selectedView.id === list.id;
-              return (
-                <SidebarRow
-                  key={list.id}
-                  title={list.name}
-                  count={list.taskCount}
-                  selected={selected}
-                  icon={
-                    <ListIcon color={selected ? "#111111" : navIconColor} />
-                  }
-                  showMenu
-                  onPress={() => onSelectView({ type: "list", id: list.id })}
-                  onPressMenu={() => {
-                    Alert.alert(list.name, undefined, [
-                      {
-                        text: "Rename",
-                        onPress: () => onRenameList?.(list),
-                      },
-                      {
-                        text: "Delete",
-                        style: "destructive",
-                        onPress: () => onDeleteList?.(list),
-                      },
-                      { text: "Cancel", style: "cancel" },
-                    ]);
-                  }}
-                />
-              );
-            })
+            topLevelItems.map((item) => (
+              <ListsSidebarTopLevelBlock
+                key={item.key}
+                item={item}
+                data={data}
+                selectedView={selectedView}
+                navIconColor={navIconColor}
+                expandedFolderIds={expandedFolderIds}
+                onToggleFolder={toggleFolderExpanded}
+                onSelectView={onSelectView}
+                onRenameList={onRenameList}
+                onDeleteList={onDeleteList}
+              />
+            ))
           )}
 
           <ListsLabelsSection

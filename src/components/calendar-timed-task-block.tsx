@@ -13,15 +13,19 @@ import { ThemedText } from "@/components/themed-text";
 import {
   getCalendarTaskBackgroundColor,
   getCalendarTaskTitleColor,
+  withHexAlpha,
 } from "@/lib/calendar-colors";
 import {
   CALENDAR_DEFAULT_DURATION_MINUTES,
   CALENDAR_HOUR_END,
   CALENDAR_MIN_DURATION_MINUTES,
+  CALENDAR_PAST_TASK_BACKGROUND_OPACITY,
   formatCalendarTimeRange,
   getCalendarGridHeightPx,
+  getCalendarTaskContentLayout,
   getHeightForCalendarDuration,
   getTopForCalendarMinutes,
+  isCalendarTimedTaskPast,
 } from "@/lib/calendar-time-grid";
 import type { TaskItem } from "@/types/todo";
 
@@ -51,8 +55,12 @@ const WORKLET_SLOT_MINUTES = 15;
 const WORKLET_MIN_DURATION = 15;
 const TASK_BLOCK_FONT_SIZE = 13.5;
 const TASK_BLOCK_LINE_HEIGHT = TASK_BLOCK_FONT_SIZE * 1.3;
+const TASK_BLOCK_TIME_FONT_SIZE = 11;
+const TASK_BLOCK_TIME_LINE_HEIGHT = 14;
 const WEEK_TASK_BLOCK_FONT_SIZE = TASK_BLOCK_FONT_SIZE - 6.5;
 const WEEK_TASK_BLOCK_LINE_HEIGHT = WEEK_TASK_BLOCK_FONT_SIZE * 1.2;
+const WEEK_TASK_BLOCK_TIME_FONT_SIZE = 7;
+const WEEK_TASK_BLOCK_TIME_LINE_HEIGHT = 9;
 const TASK_BLOCK_PADDING_HORIZONTAL = 8;
 const TASK_BLOCK_PADDING_TOP = 6;
 const TASK_BLOCK_PADDING_BOTTOM = 26;
@@ -144,6 +152,12 @@ export function CalendarTimedTaskBlock({
   const taskTitleLineHeight = isWeekView
     ? WEEK_TASK_BLOCK_LINE_HEIGHT
     : TASK_BLOCK_LINE_HEIGHT;
+  const taskTimeFontSize = isWeekView
+    ? WEEK_TASK_BLOCK_TIME_FONT_SIZE
+    : TASK_BLOCK_TIME_FONT_SIZE;
+  const taskTimeLineHeight = isWeekView
+    ? WEEK_TASK_BLOCK_TIME_LINE_HEIGHT
+    : TASK_BLOCK_TIME_LINE_HEIGHT;
   const taskBlockPadding = isWeekView
     ? {
         paddingHorizontal: WEEK_TASK_BLOCK_PADDING_HORIZONTAL,
@@ -166,6 +180,24 @@ export function CalendarTimedTaskBlock({
     );
     return { top, height, maxHeight, gridHeight };
   }, [dueDurationMinutes, dueTimeMinutes]);
+
+  const contentLayout = useMemo(() => {
+    const availableHeight =
+      layout.height -
+      taskBlockPadding.paddingTop -
+      taskBlockPadding.paddingBottom;
+    return getCalendarTaskContentLayout(availableHeight, taskTitleLineHeight);
+  }, [
+    layout.height,
+    taskBlockPadding.paddingBottom,
+    taskBlockPadding.paddingTop,
+    taskTitleLineHeight,
+  ]);
+
+  const timeRangeLabel = useMemo(
+    () => formatCalendarTimeRange(dueTimeMinutes, dueDurationMinutes),
+    [dueDurationMinutes, dueTimeMinutes],
+  );
 
   const baseTop = useSharedValue(layout.top);
   const baseHeight = useSharedValue(layout.height);
@@ -195,7 +227,31 @@ export function CalendarTimedTaskBlock({
     () => getCalendarTaskTitleColor(taskBackgroundColor),
     [taskBackgroundColor],
   );
+  const [minuteTick, setMinuteTick] = useState(0);
+  const displayBackgroundColor = useMemo(() => {
+    const endMinutes = dueTimeMinutes + dueDurationMinutes;
+    if (isCalendarTimedTaskPast(dateKey, endMinutes)) {
+      return withHexAlpha(
+        taskBackgroundColor,
+        CALENDAR_PAST_TASK_BACKGROUND_OPACITY,
+      );
+    }
+    return taskBackgroundColor;
+  }, [
+    dateKey,
+    dueDurationMinutes,
+    dueTimeMinutes,
+    minuteTick,
+    taskBackgroundColor,
+  ]);
   const [livePreviewLabel, setLivePreviewLabel] = useState(previewLabel);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setMinuteTick((tick) => tick + 1);
+    }, 60_000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     setLivePreviewLabel(previewLabel);
@@ -487,7 +543,7 @@ export function CalendarTimedTaskBlock({
           style={[
             styles.taskBlock,
             taskBlockPadding,
-            { backgroundColor: taskBackgroundColor },
+            { backgroundColor: displayBackgroundColor },
           ]}
         >
           <ThemedText
@@ -499,10 +555,25 @@ export function CalendarTimedTaskBlock({
                 color: taskTitleColor,
               },
             ]}
-            numberOfLines={4}
+            numberOfLines={contentLayout.titleMaxLines}
           >
             {task.name}
           </ThemedText>
+          {contentLayout.showTime ? (
+            <ThemedText
+              style={[
+                styles.taskBlockTimeText,
+                {
+                  fontSize: taskTimeFontSize,
+                  lineHeight: taskTimeLineHeight,
+                  color: taskTitleColor,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {timeRangeLabel}
+            </ThemedText>
+          ) : null}
         </Animated.View>
       </GestureDetector>
 
@@ -572,6 +643,11 @@ const styles = StyleSheet.create({
   },
   taskBlockText: {
     fontWeight: "500",
+  },
+  taskBlockTimeText: {
+    marginTop: 3,
+    fontWeight: "500",
+    opacity: 0.72,
   },
   resizeHandle: {
     position: "absolute",

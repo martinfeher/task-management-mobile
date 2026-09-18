@@ -10,14 +10,17 @@ import {
   writeTasksSession,
   getSelectedViewKey,
 } from "@/lib/app-data-session";
-import { createTask as createTaskRequest, deleteTask as deleteTaskRequest, fetchSidebarData, fetchTasks, reorderLists as reorderListsRequest, reorderTasks as reorderTasksRequest, toggleTaskCompleted as toggleTaskCompletedRequest } from "@/lib/api";
-import { findInboxList, listsWithoutInbox } from "@/lib/inbox-list";
+import { createTask as createTaskRequest, deleteTask as deleteTaskRequest, fetchSidebarData, fetchTasks, reorderSidebarTopLevel as reorderSidebarTopLevelRequest, reorderTasks as reorderTasksRequest, toggleTaskCompleted as toggleTaskCompletedRequest } from "@/lib/api";
+import { findInboxList } from "@/lib/inbox-list";
+import {
+  computeSidebarTopLevelAfterReorder,
+  getSidebarTopLevelPositionUpdates,
+} from "@/lib/sidebar-list-layout";
 import { normalizeTaskRepeat } from "@/lib/task-repeat";
 import { cancelTaskReminder, scheduleTaskReminder } from "@/lib/notifications";
 import type {
   SelectedView,
   SidebarData,
-  SidebarListItem,
   TaskItem,
   TaskListData,
 } from "@/types/todo";
@@ -100,7 +103,7 @@ type AppContextValue = {
   openTasksForDrawerSelection: () => void;
   /** Navigate to Lists tab (drawer opens from there). */
   openListsDrawer: () => void;
-  reorderLists: (lists: SidebarListItem[]) => void;
+  reorderSidebarTopLevel: (sourceIndex: number, dropIndex: number) => void;
   reorderTasks: (section: "tasks" | "pinned", tasks: TaskItem[]) => void;
   calendarTasks: TaskItem[];
   calendarLoading: boolean;
@@ -108,6 +111,7 @@ type AppContextValue = {
   loadCalendarTasks: (isRefresh?: boolean) => Promise<void>;
   patchCalendarTask: (taskId: string, patch: Partial<TaskItem>) => void;
   replaceCalendarTasks: (tasks: TaskItem[]) => void;
+  calendarColorEpoch: number;
   setCalendarTaskColor: (taskId: string, calendarColor: string) => void;
 };
 
@@ -146,6 +150,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [calendarTasks, setCalendarTasks] = useState<TaskItem[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarRefreshing, setCalendarRefreshing] = useState(false);
+  const [calendarColorEpoch, setCalendarColorEpoch] = useState(0);
 
   selectedViewRef.current = selectedView;
   sidebarDataRef.current = sidebarData;
@@ -633,19 +638,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const reorderLists = useCallback((reorderedLists: SidebarListItem[]) => {
-    const current = sidebarDataRef.current;
-    if (!current) return;
+  const reorderSidebarTopLevel = useCallback(
+    (sourceIndex: number, dropIndex: number) => {
+      const current = sidebarDataRef.current;
+      if (!current) return;
 
-    const inbox = findInboxList(current.lists);
-    const nextLists = inbox ? [inbox, ...reorderedLists] : reorderedLists;
+      const inboxId = findInboxList(current.lists)?.id ?? null;
+      const folders = current.folders ?? [];
+      const result = computeSidebarTopLevelAfterReorder(
+        folders,
+        current.lists,
+        inboxId,
+        sourceIndex,
+        dropIndex,
+      );
 
-    setSidebarData({ ...current, lists: nextLists });
-    void reorderListsRequest(nextLists.map((list) => list.id)).catch((error) => {
-      console.warn("Failed to persist list order:", error);
-      void loadSidebar(true);
-    });
-  }, [loadSidebar]);
+      if (!result.changed) return;
+
+      const nextSidebar = {
+        ...current,
+        lists: result.lists,
+        folders: result.folders,
+      };
+
+      setSidebarData(nextSidebar);
+      writeSidebarSession(nextSidebar);
+
+      const updates = getSidebarTopLevelPositionUpdates(
+        result.folders,
+        result.lists,
+        inboxId,
+      );
+
+      void reorderSidebarTopLevelRequest(updates).catch((error) => {
+        console.warn("Failed to persist sidebar order:", error);
+        void loadSidebar(true);
+      });
+    },
+    [loadSidebar],
+  );
 
   const reorderTasks = useCallback((section: "tasks" | "pinned", tasks: TaskItem[]) => {
     setTaskData((current) =>
@@ -684,13 +715,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       );
       setCalendarTasks((current) => {
         const previousById = new Map(current.map((task) => [task.id, task]));
-        return data.tasks.map((task) => ({
-          ...task,
-          dueRepeat:
-            normalizeTaskRepeat(task.dueRepeat) ??
-            previousById.get(task.id)?.dueRepeat ??
-            null,
-        }));
+        return data.tasks.map((task) => {
+          const previous = previousById.get(task.id);
+          const previousColor = previous?.calendarColor ?? null;
+          const nextColor = task.calendarColor ?? null;
+          const calendarColor =
+            previousColor != null && previousColor !== nextColor
+              ? previousColor
+              : nextColor;
+
+          return {
+            ...task,
+            calendarColor,
+            dueRepeat:
+              normalizeTaskRepeat(task.dueRepeat) ??
+              previous?.dueRepeat ??
+              null,
+          };
+        });
       });
     } catch {
       setCalendarTasks([]);
@@ -721,6 +763,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         task.id === taskId ? { ...task, calendarColor } : task,
       ),
     );
+    setCalendarColorEpoch((epoch) => epoch + 1);
     setTaskData((current) =>
       current
         ? {
@@ -779,7 +822,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       closeListsDrawer,
       openTasksForDrawerSelection,
       openListsDrawer,
-      reorderLists,
+      reorderSidebarTopLevel,
       reorderTasks,
       calendarTasks,
       calendarLoading,
@@ -787,6 +830,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadCalendarTasks,
       patchCalendarTask,
       replaceCalendarTasks,
+      calendarColorEpoch,
       setCalendarTaskColor,
     }),
     [
@@ -829,7 +873,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       closeListsDrawer,
       openTasksForDrawerSelection,
       openListsDrawer,
-      reorderLists,
+      reorderSidebarTopLevel,
       reorderTasks,
       calendarTasks,
       calendarLoading,
@@ -837,6 +881,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadCalendarTasks,
       patchCalendarTask,
       replaceCalendarTasks,
+      calendarColorEpoch,
       setCalendarTaskColor,
     ],
   );

@@ -76,6 +76,11 @@ export function getCalendarTaskBackgroundColor(color: string | null | undefined)
   );
 }
 
+export function withHexAlpha(hex: string, alpha: number) {
+  const { r, g, b } = parseHexRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 /** Title color derived from the block background at 50% brightness. */
 export function decreaseHexBrightness(hex: string, factor = 0.5) {
   const { r, g, b } = parseHexRgb(hex);

@@ -13,6 +13,15 @@ import type {
   TaskListData,
 } from "@/types/todo";
 
+function normalizeSidebarData(data: Partial<SidebarData>): SidebarData {
+  return {
+    folders: data.folders ?? [],
+    lists: data.lists ?? [],
+    labels: data.labels ?? [],
+    counts: data.counts ?? { today: 0, important: 0 },
+  };
+}
+
 function getTasksCacheKey(view: SelectedView) {
   if (view.type === "list") {
     return `tasks:list:${view.id}`;
@@ -45,7 +54,8 @@ export async function fetchSidebarData(options?: {
         throw new Error(`Failed to load lists (${response.status})`);
       }
 
-      return response.json() as Promise<SidebarData>;
+      const data = (await response.json()) as Partial<SidebarData>;
+      return normalizeSidebarData(data);
     },
     options,
   );
@@ -276,6 +286,8 @@ export async function updateTaskCalendarColor(
     throw new Error(`Failed to update calendar color (${response.status})`);
   }
 
+  invalidateTaskCaches();
+
   return response.json() as Promise<{ id: string; calendarColor: string | null }>;
 }
 
@@ -498,6 +510,24 @@ export async function reorderLists(listIds: string[]) {
 
   if (!response.ok) {
     throw new Error(`Failed to reorder lists (${response.status})`);
+  }
+}
+
+export async function reorderSidebarTopLevel(input: {
+  listPositions: Array<{ id: string; position: number }>;
+  folderPositions: Array<{ id: string; position: number }>;
+}) {
+  const response = await fetch(`${API_BASE_URL}/api/lists/reorder`, {
+    method: "PUT",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to reorder sidebar (${response.status})`);
   }
 }
 

@@ -43,7 +43,10 @@ export function readSidebarSession() {
     store.sidebarFetchedAt = 0;
     return null;
   }
-  return store.sidebar;
+  return {
+    ...store.sidebar,
+    folders: store.sidebar.folders ?? [],
+  };
 }
 
 export function writeSidebarSession(sidebar: SidebarData) {

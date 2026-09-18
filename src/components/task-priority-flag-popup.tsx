@@ -5,7 +5,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-
+import { FiFlagIcon } from "@/components/fi-flag-icon";
 import { AppSymbol } from "@/components/app-symbol";
 import { ThemedText } from "@/components/themed-text";
 import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
@@ -26,6 +26,23 @@ export function getTaskPriorityColor(priority: number | null) {
   return (
     TASK_PRIORITY_OPTIONS.find((option) => option.level === priority)?.color ??
     NONE_FLAG_COLOR
+  );
+}
+
+export function PriorityFlagToolbarIcon({
+  size = 25.5,
+  priority,
+  defaultColor = "#5a6578",
+}: {
+  size?: number;
+  priority: number | null;
+  defaultColor?: string;
+}) {
+  const color =
+    priority != null ? getTaskPriorityColor(priority) : defaultColor;
+
+  return (
+    <FiFlagIcon size={size} color={color} strokeWidth={1.75} />
   );
 }
 

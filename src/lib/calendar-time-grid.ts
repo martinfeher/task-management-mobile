@@ -1,3 +1,5 @@
+import { toDateKey } from "@/lib/task-dates";
+
 export const CALENDAR_HOUR_START = 6;
 export const CALENDAR_HOUR_END = 23;
 export const CALENDAR_HOUR_HEIGHT = 56;
@@ -52,6 +54,19 @@ export function getCurrentMinutesFromMidnight(date = new Date()) {
   return date.getHours() * 60 + date.getMinutes();
 }
 
+export const CALENDAR_PAST_TASK_BACKGROUND_OPACITY = 0.83;
+
+export function isCalendarTimedTaskPast(
+  dateKey: string,
+  endMinutes: number,
+  now = new Date(),
+) {
+  const todayKey = toDateKey(now);
+  if (dateKey < todayKey) return true;
+  if (dateKey > todayKey) return false;
+  return endMinutes < getCurrentMinutesFromMidnight(now);
+}
+
 export function snapToCalendarTimeSlot(
   minutes: number,
   slotMinutes = CALENDAR_TIME_SLOT_MINUTES,
@@ -103,6 +118,31 @@ export function formatCalendarTimeRange(
 ) {
   const endMinutes = startMinutes + durationMinutes;
   return `${formatCalendarTimeLabel(startMinutes)} – ${formatCalendarTimeLabel(endMinutes)}`;
+}
+
+export function getCalendarTaskContentLayout(
+  availableHeight: number,
+  lineHeight: number,
+) {
+  const lineCapacity = Math.max(0, Math.floor(availableHeight / lineHeight));
+  const showTime = lineCapacity >= 2;
+  const expandedLayout = lineCapacity > 3;
+
+  let titleMaxLines = 1;
+  if (expandedLayout) {
+    titleMaxLines = showTime ? lineCapacity - 1 : lineCapacity;
+  } else if (showTime) {
+    titleMaxLines = lineCapacity - 1;
+  } else {
+    titleMaxLines = Math.min(2, Math.max(1, lineCapacity));
+  }
+
+  return {
+    lineCapacity,
+    showTime,
+    expandedLayout,
+    titleMaxLines: Math.max(1, titleMaxLines),
+  };
 }
 
 export function getSnappedTopFromDrag(

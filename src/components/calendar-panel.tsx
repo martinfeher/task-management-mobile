@@ -128,6 +128,7 @@ export function CalendarPanel() {
     sidebarData,
     loadSidebar,
     calendarTasks,
+    calendarColorEpoch,
     calendarLoading,
     calendarRefreshing,
     loadCalendarTasks,
@@ -522,6 +523,7 @@ export function CalendarPanel() {
 
         {isTimeGridView ? (
           <CalendarTimeGridView
+            key={calendarColorEpoch}
             days={gridDays}
             tasksByDate={tasksByDate}
             selectedDate={selectedDate}

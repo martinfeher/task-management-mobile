@@ -21,7 +21,7 @@ import { LuPlusIcon } from "@/components/lu-plus-icon";
 import { LuStarIcon } from "@/components/lu-star-icon";
 import { SettingsModal } from "@/components/settings-modal";
 import { SidebarRow } from "@/components/sidebar-row";
-import { TodayCalendarIcon } from "@/components/today-calendar-icon";
+import { CiCalendarDateIcon } from "@/components/ci-calendar-date-icon";
 import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/hooks/use-theme";
 import { fetchLabels } from "@/lib/api";
@@ -46,7 +46,7 @@ export type ListsSidebarProps = {
   onSelectView: (view: SelectedView) => void;
   onRefresh: () => void;
   onRetry: () => void;
-  onReorderLists?: (lists: SidebarListItem[]) => void;
+  onReorderSidebarTopLevel?: (sourceIndex: number, dropIndex: number) => void;
   onCreateList?: () => void;
   onCreateLabel?: () => void;
   onRenameList?: (list: SidebarListItem) => void;
@@ -56,9 +56,15 @@ export type ListsSidebarProps = {
   onChangeLabelColor?: (label: SidebarLabelItem) => void;
 };
 
-export function ListIcon({ color }: { color: string }) {
+export function ListIcon({
+  color,
+  size = 16,
+}: {
+  color: string;
+  size?: number;
+}) {
   return (
-    <AppSymbol ios="list.bullet" android="list" size={16} tintColor={color} />
+    <AppSymbol ios="list.bullet" android="list" size={size} tintColor={color} />
   );
 }
 
@@ -192,9 +198,8 @@ export function ListsPinnedRows({
         countNudgeLeft={36}
         selected={todaySelected}
         icon={
-          <TodayCalendarIcon
-            size={17}
-            strokeWidth={1}
+          <CiCalendarDateIcon
+            size={20}
             color={todaySelected ? "#111111" : navIconColor}
           />
         }
@@ -416,33 +421,38 @@ function LabelsSectionHeader({
           Labels
         </Text>
       </Pressable>
-      {onAddLabel ? (
+      <View
+        className="flex-row items-center"
+        style={{ transform: [{ translateX: -10 }] }}
+      >
+        {onAddLabel ? (
+          <Pressable
+            className="h-6 w-6 items-center justify-center active:opacity-70"
+            onPress={onAddLabel}
+            accessibilityRole="button"
+            accessibilityLabel="Add label"
+            hitSlop={6}
+          >
+            <LuPlusIcon size={17} color="#acadb2" />
+          </Pressable>
+        ) : null}
         <Pressable
-          className="h-6 w-6 items-center justify-center active:opacity-70"
-          onPress={onAddLabel}
+          className="-mr-3 h-6 w-6 items-center justify-center active:opacity-70"
+          onPress={onToggle}
           accessibilityRole="button"
-          accessibilityLabel="Add label"
+          accessibilityState={{ expanded }}
+          accessibilityLabel={expanded ? "Collapse labels" : "Expand labels"}
           hitSlop={6}
         >
-          <LuPlusIcon size={14} color="#acadb2" />
+          <View
+            style={{
+              transform: [{ rotate: expanded ? "0deg" : "-90deg" }],
+            }}
+          >
+            <BiChevronDownIcon size={19} color="#c0c5e0" />
+          </View>
         </Pressable>
-      ) : null}
-      <Pressable
-        className="-mr-3 h-6 w-6 items-center justify-center active:opacity-70"
-        onPress={onToggle}
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        accessibilityLabel={expanded ? "Collapse labels" : "Expand labels"}
-        hitSlop={6}
-      >
-        <View
-          style={{
-            transform: [{ rotate: expanded ? "0deg" : "-90deg" }],
-          }}
-        >
-          <BiChevronDownIcon size={16} color="#c0c5e0" />
-        </View>
-      </Pressable>
+      </View>
     </View>
   );
 }

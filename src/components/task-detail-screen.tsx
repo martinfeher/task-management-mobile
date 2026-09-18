@@ -38,7 +38,6 @@ import {
 } from "@/components/formatted-notes-input";
 import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
 import { TaskCheckbox } from "@/components/task-checkbox";
-import { TbSubtaskIcon } from "@/components/tb-subtask-icon";
 import {
   TaskDatePickerSheet,
   type TaskScheduleSelection,
@@ -47,8 +46,10 @@ import { TaskLabelPicker } from "@/components/task-label-picker";
 import { TaskListPicker } from "@/components/task-list-picker";
 import {
   getTaskPriorityColor,
+  PriorityFlagToolbarIcon,
   TaskPriorityFlagPopup,
 } from "@/components/task-priority-flag-popup";
+import { TbSubtaskIcon } from "@/components/tb-subtask-icon";
 import { TEXT_FORMAT_TOOLBAR_HEIGHT } from "@/components/text-format-toolbar";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
@@ -184,6 +185,7 @@ const TASK_SHEET_MAX_HEIGHT_FRACTION = 0.8;
 const TASK_DETAIL_HANDLE_HEIGHT = 28;
 const TASK_DETAIL_TOOLBAR_BODY_HEIGHT = 52;
 const TOOLBAR_BOTTOM_SHIFT = 10;
+const TOOLBAR_ROW_NUDGE_DOWN = 0;
 const SCHEDULE_UNDO_ABOVE_GAP = 10;
 const SCHEDULE_UNDO_RIGHT_INSET = 7;
 const SCHEDULE_UNDO_BUTTON_HEIGHT = 36;
@@ -231,6 +233,7 @@ export function TaskDetailScreen() {
     setCalendarTaskColor,
     patchCalendarTask,
     calendarTasks,
+    calendarColorEpoch,
   } = useApp();
   const closingRef = useRef(false);
   const openedFromCalendar = fromCalendar === "1";
@@ -305,11 +308,32 @@ export function TaskDetailScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [expandedFullscreen, setExpandedFullscreen] = useState(false);
   const [calendarColorPickerOpen, setCalendarColorPickerOpen] = useState(false);
-  const [calendarColor, setCalendarColor] = useState(() =>
-    normalizeCalendarColor(
-      typeof calendarColorParam === "string" ? calendarColorParam : null,
-    ),
-  );
+  const calendarColorTouchedRef = useRef(false);
+  const calendarColor = useMemo(() => {
+    if (!openedFromCalendar) {
+      return normalizeCalendarColor(null);
+    }
+
+    if (calendarTask?.calendarColor) {
+      return normalizeCalendarColor(calendarTask.calendarColor);
+    }
+
+    if (detail?.calendarColor) {
+      return normalizeCalendarColor(detail.calendarColor);
+    }
+
+    if (typeof calendarColorParam === "string" && calendarColorParam) {
+      return normalizeCalendarColor(calendarColorParam);
+    }
+
+    return normalizeCalendarColor(null);
+  }, [
+    calendarColorEpoch,
+    calendarColorParam,
+    calendarTask,
+    detail,
+    openedFromCalendar,
+  ]);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [scheduleUndoSnapshot, setScheduleUndoSnapshot] =
     useState<TaskScheduleSelection | null>(null);
@@ -1068,6 +1092,7 @@ export function TaskDetailScreen() {
     if (!id) return;
 
     notesSaveEnabledRef.current = false;
+    calendarColorTouchedRef.current = false;
     setLoading(true);
     setDetail(null);
     setSubtasksSectionOpen(false);
@@ -1108,7 +1133,16 @@ export function TaskDetailScreen() {
             normalizeTaskRepeat(calendarMatch?.dueRepeat) ??
             null,
         });
-        setCalendarColor(normalizeCalendarColor(loaded.calendarColor));
+        if (
+          fromCalendar === "1" &&
+          loaded.id &&
+          !calendarColorTouchedRef.current
+        ) {
+          setCalendarTaskColor(
+            loaded.id,
+            normalizeCalendarColor(loaded.calendarColor),
+          );
+        }
         setDraftName(loaded.name);
         const html = resolveTaskDetailsHtml(loaded);
         const plain =
@@ -1130,7 +1164,7 @@ export function TaskDetailScreen() {
       if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
       cancelPendingHistoryCommit();
     };
-  }, [cancelPendingHistoryCommit, clearNotesSelection, id]);
+  }, [cancelPendingHistoryCommit, clearNotesSelection, fromCalendar, id, setCalendarTaskColor]);
 
   useEffect(() => {
     if (loading || !id) {
@@ -1407,7 +1441,7 @@ export function TaskDetailScreen() {
 
       const previousColor = calendarColor;
       const nextColor = normalizeCalendarColor(color);
-      setCalendarColor(nextColor);
+      calendarColorTouchedRef.current = true;
       setCalendarColorPickerOpen(false);
       setDetail((current) =>
         current ? { ...current, calendarColor: nextColor } : current,
@@ -1417,7 +1451,7 @@ export function TaskDetailScreen() {
       try {
         await updateTaskCalendarColor(taskId, nextColor);
       } catch {
-        setCalendarColor(previousColor);
+        calendarColorTouchedRef.current = false;
         setDetail((current) =>
           current ? { ...current, calendarColor: previousColor } : current,
         );
@@ -1559,13 +1593,17 @@ export function TaskDetailScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      sheetAllowedDetents: expandedFullscreen ? [1] : "fitToContents",
+      sheetAllowedDetents: expandedFullscreen
+        ? [1]
+        : openedFromCalendar
+          ? [TASK_SHEET_MIN_HEIGHT_FRACTION, 1]
+          : "fitToContents",
       sheetExpandsWhenScrolledToEdge: !expandedFullscreen,
       contentStyle: {
         backgroundColor: "#ffffff",
       },
     });
-  }, [expandedFullscreen, navigation]);
+  }, [expandedFullscreen, navigation, openedFromCalendar]);
 
   const openListPicker = useCallback(async () => {
     if (!sidebarData?.lists.length) {
@@ -1947,14 +1985,23 @@ export function TaskDetailScreen() {
                       <CalendarColorControl
                         color={calendarColor}
                         pickerOpen={calendarColorPickerOpen}
-                        onTogglePicker={() =>
-                          setCalendarColorPickerOpen((open) => !open)
-                        }
+                        onTogglePicker={() => {
+                          setCalendarColorPickerOpen((open) => {
+                            if (!open) {
+                              Keyboard.dismiss();
+                            }
+                            return !open;
+                          });
+                        }}
                         onSelectColor={(color) => {
                           void handleSelectCalendarColor(color);
                         }}
                         onClosePicker={() => setCalendarColorPickerOpen(false)}
-                        onKeepKeyboardFocus={keepNotesKeyboardFocus}
+                        onKeepKeyboardFocus={() => {
+                          if (notesFocused) {
+                            keepNotesKeyboardFocus();
+                          }
+                        }}
                       />
                     ) : null}
                   </View>
@@ -2241,28 +2288,35 @@ export function TaskDetailScreen() {
                 </View>
                 <View style={styles.flagAnchor}>
                   <View style={styles.toolbarLabeledItem}>
-                    <DetailToolbarIcon
+                    <Pressable
+                      accessibilityRole="button"
                       accessibilityLabel="Priority"
-                      ios={detail?.priority != null ? "flag.fill" : "flag"}
-                      android={
-                        detail?.priority != null ? "flag" : "outlined-flag"
-                      }
-                      active={detail?.priority != null}
-                      tintColor={
-                        detail?.priority != null
-                          ? getTaskPriorityColor(detail?.priority ?? null)
-                          : undefined
-                      }
-                      size={TOOLBAR_LABELED_ICON_SIZE}
+                      hitSlop={8}
                       onPress={() => setPriorityMenuOpen((open) => !open)}
-                    />
+                      style={({ pressed }) => [
+                        detailToolbarStyles.toolbarIconSlot,
+                        pressed && detailToolbarStyles.toolbarIconPressed,
+                      ]}
+                    >
+                      <PriorityFlagToolbarIcon
+                        size={TOOLBAR_LABELED_ICON_SIZE}
+                        priority={detail?.priority ?? null}
+                      />
+                    </Pressable>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Priority"
                       hitSlop={6}
                       onPress={() => setPriorityMenuOpen((open) => !open)}
                     >
-                      <ThemedText style={styles.toolbarCaption}>
+                      <ThemedText
+                        style={[
+                          styles.toolbarCaption,
+                          detail?.priority != null && {
+                            color: getTaskPriorityColor(detail.priority),
+                          },
+                        ]}
+                      >
                         Priority
                       </ThemedText>
                     </Pressable>
@@ -2304,14 +2358,24 @@ export function TaskDetailScreen() {
                     </ThemedText>
                   </Pressable>
                 </View>
-                <DetailToolbarIcon
-                  accessibilityLabel="Labels"
-                  ios="tag"
-                  android="local-offer"
-                  tintColor={TOOLBAR_ICON_COLOR}
-                  size={TOOLBAR_UTILITY_ICON_SIZE}
-                  onPress={() => setLabelPickerOpen(true)}
-                />
+                <View style={styles.toolbarLabeledItem}>
+                  <DetailToolbarIcon
+                    accessibilityLabel="Labels"
+                    ios="tag"
+                    android="local-offer"
+                    tintColor={TOOLBAR_ICON_COLOR}
+                    size={TOOLBAR_LABELED_ICON_SIZE}
+                    onPress={() => setLabelPickerOpen(true)}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Labels"
+                    hitSlop={6}
+                    onPress={() => setLabelPickerOpen(true)}
+                  >
+                    <ThemedText style={styles.toolbarCaption}>label</ThemedText>
+                  </Pressable>
+                </View>
                 <View style={styles.toolbarLabeledItem}>
                   <Pressable
                     accessibilityRole="button"
@@ -2330,14 +2394,15 @@ export function TaskDetailScreen() {
                   </Pressable>
                   {/* <ThemedText style={styles.toolbarCaption}>Files</ThemedText> */}
                 </View>
-                <DetailToolbarIcon
-                  accessibilityLabel="Voice note"
-                  ios="mic"
-                  android="mic"
-                  size={TOOLBAR_UTILITY_ICON_SIZE}
-                  onPress={handleVoiceNote}
-                  slotStyle={styles.voiceIconSlot}
-                />
+                <View style={styles.toolbarVoiceItem}>
+                  <DetailToolbarIcon
+                    accessibilityLabel="Voice note"
+                    ios="mic"
+                    android="mic"
+                    size={TOOLBAR_UTILITY_ICON_SIZE}
+                    onPress={handleVoiceNote}
+                  />
+                </View>
               </View>
             </View>
           </View>
@@ -2544,11 +2609,6 @@ const styles = StyleSheet.create({
   saveStatusError: {
     color: "#dc2626",
   },
-  flagAnchor: {
-    position: "relative",
-    zIndex: 31,
-    elevation: 31,
-  },
   priorityPopupAboveToolbar: {
     position: "absolute",
     bottom: 36,
@@ -2684,18 +2744,27 @@ const styles = StyleSheet.create({
   },
   toolbarControls: {
     paddingHorizontal: Spacing.three,
+    minHeight: TASK_DETAIL_TOOLBAR_BODY_HEIGHT - Spacing.two,
+    justifyContent: "flex-end",
+    paddingBottom: TOOLBAR_ROW_NUDGE_DOWN,
   },
   iconRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
-    flexShrink: 1,
     minWidth: 0,
   },
   toolbarLabeledItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 0,
+    minHeight: 24,
+  },
+  flagAnchor: {
+    position: "relative",
+    zIndex: 31,
+    elevation: 31,
+    justifyContent: "center",
   },
   toolbarCaption: {
     fontSize: 9,
@@ -2703,8 +2772,10 @@ const styles = StyleSheet.create({
     lineHeight: 11,
     color: "#9ca3af",
   },
-  voiceIconSlot: {
-    marginLeft: 39,
+  toolbarVoiceItem: {
+    marginLeft: "auto",
+    alignItems: "center",
+    justifyContent: "center",
   },
   subtasksSection: {
     marginTop: 18,

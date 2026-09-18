@@ -54,7 +54,7 @@ export default function RootLayout() {
                 <View style={styles.root}>
                   <LastTabTracker />
                   <AnimatedSplashOverlay />
-                  <Stack>
+                  <Stack screenOptions={{ freezeOnBlur: false }}>
                     <Stack.Screen
                       name="(tabs)"
                       options={{ headerShown: false, freezeOnBlur: false }}

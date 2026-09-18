@@ -1,10 +1,18 @@
 import type { TaskDoc } from "@/lib/task-document";
 import type { TaskRepeatOption } from "@/lib/task-repeat";
 
+export type SidebarFolderItem = {
+  id: string;
+  name: string;
+  position: number;
+};
+
 export type SidebarListItem = {
   id: string;
   name: string;
   taskCount: number;
+  folderId?: string | null;
+  position?: number;
 };
 
 export type SidebarLabelItem = {
@@ -15,6 +23,7 @@ export type SidebarLabelItem = {
 };
 
 export type SidebarData = {
+  folders: SidebarFolderItem[];
   lists: SidebarListItem[];
   labels: SidebarLabelItem[];
   counts: {

@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppSymbol } from "@/components/app-symbol";
-import { IoChevronBackIcon } from "@/components/io-chevron-back-icon";
+import { CgMoveLeftIcon } from "@/components/cg-move-left-icon";
 import { TaskRow } from "@/components/task-row";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
@@ -24,6 +24,8 @@ export const TASK_LIST_DRAG_DELAY_MS = 130;
 
 /** Hold duration before the task context menu opens in the task list panel. */
 export const TASK_LIST_CONTEXT_MENU_DELAY_MS = 800;
+
+const LIST_NAV_ICON_INSET = 12;
 
 /** @deprecated Use `TASK_LIST_DRAG_DELAY_MS`. */
 export const TASK_LIST_LONG_PRESS_MS = TASK_LIST_DRAG_DELAY_MS;
@@ -97,9 +99,9 @@ export function TaskListShell({
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Open lists"
-              style={styles.backButton}
+              style={styles.listsNavButton}
             >
-              <IoChevronBackIcon size={22} color="#4873c7" />
+              <CgMoveLeftIcon size={30} color="#a4a4b4" />
             </Pressable>
           ) : null}
           <ThemedText style={styles.headerTitle} numberOfLines={1}>
@@ -222,7 +224,10 @@ export function StaticTaskSection({
       ) : null}
       {blocks.map((block) => {
         const subtaskCount = subtaskCountByParentId.get(block.root.id) ?? 0;
-        const subtasksExpanded = isSubtasksExpanded(block.root.id, subtaskCount);
+        const subtasksExpanded = isSubtasksExpanded(
+          block.root.id,
+          subtaskCount,
+        );
         const visibleChildren = subtasksExpanded
           ? getVisibleSubtasks(block.children)
           : [];
@@ -290,15 +295,15 @@ const styles = StyleSheet.create({
   header: {
     paddingLeft: 26,
     paddingRight: Spacing.three,
-    paddingTop: Spacing.three,
     paddingBottom: Spacing.three,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#e4e4e7",
     backgroundColor: "#ffffff",
   },
-  backButton: {
+  listsNavButton: {
     alignSelf: "flex-start",
-    marginBottom: 2,
+    paddingTop: LIST_NAV_ICON_INSET,
+    marginBottom: LIST_NAV_ICON_INSET,
     marginLeft: -6,
   },
   headerTitle: {

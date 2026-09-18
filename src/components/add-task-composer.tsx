@@ -456,7 +456,16 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                             setMoreMenuOpen(false);
                             setPriorityMenuOpen((open) => !open);
                           }}>
-                          <ThemedText style={styles.toolbarCaption}>Priority</ThemedText>
+                          <ThemedText
+                            style={[
+                              styles.toolbarCaption,
+                              priority != null && {
+                                color: getTaskPriorityColor(priority),
+                              },
+                            ]}
+                          >
+                            Priority
+                          </ThemedText>
                         </Pressable>
                       </View>
                     </View>

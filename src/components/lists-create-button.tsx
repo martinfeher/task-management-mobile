@@ -6,7 +6,9 @@ import { LiquidGlassSurface } from "@/components/liquid-glass-surface";
 import { ListsCreateSubmenu } from "@/components/lists-create-submenu";
 
 const CREATE_COLOR = "#6f88e7";
-const CREATE_GAP_ABOVE_TAB_BAR = 6;
+const CREATE_GAP_ABOVE_TAB_BAR = 9;
+const CREATE_ICON_WIDTH = 25;
+const CREATE_ICON_HEIGHT = 26;
 const CREATE_LEFT_INSET = 16;
 const MENU_GAP_ABOVE_BUTTON = 8;
 
@@ -68,7 +70,11 @@ export function ListsCreateButton({
           isInteractive
         >
           <View style={styles.buttonContent}>
-            <IoAddOutlineIcon size={23} color={CREATE_COLOR} />
+            <IoAddOutlineIcon
+              width={CREATE_ICON_WIDTH}
+              height={CREATE_ICON_HEIGHT}
+              color={CREATE_COLOR}
+            />
             <Text style={styles.buttonLabel}>Create</Text>
           </View>
         </LiquidGlassSurface>
@@ -107,6 +113,7 @@ const styles = StyleSheet.create({
   },
   buttonLabel: {
     fontSize: 17,
+    lineHeight: 20,
     fontWeight: "500",
     color: CREATE_COLOR,
     ...(Platform.OS === "android" ? { includeFontPadding: false } : null),
