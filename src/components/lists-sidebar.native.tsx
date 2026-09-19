@@ -31,9 +31,12 @@ export function ListsSidebar({
   onRetry,
   onReorderSidebarTopLevel,
   onCreateList,
+  onCreateFolder,
   onCreateLabel,
   onRenameList,
   onDeleteList,
+  onRenameFolder,
+  onDeleteFolder,
   onRenameLabel,
   onDeleteLabel,
   onChangeLabelColor,
@@ -48,7 +51,6 @@ export function ListsSidebar({
   const renderTopLevelItem = useCallback(
     ({
       item,
-      drag,
       isActive,
     }: RenderItemParams<SidebarDraggableTopLevelItem>) => (
       <ScaleDecorator activeScale={1.02}>
@@ -63,7 +65,8 @@ export function ListsSidebar({
             onSelectView={onSelectView}
             onRenameList={onRenameList}
             onDeleteList={onDeleteList}
-            onLongPress={drag}
+            onRenameFolder={onRenameFolder}
+            onDeleteFolder={onDeleteFolder}
           />
         </View>
       </ScaleDecorator>
@@ -72,7 +75,9 @@ export function ListsSidebar({
       data,
       expandedFolderIds,
       navIconColor,
+      onDeleteFolder,
       onDeleteList,
+      onRenameFolder,
       onRenameList,
       onSelectView,
       selectedView,
@@ -89,6 +94,7 @@ export function ListsSidebar({
       onRefresh={onRefresh}
       onRetry={onRetry}
       onCreateList={onCreateList}
+      onCreateFolder={onCreateFolder}
       onCreateLabel={onCreateLabel}
     >
       {(refreshControl) => (

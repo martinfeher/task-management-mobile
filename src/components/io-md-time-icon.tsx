@@ -1,26 +1,47 @@
 import { Platform } from "react-native";
-import { IoMdTime } from "react-icons/io";
-import Svg, { G, Path } from "react-native-svg";
+import { IoTimeOutline } from "react-icons/io5";
+import Svg, { Path } from "react-native-svg";
+
+const IO_MD_TIME_CIRCLE_PATH =
+  "M256 64C150 64 64 150 64 256s86 192 192 192 192-86 192-192S362 64 256 64z";
+const IO_MD_TIME_HANDS_PATH = "M256 128v144h96";
+const IO_MD_TIME_BASE_STROKE_WIDTH = 32;
+const IO_MD_TIME_DEFAULT_STROKE_WIDTH = IO_MD_TIME_BASE_STROKE_WIDTH * 0.7;
 
 type IoMdTimeIconProps = {
   size?: number;
   color?: string;
+  strokeWidth?: number;
 };
 
 export function IoMdTimeIcon({
   size = 16,
   color = "#9ca3af",
+  strokeWidth = IO_MD_TIME_DEFAULT_STROKE_WIDTH,
 }: IoMdTimeIconProps) {
   if (Platform.OS === "web") {
-    return <IoMdTime size={size} color={color} />;
+    return (
+      <IoTimeOutline size={size} color={color} strokeWidth={strokeWidth} />
+    );
   }
 
   return (
-    <Svg width={size} height={size} viewBox="0 0 512 512">
-      <G fill={color} fillOpacity={0.9}>
-        <Path d="M255.8 48C141 48 48 141.2 48 256s93 208 207.8 208c115 0 208.2-93.2 208.2-208S370.8 48 255.8 48zm.2 374.4c-91.9 0-166.4-74.5-166.4-166.4S164.1 89.6 256 89.6 422.4 164.1 422.4 256 347.9 422.4 256 422.4z" />
-        <Path d="M266.4 152h-31.2v124.8l109.2 65.5 15.6-25.6-93.6-55.5V152z" />
-      </G>
+    <Svg width={size} height={size} viewBox="0 0 512 512" fill="none">
+      <Path
+        d={IO_MD_TIME_CIRCLE_PATH}
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeMiterlimit={10}
+        fill="none"
+      />
+      <Path
+        d={IO_MD_TIME_HANDS_PATH}
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
     </Svg>
   );
 }

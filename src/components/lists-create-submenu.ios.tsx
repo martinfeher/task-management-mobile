@@ -8,11 +8,13 @@ import {
 
 type ListsCreateSubmenuProps = {
   onCreateList: () => void;
+  onCreateFolder: () => void;
   onCreateLabel: () => void;
 };
 
 export function ListsCreateSubmenu({
   onCreateList,
+  onCreateFolder,
   onCreateLabel,
 }: ListsCreateSubmenuProps) {
   return (
@@ -23,7 +25,7 @@ export function ListsCreateSubmenu({
         modifiers={[
           glassEffect({
             shape: "roundedRectangle",
-            cornerRadius: 12,
+            cornerRadius: 15,
             glass: {
               variant: "regular",
               interactive: true,
@@ -37,7 +39,17 @@ export function ListsCreateSubmenu({
           onPress={onCreateList}
           modifiers={[
             buttonStyle("plain"),
-            frame({ minHeight: 42 }),
+            frame({ minHeight: 49 }),
+            padding({ horizontal: 16 }),
+          ]}
+        />
+        <Divider />
+        <Button
+          label="Folder"
+          onPress={onCreateFolder}
+          modifiers={[
+            buttonStyle("plain"),
+            frame({ minHeight: 49 }),
             padding({ horizontal: 16 }),
           ]}
         />
@@ -47,7 +59,7 @@ export function ListsCreateSubmenu({
           onPress={onCreateLabel}
           modifiers={[
             buttonStyle("plain"),
-            frame({ minHeight: 42 }),
+            frame({ minHeight: 49 }),
             padding({ horizontal: 16 }),
           ]}
         />

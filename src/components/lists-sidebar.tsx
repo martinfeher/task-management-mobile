@@ -22,9 +22,12 @@ export function ListsSidebar({
   onRefresh,
   onRetry,
   onCreateList,
+  onCreateFolder,
   onCreateLabel,
   onRenameList,
   onDeleteList,
+  onRenameFolder,
+  onDeleteFolder,
   onRenameLabel,
   onDeleteLabel,
   onChangeLabelColor,
@@ -45,6 +48,7 @@ export function ListsSidebar({
       onRefresh={onRefresh}
       onRetry={onRetry}
       onCreateList={onCreateList}
+      onCreateFolder={onCreateFolder}
       onCreateLabel={onCreateLabel}
     >
       {(refreshControl) => (
@@ -77,6 +81,8 @@ export function ListsSidebar({
                 onSelectView={onSelectView}
                 onRenameList={onRenameList}
                 onDeleteList={onDeleteList}
+                onRenameFolder={onRenameFolder}
+                onDeleteFolder={onDeleteFolder}
               />
             ))
           )}

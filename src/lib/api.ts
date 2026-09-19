@@ -6,6 +6,7 @@ import type {
   SearchTask,
   SelectedView,
   SidebarData,
+  SidebarFolderItem,
   SidebarListItem,
   TaskDetail,
   TaskItem,
@@ -451,6 +452,51 @@ export async function createSubtask(parentId: string, name: string) {
   }
 
   return response.json() as Promise<TaskItem>;
+}
+
+export async function renameFolder(folderId: string, name: string) {
+  const response = await fetch(`${API_BASE_URL}/api/folders/${folderId}`, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to rename folder (${response.status})`);
+  }
+
+  return response.json() as Promise<SidebarFolderItem>;
+}
+
+export async function deleteFolder(folderId: string) {
+  const response = await fetch(`${API_BASE_URL}/api/folders/${folderId}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete folder (${response.status})`);
+  }
+}
+
+export async function createFolder(name: string) {
+  const response = await fetch(`${API_BASE_URL}/api/folders`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to create folder (${response.status})`);
+  }
+
+  return response.json() as Promise<SidebarFolderItem>;
 }
 
 export async function createList(name: string) {

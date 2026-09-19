@@ -57,6 +57,48 @@ export function useSidebarExpandedFolders(
   return { expandedFolderIds, toggleFolderExpanded };
 }
 
+function showListContextMenu(
+  list: SidebarListItem,
+  handlers: {
+    onRenameList?: (list: SidebarListItem) => void;
+    onDeleteList?: (list: SidebarListItem) => void;
+  },
+) {
+  Alert.alert(list.name, undefined, [
+    {
+      text: "Rename",
+      onPress: () => handlers.onRenameList?.(list),
+    },
+    {
+      text: "Delete",
+      style: "destructive",
+      onPress: () => handlers.onDeleteList?.(list),
+    },
+    { text: "Cancel", style: "cancel" },
+  ]);
+}
+
+function showFolderContextMenu(
+  folder: SidebarFolderItem,
+  handlers: {
+    onRenameFolder?: (folder: SidebarFolderItem) => void;
+    onDeleteFolder?: (folder: SidebarFolderItem) => void;
+  },
+) {
+  Alert.alert(folder.name, undefined, [
+    {
+      text: "Rename",
+      onPress: () => handlers.onRenameFolder?.(folder),
+    },
+    {
+      text: "Delete",
+      style: "destructive",
+      onPress: () => handlers.onDeleteFolder?.(folder),
+    },
+    { text: "Cancel", style: "cancel" },
+  ]);
+}
+
 export function useSidebarTopLevelItems(data: SidebarData | null) {
   return useMemo(() => {
     const lists = data?.lists ?? [];
@@ -85,19 +127,23 @@ export function ListsFolderRow({
   expanded,
   navIconColor,
   onToggle,
-  onLongPress,
+  onRenameFolder,
+  onDeleteFolder,
 }: {
   folder: SidebarFolderItem;
   expanded: boolean;
   navIconColor: string;
   onToggle: () => void;
-  onLongPress?: () => void;
+  onRenameFolder?: (folder: SidebarFolderItem) => void;
+  onDeleteFolder?: (folder: SidebarFolderItem) => void;
 }) {
   return (
     <Pressable
       onPress={onToggle}
-      onLongPress={onLongPress}
-      delayLongPress={150}
+      onLongPress={() =>
+        showFolderContextMenu(folder, { onRenameFolder, onDeleteFolder })
+      }
+      delayLongPress={250}
       accessibilityRole="button"
       accessibilityState={{ expanded }}
       accessibilityLabel={folder.name}
@@ -140,7 +186,6 @@ export function ListsSidebarListRow({
   onSelectView,
   onRenameList,
   onDeleteList,
-  onLongPress,
 }: {
   list: SidebarListItem;
   selectedView: SelectedView | null;
@@ -149,9 +194,10 @@ export function ListsSidebarListRow({
   onSelectView: (view: SelectedView) => void;
   onRenameList?: (list: SidebarListItem) => void;
   onDeleteList?: (list: SidebarListItem) => void;
-  onLongPress?: () => void;
 }) {
   const selected = selectedView?.type === "list" && selectedView.id === list.id;
+  const openContextMenu = () =>
+    showListContextMenu(list, { onRenameList, onDeleteList });
 
   return (
     <SidebarRow
@@ -170,21 +216,8 @@ export function ListsSidebarListRow({
       }
       showMenu={!nested}
       onPress={() => onSelectView({ type: "list", id: list.id })}
-      onLongPress={onLongPress}
-      onPressMenu={() => {
-        Alert.alert(list.name, undefined, [
-          {
-            text: "Rename",
-            onPress: () => onRenameList?.(list),
-          },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: () => onDeleteList?.(list),
-          },
-          { text: "Cancel", style: "cancel" },
-        ]);
-      }}
+      onLongPress={openContextMenu}
+      onPressMenu={openContextMenu}
     />
   );
 }
@@ -199,7 +232,8 @@ export function ListsSidebarTopLevelBlock({
   onSelectView,
   onRenameList,
   onDeleteList,
-  onLongPress,
+  onRenameFolder,
+  onDeleteFolder,
 }: {
   item: SidebarDraggableTopLevelItem;
   data: SidebarData | null;
@@ -210,7 +244,8 @@ export function ListsSidebarTopLevelBlock({
   onSelectView: (view: SelectedView) => void;
   onRenameList?: (list: SidebarListItem) => void;
   onDeleteList?: (list: SidebarListItem) => void;
-  onLongPress?: () => void;
+  onRenameFolder?: (folder: SidebarFolderItem) => void;
+  onDeleteFolder?: (folder: SidebarFolderItem) => void;
 }) {
   if (item.kind === "list") {
     return (
@@ -221,7 +256,6 @@ export function ListsSidebarTopLevelBlock({
         onSelectView={onSelectView}
         onRenameList={onRenameList}
         onDeleteList={onDeleteList}
-        onLongPress={onLongPress}
       />
     );
   }
@@ -236,7 +270,8 @@ export function ListsSidebarTopLevelBlock({
         expanded={isExpanded}
         navIconColor={navIconColor}
         onToggle={() => onToggleFolder(item.folder.id)}
-        onLongPress={onLongPress}
+        onRenameFolder={onRenameFolder}
+        onDeleteFolder={onDeleteFolder}
       />
       {isExpanded
         ? folderLists.map((list) => (
@@ -247,6 +282,8 @@ export function ListsSidebarTopLevelBlock({
               navIconColor={navIconColor}
               nested
               onSelectView={onSelectView}
+              onRenameList={onRenameList}
+              onDeleteList={onDeleteList}
             />
           ))
         : null}

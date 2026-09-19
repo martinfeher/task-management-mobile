@@ -18,6 +18,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Text,
   TextInput,
   useWindowDimensions,
   View,
@@ -26,15 +27,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FullWindowOverlay } from "react-native-screens";
 
 import { AppSymbol } from "@/components/app-symbol";
-import {
-  CalendarColorControl,
-  calendarColorTitleReserveSpace,
-} from "@/components/calendar-color-control";
+import { CalendarColorControl } from "@/components/calendar-color-control";
 import {
   FormattedNotesInput,
   type NotesInputHandle,
 } from "@/components/formatted-notes-input";
 import { IoMdTimeIcon } from "@/components/io-md-time-icon";
+import { LuPlusIcon } from "@/components/lu-plus-icon";
 import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
 import { TaskCheckbox } from "@/components/task-checkbox";
 import {
@@ -48,7 +47,6 @@ import {
   PriorityFlagToolbarIcon,
   TaskPriorityFlagPopup,
 } from "@/components/task-priority-flag-popup";
-import { TbSubtaskIcon } from "@/components/tb-subtask-icon";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
@@ -182,11 +180,12 @@ const TASK_SHEET_MIN_HEIGHT_FRACTION = 0.47;
 const TASK_SHEET_MAX_HEIGHT_FRACTION = 0.8;
 const TASK_DETAIL_HANDLE_HEIGHT = 28;
 const TASK_DETAIL_TOOLBAR_BODY_HEIGHT = 56;
-const TOOLBAR_BOTTOM_SHIFT = 10;
+const TOOLBAR_BOTTOM_SHIFT = 13;
 const SCHEDULE_UNDO_ABOVE_GAP = 10;
 const SCHEDULE_UNDO_RIGHT_INSET = 7;
 const SCHEDULE_UNDO_BUTTON_HEIGHT = 36;
 const SCHEDULE_UNDO_DURATION_MS = 6000;
+const SUBTASKS_LINK_FONT_SIZE = 10;
 const MARK_COMPLETE_BOTTOM_OFFSET = 57;
 const MARK_COMPLETE_BUTTON_HEIGHT = 26;
 const HISTORY_ACTIONS_ABOVE_MARK_COMPLETE = 7;
@@ -1492,6 +1491,12 @@ export function TaskDetailScreen() {
     void loadSubtasks();
   }, [loadSubtasks]);
 
+  const openNewSubtaskInput = useCallback(() => {
+    setSubtasksExpanded(true);
+    setSubtaskInputOpen(true);
+    setSubtaskName("");
+  }, []);
+
   useEffect(() => {
     if (!subtaskInputOpen || !subtasksSectionOpen || !subtasksExpanded) {
       return;
@@ -1977,17 +1982,59 @@ export function TaskDetailScreen() {
                       }}
                       placeholder="Task name"
                       placeholderTextColor="#9ca3af"
-                      className="flex-1 p-0 text-[27px] font-bold leading-9"
-                      style={{
-                        color: "#454545",
-                        ...(openedFromCalendar
-                          ? { paddingRight: calendarColorTitleReserveSpace }
-                          : null),
-                      }}
+                      className="min-w-0 flex-1 p-0 text-[27px] font-bold leading-9"
+                      style={{ color: "#454545" }}
                       multiline
                       blurOnSubmit
                       returnKeyType="done"
                     />
+                    <View className="ml-[6px] mt-[5px] shrink-0 items-end gap-1.5 self-start">
+                      <Pressable
+                        className="active:opacity-70"
+                        accessibilityRole="button"
+                        accessibilityLabel="Link subtasks"
+                        onPress={() => void openSubtasksSection()}
+                      >
+                        <ThemedText
+                          style={{
+                            color: "#bbbbcc",
+                            fontSize: SUBTASKS_LINK_FONT_SIZE,
+                          }}
+                        >
+                          + subtask
+                        </ThemedText>
+                      </Pressable>
+                      {subtasksSectionOpen && !loading && detail ? (
+                        <Pressable
+                          onPress={handleDateCheckboxPress}
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            detail.completed
+                              ? "Mark task incomplete"
+                              : "Mark task complete"
+                          }
+                          className="flex-row items-center gap-[5px] rounded-full border border-[#e3e3e3] bg-[#f7f7f7] px-3.5 py-[5px] active:opacity-85"
+                        >
+                          <AppSymbol
+                            ios="checkmark"
+                            android="check"
+                            size={12}
+                            tintColor="#6b7280"
+                          />
+                          <ThemedText
+                            style={{
+                              color: "#6b7280",
+                              fontSize: 11,
+                              fontWeight: "500",
+                            }}
+                          >
+                            {detail.completed
+                              ? "Mark incomplete"
+                              : "Mark complete"}
+                          </ThemedText>
+                        </Pressable>
+                      ) : null}
+                    </View>
                     {openedFromCalendar ? (
                       <CalendarColorControl
                         color={calendarColor}
@@ -2143,32 +2190,49 @@ export function TaskDetailScreen() {
                 </View>
 
                 {subtasksSectionOpen ? (
-                  <View className="mt-[18px] px-4">
-                    <Pressable
-                      className="flex-row items-center gap-1.5 py-1"
-                      onPress={() =>
-                        setSubtasksExpanded((expanded) => !expanded)
-                      }
-                      accessibilityRole="button"
-                      accessibilityState={{ expanded: subtasksExpanded }}
-                      accessibilityLabel="Sub-tasks"
-                    >
-                      <View
-                        className={subtasksExpanded ? "rotate-90" : "rotate-0"}
+                  <View className="mt-[18px] bg-[#ececf5] rounded-[11px] px-1 pt-1">
+                    <View className="flex-row items-center justify-between py-1 mx-2">
+                      <Pressable
+                        className="min-w-0 flex-1 flex-row items-center gap-1.5"
+                        onPress={() =>
+                          setSubtasksExpanded((expanded) => !expanded)
+                        }
+                        accessibilityRole="button"
+                        accessibilityState={{ expanded: subtasksExpanded }}
+                        accessibilityLabel="Sub-tasks"
                       >
-                        <AppSymbol
-                          ios="chevron.right"
-                          android="chevron-right"
-                          size={20}
-                          tintColor="#9ca3af"
+                        <View
+                          className={
+                            subtasksExpanded ? "rotate-90" : "rotate-0"
+                          }
+                        >
+                          <AppSymbol
+                            ios="chevron.right"
+                            android="chevron-right"
+                            size={16}
+                            tintColor="#9ca3af"
+                          />
+                        </View>
+                        <Text className="text-[11px] font-medium leading-4 text-[#787b7d]">
+                          sub-tasks
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        className="h-6 w-6 items-center justify-center active:opacity-55"
+                        accessibilityRole="button"
+                        accessibilityLabel="Add subtask"
+                        hitSlop={8}
+                        onPress={openNewSubtaskInput}
+                      >
+                        <LuPlusIcon
+                          size={16}
+                          color="#9ca3af"
+                          strokeWidth={1.5}
                         />
-                      </View>
-                      <ThemedText className="text-xs font-medium leading-4 text-gray-400">
-                        sub-tasks
-                      </ThemedText>
-                    </Pressable>
+                      </Pressable>
+                    </View>
                     {subtasksExpanded ? (
-                      <View className="mt-1.5 gap-2">
+                      <View className="mt-0.5 gap-2">
                         {subtasksLoading ? (
                           <ActivityIndicator
                             size="small"
@@ -2274,7 +2338,7 @@ export function TaskDetailScreen() {
             )}
           </ScrollView>
 
-          {!loading && detail ? (
+          {!loading && detail && !subtasksSectionOpen ? (
             <Pressable
               onPress={handleDateCheckboxPress}
               accessibilityRole="button"
@@ -2365,16 +2429,6 @@ export function TaskDetailScreen() {
                     />
                   ) : null}
                 </View>
-                <DetailToolbarLabeledItem
-                  accessibilityLabel="Subtasks"
-                  label="subtasks"
-                  onPress={openSubtasksSection}
-                >
-                  <TbSubtaskIcon
-                    size={TOOLBAR_LABELED_ICON_SIZE}
-                    color={TOOLBAR_ICON_COLOR}
-                  />
-                </DetailToolbarLabeledItem>
                 <DetailToolbarLabeledItem
                   accessibilityLabel="Labels"
                   label="label"

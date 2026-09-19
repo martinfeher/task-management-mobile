@@ -51,7 +51,7 @@ export function SidebarRow({
       <Pressable
         onPress={onPress}
         onLongPress={onLongPress}
-        delayLongPress={150}
+        delayLongPress={250}
         accessibilityRole="button"
         accessibilityLabel={title}
         className="min-w-0 flex-1 flex-row items-center gap-2 active:opacity-85"

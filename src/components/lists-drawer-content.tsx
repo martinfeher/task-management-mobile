@@ -6,20 +6,30 @@ import { ListsSidebar } from "@/components/lists-sidebar";
 import { ThemedText } from "@/components/themed-text";
 import { useApp } from "@/contexts/app-context";
 import {
+  createFolder,
   createLabel,
   createList,
+  deleteFolder,
   deleteLabelApi,
   deleteList,
+  renameFolder,
   renameLabelApi,
   renameList,
   updateLabelColorApi,
 } from "@/lib/api";
-import type { SelectedView, SidebarLabelItem, SidebarListItem } from "@/types/todo";
+import type {
+  SelectedView,
+  SidebarFolderItem,
+  SidebarLabelItem,
+  SidebarListItem,
+} from "@/types/todo";
 
 type NamePromptState =
   | { mode: "create-list" }
+  | { mode: "create-folder" }
   | { mode: "create-label" }
   | { mode: "rename-list"; list: SidebarListItem }
+  | { mode: "rename-folder"; folder: SidebarFolderItem }
   | { mode: "rename-label"; label: SidebarLabelItem };
 
 export function ListsDrawerContent() {
@@ -53,9 +63,19 @@ export function ListsDrawerContent() {
     setNamePrompt({ mode: "rename-list", list });
   }
 
+  function openRenameFolderPrompt(folder: SidebarFolderItem) {
+    setNameDraft(folder.name);
+    setNamePrompt({ mode: "rename-folder", folder });
+  }
+
   function openRenameLabelPrompt(label: SidebarLabelItem) {
     setNameDraft(label.label);
     setNamePrompt({ mode: "rename-label", label });
+  }
+
+  function openCreateFolderPrompt() {
+    setNameDraft("");
+    setNamePrompt({ mode: "create-folder" });
   }
 
   function openCreateLabelPrompt() {
@@ -71,10 +91,14 @@ export function ListsDrawerContent() {
     try {
       if (namePrompt.mode === "create-list") {
         await createList(trimmed);
+      } else if (namePrompt.mode === "create-folder") {
+        await createFolder(trimmed);
       } else if (namePrompt.mode === "create-label") {
         await createLabel(trimmed);
       } else if (namePrompt.mode === "rename-list") {
         await renameList(namePrompt.list.id, trimmed);
+      } else if (namePrompt.mode === "rename-folder") {
+        await renameFolder(namePrompt.folder.id, trimmed);
       } else {
         await renameLabelApi(namePrompt.label.id, trimmed);
       }
@@ -84,10 +108,14 @@ export function ListsDrawerContent() {
       Alert.alert(
         namePrompt.mode === "create-list"
           ? "Couldn't create list"
+          : namePrompt.mode === "create-folder"
+            ? "Couldn't create folder"
           : namePrompt.mode === "create-label"
             ? "Couldn't create label"
           : namePrompt.mode === "rename-list"
             ? "Couldn't rename list"
+            : namePrompt.mode === "rename-folder"
+              ? "Couldn't rename folder"
             : "Couldn't rename label",
       );
     }
@@ -135,6 +163,86 @@ export function ListsDrawerContent() {
     if (list) {
       openRenameListPrompt(list);
     }
+  }
+
+  function promptForFolderName(
+    mode: "create" | "rename",
+    folder?: SidebarFolderItem,
+  ) {
+    if (Platform.OS === "ios") {
+      Alert.prompt(
+        mode === "create" ? "New folder" : "Rename folder",
+        undefined,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Save",
+            onPress: (value?: string) => {
+              const trimmed = value?.trim();
+              if (!trimmed) return;
+              void (async () => {
+                try {
+                  if (mode === "create") {
+                    await createFolder(trimmed);
+                  } else if (folder) {
+                    await renameFolder(folder.id, trimmed);
+                  }
+                  await loadSidebar(true);
+                } catch {
+                  Alert.alert(
+                    mode === "create"
+                      ? "Couldn't create folder"
+                      : "Couldn't rename folder",
+                  );
+                }
+              })();
+            },
+          },
+        ],
+        "plain-text",
+        folder?.name ?? "",
+      );
+      return;
+    }
+
+    if (mode === "create") {
+      openCreateFolderPrompt();
+      return;
+    }
+    if (folder) {
+      openRenameFolderPrompt(folder);
+    }
+  }
+
+  function promptForFolderCreate() {
+    if (Platform.OS === "ios") {
+      Alert.prompt(
+        "New folder",
+        undefined,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Save",
+            onPress: (value?: string) => {
+              const trimmed = value?.trim();
+              if (!trimmed) return;
+              void (async () => {
+                try {
+                  await createFolder(trimmed);
+                  await loadSidebar(true);
+                } catch {
+                  Alert.alert("Couldn't create folder");
+                }
+              })();
+            },
+          },
+        ],
+        "plain-text",
+      );
+      return;
+    }
+
+    openCreateFolderPrompt();
   }
 
   function promptForLabelCreate() {
@@ -235,6 +343,30 @@ export function ListsDrawerContent() {
     }
   }
 
+  async function handleDeleteFolder(folder: SidebarFolderItem) {
+    Alert.alert(
+      "Delete folder",
+      `Delete "${folder.name}"? Lists inside will be moved to the top level.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              try {
+                await deleteFolder(folder.id);
+                await loadSidebar(true);
+              } catch {
+                Alert.alert("Couldn't delete folder");
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }
+
   async function handleDeleteList(list: SidebarListItem) {
     Alert.alert(
       "Delete list",
@@ -272,9 +404,12 @@ export function ListsDrawerContent() {
         onRetry={() => void loadSidebar()}
         onReorderSidebarTopLevel={reorderSidebarTopLevel}
         onCreateList={() => promptForListName("create")}
+        onCreateFolder={promptForFolderCreate}
         onCreateLabel={promptForLabelCreate}
         onRenameList={(list) => promptForListName("rename", list)}
         onDeleteList={(list) => void handleDeleteList(list)}
+        onRenameFolder={(folder) => promptForFolderName("rename", folder)}
+        onDeleteFolder={(folder) => void handleDeleteFolder(folder)}
         onRenameLabel={promptForLabelName}
         onDeleteLabel={handleDeleteLabel}
         onChangeLabelColor={setColorPickerLabel}
@@ -294,10 +429,14 @@ export function ListsDrawerContent() {
             <ThemedText style={styles.title}>
               {namePrompt.mode === "create-list"
                 ? "New list"
+                : namePrompt.mode === "create-folder"
+                  ? "New folder"
                 : namePrompt.mode === "create-label"
                   ? "New label"
                 : namePrompt.mode === "rename-list"
                   ? "Rename list"
+                  : namePrompt.mode === "rename-folder"
+                    ? "Rename folder"
                   : "Edit title"}
             </ThemedText>
             <TextInput

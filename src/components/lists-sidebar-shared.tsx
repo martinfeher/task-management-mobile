@@ -30,6 +30,7 @@ import { getLabelDotColor } from "@/lib/label-colors";
 import type {
   SelectedView,
   SidebarData,
+  SidebarFolderItem,
   SidebarLabelItem,
   SidebarListItem,
 } from "@/types/todo";
@@ -48,9 +49,12 @@ export type ListsSidebarProps = {
   onRetry: () => void;
   onReorderSidebarTopLevel?: (sourceIndex: number, dropIndex: number) => void;
   onCreateList?: () => void;
+  onCreateFolder?: () => void;
   onCreateLabel?: () => void;
   onRenameList?: (list: SidebarListItem) => void;
   onDeleteList?: (list: SidebarListItem) => void;
+  onRenameFolder?: (folder: SidebarFolderItem) => void;
+  onDeleteFolder?: (folder: SidebarFolderItem) => void;
   onRenameLabel?: (label: SidebarLabelItem) => void;
   onDeleteLabel?: (label: SidebarLabelItem) => void;
   onChangeLabelColor?: (label: SidebarLabelItem) => void;
@@ -76,6 +80,7 @@ export function ListsSidebarShell({
   onRefresh,
   onRetry,
   onCreateList,
+  onCreateFolder,
   onCreateLabel,
   children,
 }: {
@@ -86,6 +91,7 @@ export function ListsSidebarShell({
   onRefresh: () => void;
   onRetry: () => void;
   onCreateList?: () => void;
+  onCreateFolder?: () => void;
   onCreateLabel?: () => void;
   children: (refreshControl: ReactNode) => ReactNode;
 }) {
@@ -157,9 +163,10 @@ export function ListsSidebarShell({
           )}
         </SafeAreaView>
       </GestureHandlerRootView>
-      {onCreateList && onCreateLabel ? (
+      {onCreateList && onCreateFolder && onCreateLabel ? (
         <ListsCreateButton
           onCreateList={onCreateList}
+          onCreateFolder={onCreateFolder}
           onCreateLabel={onCreateLabel}
         />
       ) : null}

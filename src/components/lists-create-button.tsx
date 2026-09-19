@@ -11,11 +11,13 @@ const CREATE_TEXT_LINE_HEIGHT = 17;
 
 type ListsCreateButtonProps = {
   onCreateList: () => void;
+  onCreateFolder: () => void;
   onCreateLabel: () => void;
 };
 
 export function ListsCreateButton({
   onCreateList,
+  onCreateFolder,
   onCreateLabel,
 }: ListsCreateButtonProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -27,6 +29,11 @@ export function ListsCreateButton({
   function handleCreateList() {
     closeMenu();
     onCreateList();
+  }
+
+  function handleCreateFolder() {
+    closeMenu();
+    onCreateFolder();
   }
 
   function handleCreateLabel() {
@@ -53,6 +60,7 @@ export function ListsCreateButton({
         <View className="absolute bottom-[51px] left-4">
           <ListsCreateSubmenu
             onCreateList={handleCreateList}
+            onCreateFolder={handleCreateFolder}
             onCreateLabel={handleCreateLabel}
           />
         </View>

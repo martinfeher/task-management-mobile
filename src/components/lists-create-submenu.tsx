@@ -4,15 +4,17 @@ import { LiquidGlassSurface } from "@/components/liquid-glass-surface";
 
 type ListsCreateSubmenuProps = {
   onCreateList: () => void;
+  onCreateFolder: () => void;
   onCreateLabel: () => void;
 };
 
 export function ListsCreateSubmenu({
   onCreateList,
+  onCreateFolder,
   onCreateLabel,
 }: ListsCreateSubmenuProps) {
   return (
-    <LiquidGlassSurface style={styles.menu} borderRadius={12} isInteractive>
+    <LiquidGlassSurface style={styles.menu} borderRadius={13} isInteractive>
       <Pressable
         style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
         accessibilityRole="button"
@@ -20,6 +22,15 @@ export function ListsCreateSubmenu({
         onPress={onCreateList}
       >
         <Text style={styles.menuLabel}>List</Text>
+      </Pressable>
+      <View style={styles.menuDivider} />
+      <Pressable
+        style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
+        accessibilityRole="button"
+        accessibilityLabel="Create folder"
+        onPress={onCreateFolder}
+      >
+        <Text style={styles.menuLabel}>Folder</Text>
       </Pressable>
       <View style={styles.menuDivider} />
       <Pressable
@@ -39,7 +50,7 @@ const styles = StyleSheet.create({
     minWidth: 132,
   },
   menuRow: {
-    minHeight: 42,
+    minHeight: 46,
     paddingHorizontal: 16,
     justifyContent: "center",
   },
