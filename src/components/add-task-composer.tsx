@@ -18,18 +18,18 @@ import { AppSymbol } from "@/components/app-symbol";
 import { IoMdTimeIcon } from "@/components/io-md-time-icon";
 import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
 import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
-import { getTaskPriorityColor } from "@/components/task-priority-flag-popup";
-import { TbSubtaskIcon } from "@/components/tb-subtask-icon";
 import { TaskDatePickerSheet } from "@/components/task-date-picker-sheet";
 import { TaskLabelPicker } from "@/components/task-label-picker";
 import { TaskListPicker } from "@/components/task-list-picker";
+import { getTaskPriorityColor } from "@/components/task-priority-flag-popup";
+import { TbSubtaskIcon } from "@/components/tb-subtask-icon";
 import { ThemedText } from "@/components/themed-text";
 import { useApp } from "@/contexts/app-context";
 import { fetchLabels } from "@/lib/api";
 import { formatTaskDueDate } from "@/lib/format-due-date";
+import { findInboxList } from "@/lib/inbox-list";
 import { getLabelDotColor } from "@/lib/label-colors";
 import { nextTaskNamePlaceholder } from "@/lib/task-name-placeholders";
-import { findInboxList } from "@/lib/inbox-list";
 import type { SidebarListItem, TaskLabel } from "@/types/todo";
 
 type AddTaskComposerProps = {
@@ -103,9 +103,12 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
     InteractionManager.runAfterInteractions(() => {
       inputRef.current?.focus();
     });
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, Platform.OS === "ios" ? 50 : 0);
+    setTimeout(
+      () => {
+        inputRef.current?.focus();
+      },
+      Platform.OS === "ios" ? 50 : 0,
+    );
   }
 
   useEffect(() => {
@@ -260,12 +263,14 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
       onRequestClose={() => {
         void submitAndClose();
       }}
-      statusBarTranslucent>
+      statusBarTranslucent
+    >
       {visible ? (
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={0}>
+          keyboardVerticalOffset={0}
+        >
           <View style={styles.backdrop}>
             <Pressable
               accessibilityRole="button"
@@ -280,7 +285,8 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
               style={styles.card}
               onLayout={(event) => {
                 setAddTaskComposerHeight(event.nativeEvent.layout.height);
-              }}>
+              }}
+            >
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close"
@@ -288,7 +294,8 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                 onPress={() => {
                   void submitAndClose();
                 }}
-                style={styles.closeButton}>
+                style={styles.closeButton}
+              >
                 <AppSymbol
                   ios="xmark"
                   android="close"
@@ -299,315 +306,348 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
               </Pressable>
 
               <View style={styles.cardContent}>
-              <View style={styles.header}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`List: ${selectedList?.name ?? "Inbox"}`}
-                  hitSlop={8}
-                  onPress={() => void openListPicker()}
-                  style={({ pressed }) => [
-                    styles.listPicker,
-                    pressed && styles.listPickerPressed,
-                  ]}>
-                  <ThemedText style={styles.listPickerText}>
-                    In{" "}
-                    <ThemedText style={styles.listPickerBold}>
-                      {selectedList?.name ?? "Inbox"}
-                    </ThemedText>
-                  </ThemedText>
-                  <AppSymbol
-                    ios="chevron.down"
-                    android="keyboard-arrow-down"
-                    size={14}
-                    tintColor="#8b95a5"
-                  />
-                </Pressable>
-              </View>
-
-              <TextInput
-                ref={inputRef}
-                value={name}
-                onChangeText={setName}
-                placeholder={taskNamePlaceholder}
-                placeholderTextColor={PLACEHOLDER_COLOR}
-                style={styles.titleInput}
-                selectionColor="#4873c7"
-                cursorColor="#4873c7"
-                returnKeyType="done"
-                blurOnSubmit={false}
-                editable={!submitting}
-                autoFocus={visible}
-                showSoftInputOnFocus
-                autoCorrect
-                autoCapitalize="sentences"
-                onSubmitEditing={() => {
-                  void submitAndContinue();
-                }}
-              />
-
-              <TextInput
-                value={description}
-                onChangeText={setDescription}
-                placeholder="Tap to add a description ..."
-                placeholderTextColor={PLACEHOLDER_COLOR}
-                style={styles.descriptionInput}
-                selectionColor="#4873c7"
-                cursorColor="#4873c7"
-                editable={!submitting}
-                multiline
-                blurOnSubmit
-                returnKeyType="done"
-                onSubmitEditing={() => {
-                  void submitAndContinue();
-                }}
-              />
-
-              {dueDateLabel || priority != null || labelIds.length > 0 ? (
-                <View style={styles.metaRow}>
-                  {dueDateLabel ? (
-                    <ThemedText style={styles.metaChip}>{dueDateLabel}</ThemedText>
-                  ) : null}
-                  {priority != null ? (
-                    <ThemedText style={styles.metaChip}>P{priority}</ThemedText>
-                  ) : null}
-                  {composerLabels.length > 0 ? (
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.labelChipRow}
-                      keyboardShouldPersistTaps="handled"
-                    >
-                      {composerLabels.map((label) => (
-                        <Pressable
-                          key={label.id}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Label ${label.label}, edit labels`}
-                          onPress={() => void openLabelPicker()}
-                          style={({ pressed }) => [
-                            styles.labelChip,
-                            { backgroundColor: getLabelDotColor(label) },
-                            pressed && styles.labelChipPressed,
-                          ]}
-                        >
-                          <ThemedText style={styles.labelChipText}>
-                            {label.label}
-                          </ThemedText>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  ) : null}
-                </View>
-              ) : null}
-
-              {priorityMenuOpen ? (
-                <View style={styles.priorityMenu}>
-                  {TASK_PRIORITY_OPTIONS.map((option) => (
-                    <Pressable
-                      key={option.level}
-                      style={styles.priorityOption}
-                      onPress={() => {
-                        setPriority(option.level);
-                        setPriorityMenuOpen(false);
-                      }}>
-                      <View
-                        style={[styles.priorityDot, { backgroundColor: option.color }]}
-                      />
-                      <ThemedText>{option.label}</ThemedText>
-                    </Pressable>
-                  ))}
+                <View style={styles.header}>
                   <Pressable
-                    style={styles.priorityOption}
-                    onPress={() => {
-                      setPriority(null);
-                      setPriorityMenuOpen(false);
-                    }}>
-                    <ThemedText style={styles.clearPriority}>Clear priority</ThemedText>
+                    accessibilityRole="button"
+                    accessibilityLabel={`List: ${selectedList?.name ?? "Inbox"}`}
+                    hitSlop={8}
+                    onPress={() => void openListPicker()}
+                    style={({ pressed }) => [
+                      styles.listPicker,
+                      pressed && styles.listPickerPressed,
+                    ]}
+                  >
+                    <ThemedText style={styles.listPickerText}>
+                      In{" "}
+                      <ThemedText style={styles.listPickerBold}>
+                        {selectedList?.name ?? "Inbox"}
+                      </ThemedText>
+                    </ThemedText>
+                    <AppSymbol
+                      ios="chevron.down"
+                      android="keyboard-arrow-down"
+                      size={14}
+                      tintColor="#8b95a5"
+                    />
                   </Pressable>
                 </View>
-              ) : null}
 
-              <View style={styles.divider} />
+                <TextInput
+                  ref={inputRef}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder={taskNamePlaceholder}
+                  placeholderTextColor={PLACEHOLDER_COLOR}
+                  style={styles.titleInput}
+                  selectionColor="#4873c7"
+                  cursorColor="#4873c7"
+                  returnKeyType="done"
+                  blurOnSubmit={false}
+                  editable={!submitting}
+                  autoFocus={visible}
+                  showSoftInputOnFocus
+                  autoCorrect
+                  autoCapitalize="sentences"
+                  onSubmitEditing={() => {
+                    void submitAndContinue();
+                  }}
+                />
 
-              <View style={styles.toolbar}>
-                <View style={styles.toolbarControls}>
-                  <View style={styles.iconRow}>
-                    <View style={styles.toolbarLabeledItem}>
+                <TextInput
+                  value={description}
+                  onChangeText={setDescription}
+                  placeholder="Tap to add a description ..."
+                  placeholderTextColor={PLACEHOLDER_COLOR}
+                  style={styles.descriptionInput}
+                  selectionColor="#4873c7"
+                  cursorColor="#4873c7"
+                  editable={!submitting}
+                  multiline
+                  blurOnSubmit
+                  returnKeyType="done"
+                  onSubmitEditing={() => {
+                    void submitAndContinue();
+                  }}
+                />
+
+                {dueDateLabel || priority != null || labelIds.length > 0 ? (
+                  <View style={styles.metaRow}>
+                    {dueDateLabel ? (
+                      <ThemedText style={styles.metaChip}>
+                        {dueDateLabel}
+                      </ThemedText>
+                    ) : null}
+                    {priority != null ? (
+                      <ThemedText style={styles.metaChip}>
+                        P{priority}
+                      </ThemedText>
+                    ) : null}
+                    {composerLabels.length > 0 ? (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.labelChipRow}
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        {composerLabels.map((label) => (
+                          <Pressable
+                            key={label.id}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Label ${label.label}, edit labels`}
+                            onPress={() => void openLabelPicker()}
+                            style={({ pressed }) => [
+                              styles.labelChip,
+                              { backgroundColor: getLabelDotColor(label) },
+                              pressed && styles.labelChipPressed,
+                            ]}
+                          >
+                            <ThemedText style={styles.labelChipText}>
+                              {label.label}
+                            </ThemedText>
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {priorityMenuOpen ? (
+                  <View style={styles.priorityMenu}>
+                    {TASK_PRIORITY_OPTIONS.map((option) => (
                       <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Date"
-                        hitSlop={8}
+                        key={option.level}
+                        style={styles.priorityOption}
                         onPress={() => {
-                          setMoreMenuOpen(false);
-                          setDatePickerOpen(true);
+                          setPriority(option.level);
+                          setPriorityMenuOpen(false);
                         }}
-                        style={({ pressed }) => [
-                          styles.toolbarIconSlot,
-                          pressed && styles.toolbarIconPressed,
-                        ]}>
-                        <IoMdTimeIcon
-                          size={TOOLBAR_LABELED_ICON_SIZE}
-                          color={dueDate ? ACTIVE_ICON_COLOR : ICON_COLOR}
+                      >
+                        <View
+                          style={[
+                            styles.priorityDot,
+                            { backgroundColor: option.color },
+                          ]}
                         />
+                        <ThemedText>{option.label}</ThemedText>
                       </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Date"
-                        hitSlop={6}
-                        onPress={() => {
-                          setMoreMenuOpen(false);
-                          setDatePickerOpen(true);
-                        }}>
-                        <ThemedText style={styles.toolbarCaption}>Date</ThemedText>
-                      </Pressable>
-                    </View>
+                    ))}
+                    <Pressable
+                      style={styles.priorityOption}
+                      onPress={() => {
+                        setPriority(null);
+                        setPriorityMenuOpen(false);
+                      }}
+                    >
+                      <ThemedText style={styles.clearPriority}>
+                        Clear priority
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                ) : null}
 
-                    <View style={styles.flagAnchor}>
+                <View style={styles.divider} />
+
+                <View style={styles.toolbar}>
+                  <View style={styles.toolbarControls}>
+                    <View style={styles.iconRow}>
                       <View style={styles.toolbarLabeledItem}>
                         <Pressable
                           accessibilityRole="button"
-                          accessibilityLabel="Priority"
+                          accessibilityLabel="Date"
                           hitSlop={8}
                           onPress={() => {
                             setMoreMenuOpen(false);
-                            setPriorityMenuOpen((open) => !open);
+                            setDatePickerOpen(true);
                           }}
                           style={({ pressed }) => [
                             styles.toolbarIconSlot,
                             pressed && styles.toolbarIconPressed,
-                          ]}>
-                          <AppSymbol
-                            ios={priority != null ? "flag.fill" : "flag"}
-                            android={priority != null ? "flag" : "outlined-flag"}
+                          ]}
+                        >
+                          <IoMdTimeIcon
                             size={TOOLBAR_LABELED_ICON_SIZE}
-                            tintColor={
-                              priority != null
-                                ? getTaskPriorityColor(priority)
-                                : ICON_COLOR
-                            }
+                            color={dueDate ? ACTIVE_ICON_COLOR : ICON_COLOR}
                           />
                         </Pressable>
                         <Pressable
                           accessibilityRole="button"
-                          accessibilityLabel="Priority"
+                          accessibilityLabel="Date"
                           hitSlop={6}
                           onPress={() => {
                             setMoreMenuOpen(false);
-                            setPriorityMenuOpen((open) => !open);
-                          }}>
-                          <ThemedText
-                            style={[
-                              styles.toolbarCaption,
-                              priority != null && {
-                                color: getTaskPriorityColor(priority),
-                              },
-                            ]}
-                          >
-                            Priority
+                            setDatePickerOpen(true);
+                          }}
+                        >
+                          <ThemedText style={styles.toolbarCaption}>
+                            Date
                           </ThemedText>
                         </Pressable>
                       </View>
-                    </View>
 
-                    <View style={styles.moreMenuAnchor}>
+                      <View style={styles.flagAnchor}>
+                        <View style={styles.toolbarLabeledItem}>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Priority"
+                            hitSlop={8}
+                            onPress={() => {
+                              setMoreMenuOpen(false);
+                              setPriorityMenuOpen((open) => !open);
+                            }}
+                            style={({ pressed }) => [
+                              styles.toolbarIconSlot,
+                              pressed && styles.toolbarIconPressed,
+                            ]}
+                          >
+                            <AppSymbol
+                              ios={priority != null ? "flag.fill" : "flag"}
+                              android={
+                                priority != null ? "flag" : "outlined-flag"
+                              }
+                              size={TOOLBAR_LABELED_ICON_SIZE}
+                              tintColor={
+                                priority != null
+                                  ? getTaskPriorityColor(priority)
+                                  : ICON_COLOR
+                              }
+                            />
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Priority"
+                            hitSlop={6}
+                            onPress={() => {
+                              setMoreMenuOpen(false);
+                              setPriorityMenuOpen((open) => !open);
+                            }}
+                          >
+                            <ThemedText
+                              style={[
+                                styles.toolbarCaption,
+                                priority != null && {
+                                  color: getTaskPriorityColor(priority),
+                                },
+                              ]}
+                            >
+                              Priority
+                            </ThemedText>
+                          </Pressable>
+                        </View>
+                      </View>
+
+                      <View style={styles.moreMenuAnchor}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="More options"
+                          hitSlop={8}
+                          onPress={() => {
+                            setPriorityMenuOpen(false);
+                            setMoreMenuOpen((open) => !open);
+                          }}
+                          style={({ pressed }) => [
+                            styles.toolbarIconSlot,
+                            pressed && styles.toolbarIconPressed,
+                          ]}
+                        >
+                          <AppSymbol
+                            ios="ellipsis"
+                            android="more-horiz"
+                            size={TOOLBAR_UTILITY_ICON_SIZE}
+                            tintColor={ICON_COLOR}
+                          />
+                        </Pressable>
+                        {moreMenuOpen ? (
+                          <View style={styles.moreMenu}>
+                            <Pressable
+                              style={styles.moreMenuRow}
+                              onPress={handleMoreMenuLabel}
+                            >
+                              <AppSymbol
+                                ios="tag"
+                                android="local-offer"
+                                size={18}
+                                tintColor={
+                                  labelIds.length > 0
+                                    ? ACTIVE_ICON_COLOR
+                                    : ICON_COLOR
+                                }
+                              />
+                              <ThemedText style={styles.moreMenuRowText}>
+                                Label
+                              </ThemedText>
+                            </Pressable>
+                            <Pressable
+                              style={styles.moreMenuRow}
+                              onPress={handleToolbarSubtask}
+                            >
+                              <TbSubtaskIcon size={18} color={ICON_COLOR} />
+                              <ThemedText style={styles.moreMenuRowText}>
+                                subtasks
+                              </ThemedText>
+                            </Pressable>
+                            <Pressable
+                              style={styles.moreMenuRow}
+                              onPress={handleAttachment}
+                            >
+                              <RiAttachment2Icon size={18} color={ICON_COLOR} />
+                              <ThemedText style={styles.moreMenuRowText}>
+                                Attachment
+                              </ThemedText>
+                            </Pressable>
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
+                    <View style={styles.toolbarTrailing}>
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel="More options"
+                        accessibilityLabel="Voice note"
                         hitSlop={8}
-                        onPress={() => {
-                          setPriorityMenuOpen(false);
-                          setMoreMenuOpen((open) => !open);
-                        }}
+                        onPress={handleVoiceNote}
                         style={({ pressed }) => [
                           styles.toolbarIconSlot,
+                          styles.voiceButton,
                           pressed && styles.toolbarIconPressed,
-                        ]}>
+                        ]}
+                      >
                         <AppSymbol
-                          ios="ellipsis"
-                          android="more-horiz"
+                          ios="mic"
+                          android="mic"
                           size={TOOLBAR_UTILITY_ICON_SIZE}
                           tintColor={ICON_COLOR}
                         />
                       </Pressable>
-                      {moreMenuOpen ? (
-                        <View style={styles.moreMenu}>
-                          <Pressable
-                            style={styles.moreMenuRow}
-                            onPress={handleMoreMenuLabel}>
-                            <AppSymbol
-                              ios="tag"
-                              android="local-offer"
-                              size={18}
-                              tintColor={
-                                labelIds.length > 0
-                                  ? ACTIVE_ICON_COLOR
-                                  : ICON_COLOR
-                              }
-                            />
-                            <ThemedText style={styles.moreMenuRowText}>Label</ThemedText>
-                          </Pressable>
-                          <Pressable
-                            style={styles.moreMenuRow}
-                            onPress={handleToolbarSubtask}>
-                            <TbSubtaskIcon size={18} color={ICON_COLOR} />
-                            <ThemedText style={styles.moreMenuRowText}>subtasks</ThemedText>
-                          </Pressable>
-                          <Pressable
-                            style={styles.moreMenuRow}
-                            onPress={handleAttachment}>
-                            <RiAttachment2Icon size={18} color={ICON_COLOR} />
-                            <ThemedText style={styles.moreMenuRowText}>
-                              Attachment
-                            </ThemedText>
-                          </Pressable>
-                        </View>
-                      ) : null}
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Confirm add task"
+                        disabled={submitting || !name.trim()}
+                        onPress={() => {
+                          void submitAndContinue();
+                        }}
+                        style={({ pressed }) => [
+                          styles.addButton,
+                          !name.trim() && styles.addButtonDisabled,
+                          pressed &&
+                            name.trim() &&
+                            !submitting &&
+                            styles.addButtonPressed,
+                        ]}
+                      >
+                        {submitting ? (
+                          <ActivityIndicator color="#ffffff" size="small" />
+                        ) : (
+                          <AppSymbol
+                            ios="arrow.up"
+                            android="arrow-upward"
+                            size={18}
+                            weight="bold"
+                            tintColor="#ffffff"
+                          />
+                        )}
+                      </Pressable>
                     </View>
                   </View>
-                  <View style={styles.toolbarTrailing}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Voice note"
-                      hitSlop={8}
-                      onPress={handleVoiceNote}
-                      style={({ pressed }) => [
-                        styles.toolbarIconSlot,
-                        styles.voiceButton,
-                        pressed && styles.toolbarIconPressed,
-                      ]}>
-                      <AppSymbol
-                        ios="mic"
-                        android="mic"
-                        size={TOOLBAR_UTILITY_ICON_SIZE}
-                        tintColor={ICON_COLOR}
-                      />
-                    </Pressable>
-                    <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Confirm add task"
-                    disabled={submitting || !name.trim()}
-                    onPress={() => {
-                      void submitAndContinue();
-                    }}
-                    style={({ pressed }) => [
-                      styles.addButton,
-                      !name.trim() && styles.addButtonDisabled,
-                      pressed && name.trim() && !submitting && styles.addButtonPressed,
-                    ]}>
-                    {submitting ? (
-                      <ActivityIndicator color="#ffffff" size="small" />
-                    ) : (
-                      <AppSymbol
-                        ios="arrow.up"
-                        android="arrow-upward"
-                        size={18}
-                        weight="bold"
-                        tintColor="#ffffff"
-                      />
-                    )}
-                  </Pressable>
-                  </View>
                 </View>
-              </View>
               </View>
             </View>
           </View>

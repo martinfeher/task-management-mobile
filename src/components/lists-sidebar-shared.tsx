@@ -15,13 +15,13 @@ import { withUniwind } from "uniwind";
 
 import { AppSymbol } from "@/components/app-symbol";
 import { BiChevronDownIcon } from "@/components/bi-chevron-down-icon";
+import { BsCalendar4DateIcon } from "@/components/bs-calendar4-date-icon";
 import { ListsCreateButton } from "@/components/lists-create-button";
 import { LuInboxIcon } from "@/components/lu-inbox-icon";
 import { LuPlusIcon } from "@/components/lu-plus-icon";
 import { LuStarIcon } from "@/components/lu-star-icon";
 import { SettingsModal } from "@/components/settings-modal";
 import { SidebarRow } from "@/components/sidebar-row";
-import { CiCalendarDateIcon } from "@/components/ci-calendar-date-icon";
 import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/hooks/use-theme";
 import { fetchLabels } from "@/lib/api";
@@ -196,11 +196,13 @@ export function ListsPinnedRows({
         title="Today"
         count={data?.counts.today}
         countNudgeLeft={36}
+        titleNudgeRight={3}
         selected={todaySelected}
         icon={
-          <CiCalendarDateIcon
-            size={20}
-            color={todaySelected ? "#111111" : navIconColor}
+          <BsCalendar4DateIcon
+            size={17}
+            day={new Date().getDate()}
+            color={todaySelected ? "#797979" : "#acafc3"}
           />
         }
         onPress={() => onSelectView({ type: "today" })}
@@ -210,10 +212,11 @@ export function ListsPinnedRows({
           title="Inbox"
           count={inboxList.taskCount}
           countNudgeLeft={36}
+          titleNudgeRight={3}
           selected={inboxSelected}
           icon={
             <LuInboxIcon
-              size={17}
+              size={19}
               strokeWidth={1}
               color={inboxSelected ? "#111111" : navIconColor}
             />
@@ -225,10 +228,11 @@ export function ListsPinnedRows({
         title="Important"
         count={data?.counts.important}
         countNudgeLeft={36}
+        titleNudgeRight={3}
         selected={importantSelected}
         icon={
           <LuStarIcon
-            size={18}
+            size={19}
             strokeWidth={1}
             color={importantSelected ? "#111111" : navIconColor}
           />

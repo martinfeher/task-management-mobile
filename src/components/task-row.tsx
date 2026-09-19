@@ -2,9 +2,9 @@ import { AppSymbol } from "@/components/app-symbol";
 import { MdKeyboardArrowDownIcon } from "@/components/md-keyboard-arrow-down-icon";
 import { RiArrowDropRightLineIcon } from "@/components/ri-arrow-drop-right-line-icon";
 import { TaskCheckbox } from "@/components/task-checkbox";
-import { TaskListSubtaskIcon } from "@/components/task-list-subtask-icon";
 import type { TaskContextMenuAnchor } from "@/components/task-context-menu";
 import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
+import { TaskListSubtaskIcon } from "@/components/task-list-subtask-icon";
 import { ThemedText } from "@/components/themed-text";
 import { formatTaskDueDateParts } from "@/lib/format-due-date";
 import { getLabelDotColor } from "@/lib/label-colors";
@@ -506,164 +506,164 @@ export function TaskRow({
           useCompactRowLayout && styles.contentPressableNoDueDate,
         ]}
       >
-      <Pressable
-        style={[
-          styles.contentPressable,
-          useCompactRowLayout && styles.contentPressableNoDueDate,
-        ]}
-        onPressIn={(event) => {
-          menuOpenedThisGestureRef.current = false;
-          if (!usesSplitHoldTiming) return;
-
-          const { pageX, pageY } = event.nativeEvent;
-          clearHoldTimers();
-          pressDelayTimerRef.current = setTimeout(() => {
-            pressDelayTimerRef.current = null;
-            handleTouchStart(pageX, pageY);
-          }, longPressDelayMs);
-        }}
-        onPress={() => {
-          if (menuOpenedThisGestureRef.current) return;
-          onPress?.(task);
-        }}
-        onLongPress={
-          canLongPress && !usesSplitHoldTiming ? handleLongPress : undefined
-        }
-        onPressOut={() => {
-          if (usesSplitHoldTiming) {
-            handleTouchEnd();
-            return;
-          }
-          clearHoldTimers();
-          dragActivatedRef.current = false;
-          dragIntentRef.current = false;
-          resetHoldShadow();
-          if (menuOpenedThisGestureRef.current) {
-            onContextMenuGestureEnd?.();
-            clearMenuOpenedFlagSoon();
-          }
-        }}
-        delayLongPress={
-          canLongPress && !usesSplitHoldTiming ? longPressDelayMs : undefined
-        }
-        disabled={!onPress && !canLongPress}
-        accessibilityRole="button"
-        accessibilityLabel={
-          canLongPress
-            ? `Open task ${task.name}. Long press for options or drag to reorder`
-            : `Open task ${task.name}`
-        }
-      >
-        <View
+        <Pressable
           style={[
-            styles.textBlock,
-            useCompactRowLayout && styles.textBlockNoDueDate,
+            styles.contentPressable,
+            useCompactRowLayout && styles.contentPressableNoDueDate,
           ]}
+          onPressIn={(event) => {
+            menuOpenedThisGestureRef.current = false;
+            if (!usesSplitHoldTiming) return;
+
+            const { pageX, pageY } = event.nativeEvent;
+            clearHoldTimers();
+            pressDelayTimerRef.current = setTimeout(() => {
+              pressDelayTimerRef.current = null;
+              handleTouchStart(pageX, pageY);
+            }, longPressDelayMs);
+          }}
+          onPress={() => {
+            if (menuOpenedThisGestureRef.current) return;
+            onPress?.(task);
+          }}
+          onLongPress={
+            canLongPress && !usesSplitHoldTiming ? handleLongPress : undefined
+          }
+          onPressOut={() => {
+            if (usesSplitHoldTiming) {
+              handleTouchEnd();
+              return;
+            }
+            clearHoldTimers();
+            dragActivatedRef.current = false;
+            dragIntentRef.current = false;
+            resetHoldShadow();
+            if (menuOpenedThisGestureRef.current) {
+              onContextMenuGestureEnd?.();
+              clearMenuOpenedFlagSoon();
+            }
+          }}
+          delayLongPress={
+            canLongPress && !usesSplitHoldTiming ? longPressDelayMs : undefined
+          }
+          disabled={!onPress && !canLongPress}
+          accessibilityRole="button"
+          accessibilityLabel={
+            canLongPress
+              ? `Open task ${task.name}. Long press for options or drag to reorder`
+              : `Open task ${task.name}`
+          }
         >
-          <View style={styles.mainRow}>
-            <ThemedText
-              style={[
-                styles.title,
-                task.depth > 0 && styles.subtaskTitle,
-                useCompactRowLayout && styles.titleNoDueDate,
-                checked && styles.titleCompleted,
-              ]}
-              numberOfLines={1}
-            >
-              {task.name}
-            </ThemedText>
-
-            <View style={styles.meta}>
-              {showListName && task.listName ? (
-                <ThemedText style={styles.listName} numberOfLines={1}>
-                  {task.listName}
-                </ThemedText>
-              ) : null}
-
-              {task.priority != null ? (
-                <AppSymbol
-                  ios="flag.fill"
-                  android="flag"
-                  size={12}
-                  tintColor={
-                    TASK_PRIORITY_OPTIONS.find(
-                      (option) => option.level === task.priority,
-                    )?.color ?? "#9ca3af"
-                  }
-                />
-              ) : null}
-
-              {visibleLabels.map((label) => (
-                <TaskLabelChip key={label.id} label={label} />
-              ))}
-              {hiddenLabelCount > 0 ? (
-                <ThemedText style={styles.moreLabels}>
-                  +{hiddenLabelCount}
-                </ThemedText>
-              ) : null}
-            </View>
-          </View>
-        </View>
-      </Pressable>
-
-      {showSublineRow ? (
-        <View style={styles.sublineRow}>
-          {showSubtaskCollapse ? (
-            <View style={styles.subtaskCollapseGroup}>
-              <Pressable
-                style={styles.subtaskCollapseButton}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  subtasksExpanded ? "Collapse subtasks" : "Show subtasks"
-                }
-                accessibilityState={{ expanded: subtasksExpanded }}
-                onPress={() => onToggleSubtasksExpanded?.()}
-              >
-                {subtasksExpanded ? (
-                  <MdKeyboardArrowDownIcon size={15} color="#a4a5a8" />
-                ) : (
-                  <RiArrowDropRightLineIcon size={21} color="#babbbd" />
-                )}
-              </Pressable>
-              {!subtasksExpanded ? (
-                <Pressable
-                  style={styles.subtaskBranchButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Show subtasks"
-                  accessibilityState={{ expanded: false }}
-                  onPress={() => onToggleSubtasksExpanded?.()}
-                >
-                  <TaskListSubtaskIcon size={13} color="#afafaf" />
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null}
-
-          {dueDateParts ? (
-            <View style={styles.dueDateRow}>
+          <View
+            style={[
+              styles.textBlock,
+              useCompactRowLayout && styles.textBlockNoDueDate,
+            ]}
+          >
+            <View style={styles.mainRow}>
               <ThemedText
-                style={[styles.dueDate, checked && styles.dueDateCompleted]}
+                style={[
+                  styles.title,
+                  task.depth > 0 && styles.subtaskTitle,
+                  useCompactRowLayout && styles.titleNoDueDate,
+                  checked && styles.titleCompleted,
+                ]}
                 numberOfLines={1}
               >
-                {dueDateParts.dateLabel}
-                {dueDateParts.timeLabel ? ", " : ""}
+                {task.name}
               </ThemedText>
-              {dueDateParts.timeLabel ? (
+
+              <View style={styles.meta}>
+                {showListName && task.listName ? (
+                  <ThemedText style={styles.listName} numberOfLines={1}>
+                    {task.listName}
+                  </ThemedText>
+                ) : null}
+
+                {task.priority != null ? (
+                  <AppSymbol
+                    ios="flag.fill"
+                    android="flag"
+                    size={12}
+                    tintColor={
+                      TASK_PRIORITY_OPTIONS.find(
+                        (option) => option.level === task.priority,
+                      )?.color ?? "#9ca3af"
+                    }
+                  />
+                ) : null}
+
+                {visibleLabels.map((label) => (
+                  <TaskLabelChip key={label.id} label={label} />
+                ))}
+                {hiddenLabelCount > 0 ? (
+                  <ThemedText style={styles.moreLabels}>
+                    +{hiddenLabelCount}
+                  </ThemedText>
+                ) : null}
+              </View>
+            </View>
+          </View>
+        </Pressable>
+
+        {showSublineRow ? (
+          <View style={styles.sublineRow}>
+            {showSubtaskCollapse ? (
+              <View style={styles.subtaskCollapseGroup}>
+                <Pressable
+                  style={styles.subtaskCollapseButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    subtasksExpanded ? "Collapse subtasks" : "Show subtasks"
+                  }
+                  accessibilityState={{ expanded: subtasksExpanded }}
+                  onPress={() => onToggleSubtasksExpanded?.()}
+                >
+                  {subtasksExpanded ? (
+                    <MdKeyboardArrowDownIcon size={15} color="#a4a5a8" />
+                  ) : (
+                    <RiArrowDropRightLineIcon size={21} color="#babbbd" />
+                  )}
+                </Pressable>
+                {!subtasksExpanded ? (
+                  <Pressable
+                    style={styles.subtaskBranchButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Show subtasks"
+                    accessibilityState={{ expanded: false }}
+                    onPress={() => onToggleSubtasksExpanded?.()}
+                  >
+                    <TaskListSubtaskIcon size={13} color="#afafaf" />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+
+            {dueDateParts ? (
+              <View style={styles.dueDateRow}>
                 <ThemedText
-                  style={[
-                    styles.dueDate,
-                    styles.dueTime,
-                    checked && styles.dueDateCompleted,
-                  ]}
+                  style={[styles.dueDate, checked && styles.dueDateCompleted]}
                   numberOfLines={1}
                 >
-                  {dueDateParts.timeLabel}
+                  {dueDateParts.dateLabel}
+                  {dueDateParts.timeLabel ? ", " : ""}
                 </ThemedText>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-      ) : null}
+                {dueDateParts.timeLabel ? (
+                  <ThemedText
+                    style={[
+                      styles.dueDate,
+                      styles.dueTime,
+                      checked && styles.dueDateCompleted,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {dueDateParts.timeLabel}
+                  </ThemedText>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
       </View>
       {!isDragging ? (
         <View pointerEvents="none" style={styles.separator} />
@@ -741,8 +741,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   subtaskCollapseButton: {
-    width: 18,
-    height: 18,
+    width: 21,
+    height: 21,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -852,7 +852,7 @@ const styles = StyleSheet.create({
     marginTop: 1.5,
   },
   dueDate: {
-    fontSize: 9,
+    fontSize: 10.5,
     lineHeight: 13,
     fontWeight: "500",
     flexShrink: 1,

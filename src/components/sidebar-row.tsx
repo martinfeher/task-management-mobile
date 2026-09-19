@@ -3,7 +3,6 @@ import { Platform, Pressable, Text, View } from "react-native";
 
 import { AppSymbol } from "@/components/app-symbol";
 
-const SIDEBAR_MENU_ICON_SIZE = 18 * 0.86 * (1 - 0.13);
 const SIDEBAR_MENU_ICON_COLOR = "#c5c5c5";
 
 type SidebarRowProps = {
@@ -13,9 +12,11 @@ type SidebarRowProps = {
   colorDot?: string;
   selected?: boolean;
   selectedColor?: string;
+  selectedTitleClassName?: string;
   icon?: ReactNode;
   showMenu?: boolean;
   countNudgeLeft?: number;
+  titleNudgeRight?: number;
   nested?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
@@ -29,9 +30,11 @@ export function SidebarRow({
   colorDot,
   selected = false,
   selectedColor = "#111111",
+  selectedTitleClassName,
   icon,
   showMenu = false,
   countNudgeLeft,
+  titleNudgeRight = 0,
   nested = false,
   onPress,
   onLongPress,
@@ -39,7 +42,7 @@ export function SidebarRow({
 }: SidebarRowProps) {
   return (
     <View
-      className={`mb-px ${nested ? "ml-[13px]" : "ml-[3px]"} mr-1.5 min-h-[45px] flex-row items-stretch gap-2 border-l-2 px-3 ${
+      className={`mb-px ${nested ? "ml-[13px]" : "ml-[2px]"} mr-1.5 min-h-[45px] flex-row items-stretch gap-2 border-l-2 px-3 ${
         selected
           ? "rounded-l-none rounded-r-[11px] border-l-lists-accent-border bg-lists-selected"
           : "rounded-[3px] border-l-transparent"
@@ -54,21 +57,25 @@ export function SidebarRow({
         className="min-w-0 flex-1 flex-row items-center gap-2 active:opacity-85"
       >
         {icon ? (
-          <View className="h-[22px] w-[22px] shrink-0 items-center justify-center">
+          <View className="h-[22px] w-[22px] mr-px shrink-0 items-center justify-center">
             {icon}
           </View>
         ) : null}
         <Text
           className={`flex-1 shrink text-[17px] mb-[1px] leading-[22px] ${
-            selected
-              ? "font-medium"
-              : nested
-                ? "font-normal text-[#676a6f]"
-                : "font-normal text-zinc-700"
+            selected && selectedTitleClassName
+              ? selectedTitleClassName
+              : selected
+                ? "font-medium"
+                : nested
+                  ? "font-normal text-[#676a6f]"
+                  : "font-normal text-zinc-700"
           }`}
           style={{
-            marginLeft: -1.5,
-            ...(selected ? { color: selectedColor } : null),
+            marginLeft: -4 + titleNudgeRight,
+            ...(selected && !selectedTitleClassName
+              ? { color: selectedColor }
+              : null),
           }}
           numberOfLines={1}
           {...(Platform.OS === "android"
@@ -88,7 +95,7 @@ export function SidebarRow({
         ) : null}
         {count !== undefined && (alwaysShowCount || count > 0) ? (
           <Text
-            className="min-w-5 ml-2 text-right text-xs tabular-nums text-[#cdcdd2]"
+            className="min-w-5 ml-2 text-right text-[11.5px] tabular-nums text-[#cdcdd2]"
             style={countNudgeLeft ? { marginRight: countNudgeLeft } : undefined}
           >
             {count}
@@ -101,13 +108,13 @@ export function SidebarRow({
           onPress={onPressMenu}
           accessibilityRole="button"
           accessibilityLabel={`Options for ${title}`}
-          className="w-7 shrink-0 items-center justify-center self-stretch rounded-lg active:bg-zinc-200/80"
+          className="w-7 ml-[2px] shrink-0 items-center justify-center self-stretch rounded-lg active:bg-zinc-200/80"
         >
           <View style={{ marginLeft: 7 }}>
             <AppSymbol
               ios="ellipsis"
               android="more-horiz"
-              size={SIDEBAR_MENU_ICON_SIZE}
+              size={12}
               tintColor={SIDEBAR_MENU_ICON_COLOR}
             />
           </View>

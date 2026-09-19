@@ -49,7 +49,6 @@ import {
   TaskPriorityFlagPopup,
 } from "@/components/task-priority-flag-popup";
 import { TbSubtaskIcon } from "@/components/tb-subtask-icon";
-import { TEXT_FORMAT_TOOLBAR_HEIGHT } from "@/components/text-format-toolbar";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
@@ -1832,7 +1831,7 @@ export function TaskDetailScreen() {
             accessibilityLabel="More options"
             hitSlop={8}
             onPress={openDetailMenu}
-            className="absolute right-2.5 top-2.5 z-20 h-[33px] w-[33px] items-center justify-center rounded-full bg-gray-100"
+            className="absolute right-2.5 top-2.5 z-20 h-[36px] w-[36px] items-center justify-center rounded-full bg-gray-100"
           >
             <AppSymbol
               ios="ellipsis"
@@ -1876,14 +1875,11 @@ export function TaskDetailScreen() {
                 className="min-w-0 flex-1 flex-row items-center gap-1"
                 onPress={() => void openListPicker()}
               >
-                <ThemedText className="shrink text-[15px]">
-                  <ThemedText style={{ color: "#797987" }}>In </ThemedText>
-                  <ThemedText
-                    className="text-base font-semibold"
-                    style={{ color: "#797987" }}
-                  >
-                    {resolvedListName}
-                  </ThemedText>
+                <ThemedText
+                  className="shrink text-base font-semibold"
+                  style={{ color: "#797987" }}
+                >
+                  {resolvedListName}
                 </ThemedText>
                 <AppSymbol
                   ios="chevron.down"
@@ -1899,10 +1895,13 @@ export function TaskDetailScreen() {
                 className="mr-2 -ml-1 shrink-0 flex-row items-center gap-1 py-1"
                 onPress={() => setDatePickerOpen(true)}
               >
-                <IoMdTimeIcon size={17} color="#a6a6a6" />
+                <IoMdTimeIcon size={18} color="#a6a6a6" />
                 <ThemedText
-                  className={dueDateLabel ? "font-normal" : undefined}
-                  style={{ color: "#a6a6a6", fontSize: dueDateLabel ? 17 : 16 }}
+                  className={`${dueDateLabel ? "font-normal" : ""} ml-px`.trim()}
+                  style={{
+                    color: "#a6a6a6",
+                    fontSize: dueDateLabel ? 15.5 : 14.5,
+                  }}
                 >
                   {dueDateLabel ?? "Date & Reminder"}
                 </ThemedText>
@@ -1960,7 +1959,7 @@ export function TaskDetailScreen() {
                       : undefined
                   }
                 >
-                  <View className="relative -mt-[5px] mb-[5px] flex-row items-start gap-2 pt-px">
+                  <View className="relative -mt-[3px] mb-[7px] flex-row items-start gap-2 pt-px">
                     <TextInput
                       value={draftName}
                       onChangeText={(value) => {
@@ -2331,10 +2330,7 @@ export function TaskDetailScreen() {
                   label="Date"
                   onPress={() => setDatePickerOpen(true)}
                 >
-                  <IoMdTimeIcon
-                    size={TOOLBAR_LABELED_ICON_SIZE}
-                    color={TOOLBAR_ICON_COLOR}
-                  />
+                  <IoMdTimeIcon size={28} color={TOOLBAR_ICON_COLOR} />
                 </DetailToolbarLabeledItem>
                 <View className="relative z-[31] justify-center">
                   <DetailToolbarLabeledItem

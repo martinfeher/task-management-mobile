@@ -101,18 +101,18 @@ export function ListsFolderRow({
       accessibilityRole="button"
       accessibilityState={{ expanded }}
       accessibilityLabel={folder.name}
-      className="mb-1 ml-[11px] mr-1.5 min-h-[34px] flex-row items-center rounded-md px-1.5 active:bg-zinc-200/60"
+      className="mb-1 ml-[10px] mr-1.5 min-h-[34px] flex-row items-center rounded-md px-1.5 active:bg-zinc-200/60"
     >
       <AppSymbol
         ios={expanded ? "folder.fill" : "folder"}
         android="folder"
-        size={20}
+        size={22}
         tintColor="#98b5c7"
         style={{ marginLeft: -1 }}
       />
       <View
         className="min-w-0 flex-1 flex-row items-center gap-1 pr-8"
-        style={{ paddingLeft: 8 }}
+        style={{ paddingLeft: 6 }}
       >
         <Text
           className="min-w-0 flex-1 text-[17px] font-normal text-zinc-700"
@@ -158,7 +158,7 @@ export function ListsSidebarListRow({
       title={list.name}
       count={list.taskCount}
       selected={selected}
-      selectedColor="#424242"
+      selectedTitleClassName="font-normal text-zinc-700"
       nested={nested}
       icon={
         <View style={{ marginLeft: -3 }}>

@@ -26,7 +26,8 @@ export function TodayCalendarIcon({
           borderColor: color,
           borderWidth: strokeWidth,
         },
-      ]}>
+      ]}
+    >
       <View
         style={[
           styles.headerLine,
@@ -35,16 +36,10 @@ export function TodayCalendarIcon({
       />
       <View style={styles.hooks}>
         <View
-          style={[
-            styles.hook,
-            { backgroundColor: color, width: strokeWidth },
-          ]}
+          style={[styles.hook, { backgroundColor: color, width: strokeWidth }]}
         />
         <View
-          style={[
-            styles.hook,
-            { backgroundColor: color, width: strokeWidth },
-          ]}
+          style={[styles.hook, { backgroundColor: color, width: strokeWidth }]}
         />
       </View>
       <Text style={[styles.day, { color, fontSize }]}>{dayLabel}</Text>

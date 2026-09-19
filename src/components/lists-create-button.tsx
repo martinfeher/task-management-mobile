@@ -6,8 +6,8 @@ import { LiquidGlassSurface } from "@/components/liquid-glass-surface";
 import { ListsCreateSubmenu } from "@/components/lists-create-submenu";
 
 const CREATE_COLOR = "#6f88e7";
-const CREATE_ICON_WIDTH = 25;
-const CREATE_ICON_HEIGHT = 26;
+const CREATE_ICON_SIZE = 22;
+const CREATE_TEXT_LINE_HEIGHT = 17;
 
 type ListsCreateButtonProps = {
   onCreateList: () => void;
@@ -67,21 +67,33 @@ export function ListsCreateButton({
       >
         <LiquidGlassSurface borderRadius={16} isInteractive>
           <View className="flex-row items-center gap-1.5 px-[9px] py-2">
-            <IoAddOutlineIcon
-              width={CREATE_ICON_WIDTH}
-              height={CREATE_ICON_HEIGHT}
-              color={CREATE_COLOR}
-            />
-            <Text
-              className="text-[17px] font-medium leading-5 text-[#6f88e7]"
-              style={
-                Platform.OS === "android"
-                  ? { includeFontPadding: false }
-                  : undefined
-              }
+            <View
+              className="items-center justify-center"
+              style={{ width: CREATE_ICON_SIZE, height: CREATE_ICON_SIZE }}
             >
-              Create
-            </Text>
+              <IoAddOutlineIcon
+                width={CREATE_ICON_SIZE}
+                height={CREATE_ICON_SIZE}
+                color={CREATE_COLOR}
+              />
+            </View>
+            <View
+              className="justify-center"
+              style={{ height: CREATE_ICON_SIZE }}
+            >
+              <Text
+                className="text-[17px] mt-[3px] pr-[3px] font-medium text-[#6f88e7]"
+                style={{
+                  lineHeight: CREATE_TEXT_LINE_HEIGHT,
+                  includeFontPadding: false,
+                  ...(Platform.OS === "android"
+                    ? { textAlignVertical: "center" as const }
+                    : null),
+                }}
+              >
+                Create
+              </Text>
+            </View>
           </View>
         </LiquidGlassSurface>
       </Pressable>
