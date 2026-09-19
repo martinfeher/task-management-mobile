@@ -679,16 +679,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const reorderTasks = useCallback((section: "tasks" | "pinned", tasks: TaskItem[]) => {
-    setTaskData((current) =>
-      current
-        ? {
-            ...current,
-            [section]: tasks,
-          }
-        : current,
-    );
-
     const view = selectedViewRef.current;
+    setTaskData((current) => {
+      if (!current) return current;
+
+      const next = {
+        ...current,
+        [section]: tasks,
+      };
+
+      if (view) {
+        writeTasksSession(view, next);
+      }
+
+      return next;
+    });
+
     if (view?.type !== "list") return;
 
     void reorderTasksRequest({

@@ -107,7 +107,8 @@ export function ListsFolderRow({
         ios={expanded ? "folder.fill" : "folder"}
         android="folder"
         size={20}
-        tintColor={navIconColor}
+        tintColor="#98b5c7"
+        style={{ marginLeft: -1 }}
       />
       <View
         className="min-w-0 flex-1 flex-row items-center gap-1 pr-8"
@@ -160,10 +161,12 @@ export function ListsSidebarListRow({
       selectedColor="#424242"
       nested={nested}
       icon={
-        <ListIcon
-          size={18}
-          color={selected ? "#383838" : nested ? "#676a6f" : navIconColor}
-        />
+        <View style={{ marginLeft: -3 }}>
+          <ListIcon
+            size={17}
+            color={selected ? "#8a919d" : nested ? "#b3b8ca" : "#b3b8ca"}
+          />
+        </View>
       }
       showMenu={!nested}
       onPress={() => onSelectView({ type: "list", id: list.id })}

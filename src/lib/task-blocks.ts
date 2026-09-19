@@ -30,3 +30,27 @@ export function tasksToBlocks(tasks: TaskItem[]): TaskBlock[] {
 export function blocksToTasks(blocks: TaskBlock[]): TaskItem[] {
   return blocks.flatMap((block) => [block.root, ...block.children]);
 }
+
+/** Apply drag result; fall back to from/to when the library returns unchanged data. */
+export function reorderBlocks(
+  blocks: TaskBlock[],
+  data: TaskBlock[],
+  from: number,
+  to: number,
+): TaskBlock[] {
+  if (from === to) return blocks;
+
+  const dataOrder = data.map((block) => block.id).join(",");
+  const currentOrder = blocks.map((block) => block.id).join(",");
+  if (dataOrder !== currentOrder) return data;
+
+  const next = [...blocks];
+  const [moved] = next.splice(from, 1);
+  if (!moved) return blocks;
+  next.splice(to, 0, moved);
+  return next;
+}
+
+export function getBlockOrderVersion(blocks: TaskBlock[]) {
+  return blocks.map((block) => block.id).join(",");
+}

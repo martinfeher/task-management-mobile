@@ -1,16 +1,13 @@
 import { useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 
 import { IoAddOutlineIcon } from "@/components/io-add-outline-icon";
 import { LiquidGlassSurface } from "@/components/liquid-glass-surface";
 import { ListsCreateSubmenu } from "@/components/lists-create-submenu";
 
 const CREATE_COLOR = "#6f88e7";
-const CREATE_GAP_ABOVE_TAB_BAR = 9;
 const CREATE_ICON_WIDTH = 25;
 const CREATE_ICON_HEIGHT = 26;
-const CREATE_LEFT_INSET = 16;
-const MENU_GAP_ABOVE_BUTTON = 8;
 
 type ListsCreateButtonProps = {
   onCreateList: () => void;
@@ -38,10 +35,14 @@ export function ListsCreateButton({
   }
 
   return (
-    <View pointerEvents="box-none" style={styles.host}>
+    <View
+      pointerEvents="box-none"
+      className="absolute inset-0 z-[99998]"
+      style={{ elevation: 99998 }}
+    >
       {menuOpen ? (
         <Pressable
-          style={styles.backdrop}
+          className="absolute inset-0"
           onPress={closeMenu}
           accessibilityRole="button"
           accessibilityLabel="Dismiss create menu"
@@ -49,7 +50,7 @@ export function ListsCreateButton({
       ) : null}
 
       {menuOpen ? (
-        <View style={styles.menuHost}>
+        <View className="absolute bottom-[51px] left-4">
           <ListsCreateSubmenu
             onCreateList={handleCreateList}
             onCreateLabel={handleCreateLabel}
@@ -58,69 +59,32 @@ export function ListsCreateButton({
       ) : null}
 
       <Pressable
-        style={styles.buttonHost}
+        className="absolute bottom-[9px] left-4"
         accessibilityRole="button"
         accessibilityLabel="Create"
         accessibilityState={{ expanded: menuOpen }}
         onPress={() => setMenuOpen((open) => !open)}
       >
-        <LiquidGlassSurface
-          style={styles.buttonGlass}
-          borderRadius={12}
-          isInteractive
-        >
-          <View style={styles.buttonContent}>
+        <LiquidGlassSurface borderRadius={16} isInteractive>
+          <View className="flex-row items-center gap-1.5 px-[9px] py-2">
             <IoAddOutlineIcon
               width={CREATE_ICON_WIDTH}
               height={CREATE_ICON_HEIGHT}
               color={CREATE_COLOR}
             />
-            <Text style={styles.buttonLabel}>Create</Text>
+            <Text
+              className="text-[17px] font-medium leading-5 text-[#6f88e7]"
+              style={
+                Platform.OS === "android"
+                  ? { includeFontPadding: false }
+                  : undefined
+              }
+            >
+              Create
+            </Text>
           </View>
         </LiquidGlassSurface>
       </Pressable>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  host: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    zIndex: 99998,
-    elevation: 99998,
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-  },
-  buttonHost: {
-    position: "absolute",
-    left: CREATE_LEFT_INSET,
-    bottom: CREATE_GAP_ABOVE_TAB_BAR,
-  },
-  buttonGlass: {
-    alignSelf: "flex-start",
-  },
-  buttonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 9,
-  },
-  buttonLabel: {
-    fontSize: 17,
-    lineHeight: 20,
-    fontWeight: "500",
-    color: CREATE_COLOR,
-    ...(Platform.OS === "android" ? { includeFontPadding: false } : null),
-  },
-  menuHost: {
-    position: "absolute",
-    left: CREATE_LEFT_INSET,
-    bottom: CREATE_GAP_ABOVE_TAB_BAR + 34 + MENU_GAP_ABOVE_BUTTON,
-  },
-});

@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppSymbol } from "@/components/app-symbol";
-import { CgMoveLeftIcon } from "@/components/cg-move-left-icon";
+import { FiChevronLeftIcon } from "@/components/fi-chevron-left-icon";
 import { TaskRow } from "@/components/task-row";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
@@ -101,7 +101,7 @@ export function TaskListShell({
               accessibilityLabel="Open lists"
               style={styles.listsNavButton}
             >
-              <CgMoveLeftIcon size={30} color="#a4a4b4" />
+              <FiChevronLeftIcon size={30} color="#a4a4b4" />
             </Pressable>
           ) : null}
           <ThemedText style={styles.headerTitle} numberOfLines={1}>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -8,12 +8,14 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from "react-native";
 
 import { AppSymbol } from "@/components/app-symbol";
+import { IoMdTimeIcon } from "@/components/io-md-time-icon";
 import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
 import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
 import { getTaskPriorityColor } from "@/components/task-priority-flag-popup";
@@ -25,6 +27,7 @@ import { ThemedText } from "@/components/themed-text";
 import { useApp } from "@/contexts/app-context";
 import { fetchLabels } from "@/lib/api";
 import { formatTaskDueDate } from "@/lib/format-due-date";
+import { getLabelDotColor } from "@/lib/label-colors";
 import { nextTaskNamePlaceholder } from "@/lib/task-name-placeholders";
 import { findInboxList } from "@/lib/inbox-list";
 import type { SidebarListItem, TaskLabel } from "@/types/todo";
@@ -79,6 +82,22 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
     findInboxList(lists);
   const dueDateLabel = formatTaskDueDate(dueDate);
   const assignedLabelIds = new Set(labelIds);
+  const composerLabels = useMemo(() => {
+    const byId = new Map<string, TaskLabel>();
+    for (const label of sidebarData?.labels ?? []) {
+      byId.set(label.id, {
+        id: label.id,
+        label: label.label,
+        color: label.color,
+      });
+    }
+    for (const label of allLabels) {
+      byId.set(label.id, label);
+    }
+    return labelIds
+      .map((id) => byId.get(id))
+      .filter((label): label is TaskLabel => label != null);
+  }, [allLabels, labelIds, sidebarData?.labels]);
 
   function focusTitleInput() {
     InteractionManager.runAfterInteractions(() => {
@@ -351,10 +370,31 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                   {priority != null ? (
                     <ThemedText style={styles.metaChip}>P{priority}</ThemedText>
                   ) : null}
-                  {labelIds.length > 0 ? (
-                    <ThemedText style={styles.metaChip}>
-                      {labelIds.length} label{labelIds.length === 1 ? "" : "s"}
-                    </ThemedText>
+                  {composerLabels.length > 0 ? (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.labelChipRow}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {composerLabels.map((label) => (
+                        <Pressable
+                          key={label.id}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Label ${label.label}, edit labels`}
+                          onPress={() => void openLabelPicker()}
+                          style={({ pressed }) => [
+                            styles.labelChip,
+                            { backgroundColor: getLabelDotColor(label) },
+                            pressed && styles.labelChipPressed,
+                          ]}
+                        >
+                          <ThemedText style={styles.labelChipText}>
+                            {label.label}
+                          </ThemedText>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
                   ) : null}
                 </View>
               ) : null}
@@ -404,11 +444,9 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                           styles.toolbarIconSlot,
                           pressed && styles.toolbarIconPressed,
                         ]}>
-                        <AppSymbol
-                          ios="calendar"
-                          android="event"
+                        <IoMdTimeIcon
                           size={TOOLBAR_LABELED_ICON_SIZE}
-                          tintColor={dueDate ? ACTIVE_ICON_COLOR : ICON_COLOR}
+                          color={dueDate ? ACTIVE_ICON_COLOR : ICON_COLOR}
                         />
                       </Pressable>
                       <Pressable
@@ -697,6 +735,26 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
     overflow: "hidden",
+  },
+  labelChipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  labelChip: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 2.25,
+    flexShrink: 0,
+  },
+  labelChipPressed: {
+    opacity: 0.85,
+  },
+  labelChipText: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: "600",
+    color: "#ffffff",
   },
   priorityMenu: {
     marginTop: 8,

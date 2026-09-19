@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import {
   ActivityIndicator,
@@ -17,12 +18,9 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   TextInput,
   useWindowDimensions,
   View,
-  type StyleProp,
-  type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FullWindowOverlay } from "react-native-screens";
@@ -36,6 +34,7 @@ import {
   FormattedNotesInput,
   type NotesInputHandle,
 } from "@/components/formatted-notes-input";
+import { IoMdTimeIcon } from "@/components/io-md-time-icon";
 import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
 import { TaskCheckbox } from "@/components/task-checkbox";
 import {
@@ -183,13 +182,15 @@ const TASK_SHEET_MIN_HEIGHT_FRACTION = 0.47;
 /** Max scroll area when notes are long; keeps the sheet from exceeding ~80% screen. */
 const TASK_SHEET_MAX_HEIGHT_FRACTION = 0.8;
 const TASK_DETAIL_HANDLE_HEIGHT = 28;
-const TASK_DETAIL_TOOLBAR_BODY_HEIGHT = 52;
+const TASK_DETAIL_TOOLBAR_BODY_HEIGHT = 56;
 const TOOLBAR_BOTTOM_SHIFT = 10;
-const TOOLBAR_ROW_NUDGE_DOWN = 0;
 const SCHEDULE_UNDO_ABOVE_GAP = 10;
 const SCHEDULE_UNDO_RIGHT_INSET = 7;
 const SCHEDULE_UNDO_BUTTON_HEIGHT = 36;
 const SCHEDULE_UNDO_DURATION_MS = 6000;
+const MARK_COMPLETE_BOTTOM_OFFSET = 57;
+const MARK_COMPLETE_BUTTON_HEIGHT = 26;
+const HISTORY_ACTIONS_ABOVE_MARK_COMPLETE = 7;
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -1164,7 +1165,13 @@ export function TaskDetailScreen() {
       if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
       cancelPendingHistoryCommit();
     };
-  }, [cancelPendingHistoryCommit, clearNotesSelection, fromCalendar, id, setCalendarTaskColor]);
+  }, [
+    cancelPendingHistoryCommit,
+    clearNotesSelection,
+    fromCalendar,
+    id,
+    setCalendarTaskColor,
+  ]);
 
   useEffect(() => {
     if (loading || !id) {
@@ -1658,14 +1665,12 @@ export function TaskDetailScreen() {
   const canRedo = historyRef.current.future.length > 0;
   void historyVersion;
 
-  // Float the undo/redo pair 4px above whatever currently occupies that
-  // resting spot: the text-formatting toolbar's top edge while it's open,
-  // or the bottom icon row (Date/Flag/Label/subtask/mic) otherwise. Both
-  // cases share `toolbarBottomOffset` as the anchor because that's the same
-  // value the toolbar itself uses to hover above the keyboard/footer.
-  const historyActionsBottomOffset = showFormatToolbar
-    ? toolbarBottomOffset + TEXT_FORMAT_TOOLBAR_HEIGHT + 4
-    : toolbarBottomOffset + 4;
+  // Anchor undo/redo 7px above the Mark complete pill (same horizontal stack).
+  const historyActionsBottomOffset =
+    (keyboardHeight > 0 ? keyboardHeight : 0) +
+    MARK_COMPLETE_BOTTOM_OFFSET +
+    MARK_COMPLETE_BUTTON_HEIGHT +
+    HISTORY_ACTIONS_ABOVE_MARK_COMPLETE;
 
   useHistoryActionsRegistration(
     !loading && !datePickerOpen,
@@ -1741,12 +1746,14 @@ export function TaskDetailScreen() {
 
   const scheduleUndoOverlay = scheduleUndoSnapshot ? (
     Platform.OS === "web" ? (
-      <View style={styles.scheduleUndoOverlay} pointerEvents="box-none">
+      <View className="absolute inset-0 z-[100]" pointerEvents="box-none">
         <Pressable
-          style={[
-            styles.scheduleUndoButton,
-            { top: scheduleUndoTop, right: SCHEDULE_UNDO_RIGHT_INSET },
-          ]}
+          className="absolute h-9 flex-row items-center gap-1.5 rounded-full bg-gray-100 px-3.5 shadow-sm"
+          style={{
+            top: scheduleUndoTop,
+            right: SCHEDULE_UNDO_RIGHT_INSET,
+            elevation: 4,
+          }}
           onPress={() => void handleScheduleUndo()}
           accessibilityRole="button"
           accessibilityLabel="Undo clear date and time"
@@ -1757,17 +1764,21 @@ export function TaskDetailScreen() {
             size={14}
             tintColor="#374151"
           />
-          <ThemedText style={styles.scheduleUndoButtonText}>Undo</ThemedText>
+          <ThemedText className="text-sm font-semibold text-gray-700">
+            Undo
+          </ThemedText>
         </Pressable>
       </View>
     ) : (
       <FullWindowOverlay>
-        <View style={styles.scheduleUndoOverlay} pointerEvents="box-none">
+        <View className="absolute inset-0 z-[100]" pointerEvents="box-none">
           <Pressable
-            style={[
-              styles.scheduleUndoButton,
-              { top: scheduleUndoTop, right: SCHEDULE_UNDO_RIGHT_INSET },
-            ]}
+            className="absolute h-9 flex-row items-center gap-1.5 rounded-full bg-gray-100 px-3.5 shadow-sm"
+            style={{
+              top: scheduleUndoTop,
+              right: SCHEDULE_UNDO_RIGHT_INSET,
+              elevation: 4,
+            }}
             onPress={() => void handleScheduleUndo()}
             accessibilityRole="button"
             accessibilityLabel="Undo clear date and time"
@@ -1778,7 +1789,9 @@ export function TaskDetailScreen() {
               size={14}
               tintColor="#374151"
             />
-            <ThemedText style={styles.scheduleUndoButtonText}>Undo</ThemedText>
+            <ThemedText className="text-sm font-semibold text-gray-700">
+              Undo
+            </ThemedText>
           </Pressable>
         </View>
       </FullWindowOverlay>
@@ -1788,8 +1801,8 @@ export function TaskDetailScreen() {
   return (
     <>
       <KeyboardAvoidingView
+        className="relative bg-white"
         style={[
-          styles.container,
           { minHeight: sheetMinHeight },
           expandedFullscreen && { minHeight: expandedContainerHeight },
         ]}
@@ -1799,19 +1812,19 @@ export function TaskDetailScreen() {
         <View
           ref={sheetContainerRef}
           onLayout={measureSheetTop}
-          style={styles.sheetMeasureRoot}
+          className="flex-1"
           collapsable={false}
         >
           {calendarColorPickerOpen ? (
             <Pressable
-              style={styles.priorityBackdrop}
+              className="absolute inset-0 z-30"
               onPress={() => setCalendarColorPickerOpen(false)}
               accessibilityRole="button"
               accessibilityLabel="Dismiss color picker"
             />
           ) : null}
-          <View style={styles.handleRow}>
-            <View style={styles.handle} />
+          <View className="items-center pb-1 pt-2">
+            <View className="h-[5px] w-11 rounded-[3px] bg-gray-300" />
           </View>
 
           <Pressable
@@ -1819,7 +1832,7 @@ export function TaskDetailScreen() {
             accessibilityLabel="More options"
             hitSlop={8}
             onPress={openDetailMenu}
-            style={styles.headerMenuButton}
+            className="absolute right-2.5 top-2.5 z-20 h-[33px] w-[33px] items-center justify-center rounded-full bg-gray-100"
           >
             <AppSymbol
               ios="ellipsis"
@@ -1836,13 +1849,21 @@ export function TaskDetailScreen() {
                 ? { minHeight: expandedScrollHeight }
                 : { maxHeight: maxScrollHeight }
             }
-            contentContainerStyle={[
-              styles.contentContainer,
-              expandedFullscreen && {
-                minHeight: expandedScrollHeight,
-                flexGrow: 1,
-              },
-            ]}
+            contentContainerStyle={
+              expandedFullscreen
+                ? {
+                    minHeight: expandedScrollHeight,
+                    flexGrow: 1,
+                    paddingLeft: Spacing.three,
+                    paddingRight: Spacing.three - 2,
+                    paddingBottom: Spacing.two,
+                  }
+                : {
+                    paddingLeft: Spacing.three,
+                    paddingRight: Spacing.three - 2,
+                    paddingBottom: Spacing.two,
+                  }
+            }
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             nestedScrollEnabled
@@ -1850,14 +1871,17 @@ export function TaskDetailScreen() {
             scrollEnabled={!priorityMenuOpen}
             pointerEvents={priorityMenuOpen ? "none" : "auto"}
           >
-            <View style={styles.listHeaderRow}>
+            <View className="-mt-[2px] flex-row items-center gap-2 pb-1 pr-10 pt-1">
               <Pressable
-                style={styles.listBadge}
+                className="min-w-0 flex-1 flex-row items-center gap-1"
                 onPress={() => void openListPicker()}
               >
-                <ThemedText style={styles.listPickerText}>
-                  <ThemedText style={styles.listPickerPrefix}>In </ThemedText>
-                  <ThemedText style={styles.listPickerBold}>
+                <ThemedText className="shrink text-[15px]">
+                  <ThemedText style={{ color: "#797987" }}>In </ThemedText>
+                  <ThemedText
+                    className="text-base font-semibold"
+                    style={{ color: "#797987" }}
+                  >
                     {resolvedListName}
                   </ThemedText>
                 </ThemedText>
@@ -1865,48 +1889,20 @@ export function TaskDetailScreen() {
                   ios="chevron.down"
                   android="keyboard-arrow-down"
                   size={14}
-                  tintColor="#8b95a5"
+                  tintColor="#797987"
                 />
               </Pressable>
             </View>
 
-            <View style={styles.dateRow}>
+            <View className="flex-row items-center gap-2 pb-2">
               <Pressable
-                style={styles.dateCheckboxHit}
-                onPress={handleDateCheckboxPress}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: detail?.completed ?? false }}
-                accessibilityLabel={
-                  detail?.completed
-                    ? "Mark task incomplete"
-                    : "Mark task complete"
-                }
-              >
-                <View
-                  style={[
-                    styles.dateCheckbox,
-                    detail?.completed && styles.dateCheckboxDone,
-                  ]}
-                >
-                  {detail?.completed ? (
-                    <AppSymbol
-                      ios="checkmark"
-                      android="check"
-                      size={12}
-                      tintColor="#ffffff"
-                    />
-                  ) : null}
-                </View>
-              </Pressable>
-              <Pressable
-                style={styles.dateLabelPressable}
+                className="mr-2 -ml-1 shrink-0 flex-row items-center gap-1 py-1"
                 onPress={() => setDatePickerOpen(true)}
               >
+                <IoMdTimeIcon size={17} color="#a6a6a6" />
                 <ThemedText
-                  style={[
-                    styles.dateLabel,
-                    dueDateLabel && styles.dateLabelSet,
-                  ]}
+                  className={dueDateLabel ? "font-normal" : undefined}
+                  style={{ color: "#a6a6a6", fontSize: dueDateLabel ? 17 : 16 }}
                 >
                   {dueDateLabel ?? "Date & Reminder"}
                 </ThemedText>
@@ -1914,8 +1910,13 @@ export function TaskDetailScreen() {
               {!loading && (detail?.labels ?? []).length > 0 ? (
                 <ScrollView
                   horizontal
-                  style={styles.dateLabelsScroll}
-                  contentContainerStyle={styles.dateLabelsScrollContent}
+                  className="ml-[3px] min-w-0 flex-1"
+                  contentContainerStyle={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: Spacing.one,
+                    paddingRight: Spacing.one,
+                  }}
                   showsHorizontalScrollIndicator={false}
                   nestedScrollEnabled
                   keyboardShouldPersistTaps="handled"
@@ -1926,13 +1927,16 @@ export function TaskDetailScreen() {
                       accessibilityRole="button"
                       accessibilityLabel={`Label ${label.label}, edit labels`}
                       onPress={() => setLabelPickerOpen(true)}
-                      style={({ pressed }) => [
-                        styles.labelChip,
-                        { backgroundColor: getLabelDotColor(label) },
-                        pressed && styles.labelChipPressed,
-                      ]}
+                      className="shrink-0 rounded-full px-2.5 active:opacity-85"
+                      style={({ pressed }) => ({
+                        backgroundColor: getLabelDotColor(label),
+                        opacity: pressed ? 0.85 : 1,
+                      })}
                     >
-                      <ThemedText style={styles.labelChipText}>
+                      <ThemedText
+                        className="font-semibold leading-[13px]"
+                        style={{ color: "#ffffff", fontSize: 10 }}
+                      >
                         {label.label}
                       </ThemedText>
                     </Pressable>
@@ -1942,19 +1946,21 @@ export function TaskDetailScreen() {
             </View>
 
             {loading ? (
-              <ActivityIndicator style={styles.loader} color="#3c87f7" />
+              <ActivityIndicator className="mt-6" color="#3c87f7" />
             ) : (
               <>
                 <View
-                  style={[
-                    styles.taskBody,
-                    expandedFullscreen && {
-                      minHeight: expandedTaskBodyHeight,
-                      flexGrow: 1,
-                    },
-                  ]}
+                  className="w-full"
+                  style={
+                    expandedFullscreen
+                      ? {
+                          minHeight: expandedTaskBodyHeight,
+                          flexGrow: 1,
+                        }
+                      : undefined
+                  }
                 >
-                  <View style={styles.titleRow}>
+                  <View className="relative -mt-[5px] mb-[5px] flex-row items-start gap-2 pt-px">
                     <TextInput
                       value={draftName}
                       onChangeText={(value) => {
@@ -1972,11 +1978,13 @@ export function TaskDetailScreen() {
                       }}
                       placeholder="Task name"
                       placeholderTextColor="#9ca3af"
-                      style={[
-                        styles.taskTitleInput,
-                        openedFromCalendar &&
-                          styles.taskTitleInputWithCalendarColor,
-                      ]}
+                      className="flex-1 p-0 text-[27px] font-bold leading-9"
+                      style={{
+                        color: "#454545",
+                        ...(openedFromCalendar
+                          ? { paddingRight: calendarColorTitleReserveSpace }
+                          : null),
+                      }}
                       multiline
                       blurOnSubmit
                       returnKeyType="done"
@@ -2117,7 +2125,12 @@ export function TaskDetailScreen() {
                       }}
                       placeholder="Add notes"
                       placeholderTextColor="#9ca3af"
-                      style={styles.notesInput}
+                      style={{
+                        padding: 0,
+                        fontSize: 17,
+                        lineHeight: 26,
+                        color: "#374151",
+                      }}
                       notesMinHeight={
                         expandedFullscreen ? expandedNotesHeight : undefined
                       }
@@ -2131,9 +2144,9 @@ export function TaskDetailScreen() {
                 </View>
 
                 {subtasksSectionOpen ? (
-                  <View style={styles.subtasksSection}>
+                  <View className="mt-[18px] px-4">
                     <Pressable
-                      style={styles.subtasksHeader}
+                      className="flex-row items-center gap-1.5 py-1"
                       onPress={() =>
                         setSubtasksExpanded((expanded) => !expanded)
                       }
@@ -2142,33 +2155,33 @@ export function TaskDetailScreen() {
                       accessibilityLabel="Sub-tasks"
                     >
                       <View
-                        style={[
-                          styles.subtasksChevron,
-                          subtasksExpanded && styles.subtasksChevronExpanded,
-                        ]}
+                        className={subtasksExpanded ? "rotate-90" : "rotate-0"}
                       >
                         <AppSymbol
                           ios="chevron.right"
                           android="chevron-right"
-                          size={11}
+                          size={20}
                           tintColor="#9ca3af"
                         />
                       </View>
-                      <ThemedText style={styles.subtasksHeaderText}>
+                      <ThemedText className="text-xs font-medium leading-4 text-gray-400">
                         sub-tasks
                       </ThemedText>
                     </Pressable>
                     {subtasksExpanded ? (
-                      <View style={styles.subtasksContent}>
+                      <View className="mt-1.5 gap-2">
                         {subtasksLoading ? (
                           <ActivityIndicator
                             size="small"
                             color="#4873c7"
-                            style={styles.subtasksLoader}
+                            className="mb-1 self-start"
                           />
                         ) : null}
                         {subtasks.map((subtask) => (
-                          <View key={subtask.id} style={styles.subtaskRow}>
+                          <View
+                            key={subtask.id}
+                            className="min-h-[34px] flex-row items-center gap-2.5"
+                          >
                             <TaskCheckbox
                               checked={subtask.completed}
                               accessibilityLabel={
@@ -2184,10 +2197,11 @@ export function TaskDetailScreen() {
                               }
                             />
                             <ThemedText
-                              style={[
-                                styles.subtaskName,
-                                subtask.completed && styles.subtaskNameDone,
-                              ]}
+                              className={`flex-1 text-sm leading-[22px] text-[#626b83] ${
+                                subtask.completed
+                                  ? "text-gray-400 line-through"
+                                  : ""
+                              }`}
                               numberOfLines={2}
                             >
                               {subtask.name}
@@ -2195,14 +2209,14 @@ export function TaskDetailScreen() {
                           </View>
                         ))}
                         {subtaskInputOpen ? (
-                          <View style={styles.subtaskRow}>
-                            <View style={styles.subtaskDraftCheckbox} />
+                          <View className="min-h-[34px] flex-row items-center gap-2.5">
+                            <View className="h-[22px] w-[22px] rounded-xl border-[1.5px] border-[#dad4d5] bg-white" />
                             <TextInput
                               ref={subtaskInputRef}
                               value={subtaskName}
                               onChangeText={setSubtaskName}
                               autoFocus
-                              style={styles.subtaskAddInput}
+                              className="flex-1 py-1 text-base leading-[22px] text-gray-900"
                               returnKeyType="done"
                               blurOnSubmit={false}
                               onSubmitEditing={() => void handleAddSubtask()}
@@ -2225,7 +2239,13 @@ export function TaskDetailScreen() {
                       <Image
                         key={`image-${index}`}
                         source={{ uri: block.uri }}
-                        style={styles.detailImage}
+                        style={{
+                          width: "100%",
+                          height: 240,
+                          borderRadius: 18,
+                          marginBottom: Spacing.three,
+                          backgroundColor: "#f3f4f6",
+                        }}
                         contentFit="cover"
                       />
                     );
@@ -2234,12 +2254,12 @@ export function TaskDetailScreen() {
                   return (
                     <Pressable
                       key={`link-${index}`}
-                      style={styles.linkRow}
+                      className="mb-4 flex-row items-center gap-1.5"
                       onPress={() =>
                         void WebBrowser.openBrowserAsync(block.href)
                       }
                     >
-                      <ThemedText style={styles.detailLink}>
+                      <ThemedText className="shrink text-base leading-6 text-blue-600">
                         {block.text}
                       </ThemedText>
                       <AppSymbol
@@ -2255,160 +2275,153 @@ export function TaskDetailScreen() {
             )}
           </ScrollView>
 
-          <View style={[styles.toolbar, toolbarSafeAreaStyle]}>
+          {!loading && detail ? (
+            <Pressable
+              onPress={handleDateCheckboxPress}
+              accessibilityRole="button"
+              accessibilityLabel={
+                detail.completed ? "Mark task incomplete" : "Mark task complete"
+              }
+              className="absolute z-20 flex-row items-center gap-[5px] rounded-full border border-[#e3e3e3] bg-[#f7f7f7] px-3.5 py-[5px] active:opacity-85"
+              style={{
+                right: 10,
+                bottom: MARK_COMPLETE_BOTTOM_OFFSET,
+              }}
+            >
+              <AppSymbol
+                ios="checkmark"
+                android="check"
+                size={12}
+                tintColor="#6b7280"
+              />
+              <ThemedText
+                style={{
+                  color: "#6b7280",
+                  fontSize: 11,
+                  fontWeight: "500",
+                }}
+              >
+                {detail.completed ? "Mark incomplete" : "Mark complete"}
+              </ThemedText>
+            </Pressable>
+          ) : null}
+
+          <View
+            className="border-t border-gray-200 bg-white pt-2"
+            style={toolbarSafeAreaStyle}
+          >
             {saveStatusLabel ? (
               <ThemedText
-                style={[
-                  styles.saveStatus,
-                  saveStatus === "error" && styles.saveStatusError,
-                ]}
+                className={`px-4 pb-1 text-xs text-gray-500 ${
+                  saveStatus === "error" ? "text-red-600" : ""
+                }`}
               >
                 {saveStatusLabel}
               </ThemedText>
             ) : null}
-            <View style={styles.toolbarControls}>
-              <View style={styles.iconRow}>
-                <View style={styles.toolbarLabeledItem}>
-                  <DetailToolbarIcon
-                    accessibilityLabel="Date"
-                    ios="calendar"
-                    android="event"
-                    tintColor={TOOLBAR_ICON_COLOR}
+            <View
+              className="justify-end px-4"
+              style={{
+                minHeight: TASK_DETAIL_TOOLBAR_BODY_HEIGHT - Spacing.two,
+              }}
+            >
+              <View className="min-w-0 flex-row items-start gap-8">
+                <DetailToolbarLabeledItem
+                  accessibilityLabel="Date"
+                  label="Date"
+                  onPress={() => setDatePickerOpen(true)}
+                >
+                  <IoMdTimeIcon
                     size={TOOLBAR_LABELED_ICON_SIZE}
-                    onPress={() => setDatePickerOpen(true)}
+                    color={TOOLBAR_ICON_COLOR}
                   />
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Date"
-                    hitSlop={6}
-                    onPress={() => setDatePickerOpen(true)}
+                </DetailToolbarLabeledItem>
+                <View className="relative z-[31] justify-center">
+                  <DetailToolbarLabeledItem
+                    accessibilityLabel="Priority"
+                    label="Priority"
+                    labelColor={
+                      detail?.priority != null
+                        ? getTaskPriorityColor(detail.priority)
+                        : undefined
+                    }
+                    onPress={() => setPriorityMenuOpen((open) => !open)}
                   >
-                    <ThemedText style={styles.toolbarCaption}>Date</ThemedText>
-                  </Pressable>
-                </View>
-                <View style={styles.flagAnchor}>
-                  <View style={styles.toolbarLabeledItem}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Priority"
-                      hitSlop={8}
-                      onPress={() => setPriorityMenuOpen((open) => !open)}
-                      style={({ pressed }) => [
-                        detailToolbarStyles.toolbarIconSlot,
-                        pressed && detailToolbarStyles.toolbarIconPressed,
-                      ]}
-                    >
-                      <PriorityFlagToolbarIcon
-                        size={TOOLBAR_LABELED_ICON_SIZE}
-                        priority={detail?.priority ?? null}
-                      />
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Priority"
-                      hitSlop={6}
-                      onPress={() => setPriorityMenuOpen((open) => !open)}
-                    >
-                      <ThemedText
-                        style={[
-                          styles.toolbarCaption,
-                          detail?.priority != null && {
-                            color: getTaskPriorityColor(detail.priority),
-                          },
-                        ]}
-                      >
-                        Priority
-                      </ThemedText>
-                    </Pressable>
-                  </View>
+                    <PriorityFlagToolbarIcon
+                      size={TOOLBAR_LABELED_ICON_SIZE}
+                      priority={null}
+                      defaultColor={TOOLBAR_ICON_COLOR}
+                    />
+                  </DetailToolbarLabeledItem>
                   {priorityMenuOpen ? (
                     <TaskPriorityFlagPopup
                       embedded
                       selected={detail?.priority ?? null}
                       onSelect={(priority) => void handleSetPriority(priority)}
                       onClose={() => setPriorityMenuOpen(false)}
-                      style={styles.priorityPopupAboveToolbar}
+                      style={{
+                        position: "absolute",
+                        bottom: 40,
+                        left: -24,
+                        zIndex: 32,
+                        elevation: 32,
+                      }}
                     />
                   ) : null}
                 </View>
-                <View style={styles.toolbarLabeledItem}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Subtasks"
-                    hitSlop={8}
-                    onPress={openSubtasksSection}
-                    style={({ pressed }) => [
-                      detailToolbarStyles.toolbarIconSlot,
-                      pressed && detailToolbarStyles.toolbarIconPressed,
-                    ]}
-                  >
-                    <TbSubtaskIcon
-                      size={TOOLBAR_LABELED_ICON_SIZE}
-                      color={TOOLBAR_ICON_COLOR}
-                    />
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Subtasks"
-                    hitSlop={6}
-                    onPress={openSubtasksSection}
-                  >
-                    <ThemedText style={styles.toolbarCaption}>
-                      subtasks
-                    </ThemedText>
-                  </Pressable>
-                </View>
-                <View style={styles.toolbarLabeledItem}>
-                  <DetailToolbarIcon
-                    accessibilityLabel="Labels"
+                <DetailToolbarLabeledItem
+                  accessibilityLabel="Subtasks"
+                  label="subtasks"
+                  onPress={openSubtasksSection}
+                >
+                  <TbSubtaskIcon
+                    size={TOOLBAR_LABELED_ICON_SIZE}
+                    color={TOOLBAR_ICON_COLOR}
+                  />
+                </DetailToolbarLabeledItem>
+                <DetailToolbarLabeledItem
+                  accessibilityLabel="Labels"
+                  label="label"
+                  onPress={() => setLabelPickerOpen(true)}
+                >
+                  <AppSymbol
                     ios="tag"
                     android="local-offer"
-                    tintColor={TOOLBAR_ICON_COLOR}
                     size={TOOLBAR_LABELED_ICON_SIZE}
-                    onPress={() => setLabelPickerOpen(true)}
+                    tintColor={TOOLBAR_ICON_COLOR}
                   />
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Labels"
-                    hitSlop={6}
-                    onPress={() => setLabelPickerOpen(true)}
-                  >
-                    <ThemedText style={styles.toolbarCaption}>label</ThemedText>
-                  </Pressable>
-                </View>
-                <View style={styles.toolbarLabeledItem}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Attachment"
-                    hitSlop={8}
-                    onPress={handleAttachment}
-                    style={({ pressed }) => [
-                      detailToolbarStyles.toolbarIconSlot,
-                      pressed && detailToolbarStyles.toolbarIconPressed,
-                    ]}
-                  >
-                    <RiAttachment2Icon
-                      size={TOOLBAR_UTILITY_ICON_SIZE}
-                      color={TOOLBAR_ICON_COLOR}
-                    />
-                  </Pressable>
-                  {/* <ThemedText style={styles.toolbarCaption}>Files</ThemedText> */}
-                </View>
-                <View style={styles.toolbarVoiceItem}>
-                  <DetailToolbarIcon
-                    accessibilityLabel="Voice note"
-                    ios="mic"
-                    android="mic"
+                </DetailToolbarLabeledItem>
+                <DetailToolbarLabeledItem
+                  accessibilityLabel="Files"
+                  label="Files"
+                  onPress={handleAttachment}
+                >
+                  <RiAttachment2Icon
                     size={TOOLBAR_UTILITY_ICON_SIZE}
-                    onPress={handleVoiceNote}
+                    color={TOOLBAR_ICON_COLOR}
                   />
+                </DetailToolbarLabeledItem>
+                <View className="ml-[20px]">
+                  <DetailToolbarLabeledItem
+                    accessibilityLabel="Voice note"
+                    label="Voice"
+                    showLabel={false}
+                    onPress={handleVoiceNote}
+                  >
+                    <AppSymbol
+                      ios="mic"
+                      android="mic"
+                      size={TOOLBAR_UTILITY_ICON_SIZE}
+                      tintColor={TOOLBAR_ICON_COLOR}
+                    />
+                  </DetailToolbarLabeledItem>
                 </View>
               </View>
             </View>
           </View>
           {priorityMenuOpen ? (
             <Pressable
-              style={styles.priorityBackdrop}
+              className="absolute inset-0 z-30"
               onPress={() => setPriorityMenuOpen(false)}
               accessibilityRole="button"
               accessibilityLabel="Dismiss priority menu"
@@ -2450,392 +2463,50 @@ export function TaskDetailScreen() {
   );
 }
 
-const TOOLBAR_ICON_COLOR = "#5a6578";
-const TOOLBAR_ACTIVE_ICON_COLOR = "#4873c7";
+const TOOLBAR_ICON_COLOR = "#9f9f9f";
 const TOOLBAR_LABELED_ICON_SIZE = 25.5;
 const TOOLBAR_UTILITY_ICON_SIZE = 25.5;
+const TOOLBAR_LABEL_FONT_SIZE = 8;
+const TOOLBAR_LABEL_LINE_HEIGHT = 13;
 
-function DetailToolbarIcon({
-  ios,
-  android,
+function DetailToolbarLabeledItem({
   accessibilityLabel,
-  active = false,
-  tintColor,
+  label,
+  labelColor,
   onPress,
-  slotStyle,
-  size = 22,
+  children,
+  showLabel = true,
 }: {
-  ios: string;
-  android: string;
   accessibilityLabel: string;
-  active?: boolean;
-  tintColor?: string;
-  onPress?: () => void;
-  slotStyle?: StyleProp<ViewStyle>;
-  size?: number;
+  label: string;
+  labelColor?: string;
+  onPress: () => void;
+  children: ReactNode;
+  showLabel?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      hitSlop={8}
+      hitSlop={6}
       onPress={onPress}
-      style={({ pressed }) => [
-        detailToolbarStyles.toolbarIconSlot,
-        slotStyle,
-        pressed && detailToolbarStyles.toolbarIconPressed,
-      ]}
+      className="min-w-[34px] items-center active:opacity-55"
     >
-      <AppSymbol
-        ios={ios}
-        android={android}
-        size={size}
-        tintColor={
-          tintColor ?? (active ? TOOLBAR_ACTIVE_ICON_COLOR : TOOLBAR_ICON_COLOR)
-        }
-      />
+      <View className="h-[26px] w-[26px] items-center justify-center">
+        {children}
+      </View>
+      {showLabel && label.length > 0 ? (
+        <ThemedText
+          className="mt-1 text-center"
+          style={{
+            color: labelColor ?? TOOLBAR_ICON_COLOR,
+            fontSize: TOOLBAR_LABEL_FONT_SIZE,
+            lineHeight: TOOLBAR_LABEL_LINE_HEIGHT,
+          }}
+        >
+          {label}
+        </ThemedText>
+      ) : null}
     </Pressable>
   );
 }
-
-const detailToolbarStyles = StyleSheet.create({
-  toolbarIconSlot: {
-    height: 24,
-    minWidth: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  toolbarInlineIconSlot: {
-    minWidth: 24,
-    marginLeft: 2,
-  },
-  toolbarIconPressed: {
-    opacity: 0.55,
-  },
-});
-
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: "#ffffff",
-    position: "relative",
-  },
-  sheetMeasureRoot: {
-    flex: 1,
-  },
-  scheduleUndoOverlay: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 100,
-    elevation: 100,
-  },
-  scheduleUndoButton: {
-    position: "absolute",
-    height: SCHEDULE_UNDO_BUTTON_HEIGHT,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    borderRadius: SCHEDULE_UNDO_BUTTON_HEIGHT / 2,
-    backgroundColor: "#f3f4f6",
-    shadowColor: "#000000",
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  scheduleUndoButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-  },
-  taskBody: {
-    width: "100%",
-  },
-  handleRow: {
-    alignItems: "center",
-    paddingTop: Spacing.two,
-    paddingBottom: Spacing.one,
-  },
-  handle: {
-    width: 44,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "#d1d5db",
-  },
-  listHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.two,
-    paddingTop: Spacing.one,
-    paddingBottom: Spacing.one,
-    paddingRight: 40,
-  },
-  listBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    flex: 1,
-    minWidth: 0,
-  },
-  listPickerText: {
-    fontSize: 15,
-    flexShrink: 1,
-  },
-  listPickerPrefix: {
-    color: "#959595",
-  },
-  listPickerBold: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#424242",
-  },
-  headerMenuButton: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    width: 33,
-    height: 33,
-    borderRadius: 17,
-    backgroundColor: "#f3f4f6",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 20,
-  },
-  saveStatus: {
-    fontSize: 12,
-    color: "#6b7280",
-    paddingHorizontal: Spacing.three,
-    paddingBottom: 4,
-  },
-  saveStatusError: {
-    color: "#dc2626",
-  },
-  priorityPopupAboveToolbar: {
-    position: "absolute",
-    bottom: 36,
-    left: -24,
-    zIndex: 32,
-    elevation: 32,
-  },
-  priorityBackdrop: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 30,
-    elevation: 30,
-  },
-  contentContainer: {
-    paddingLeft: Spacing.three,
-    paddingRight: Spacing.three - 2,
-    paddingBottom: Spacing.two,
-  },
-  dateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.two,
-    paddingBottom: Spacing.two,
-  },
-  dateCheckboxHit: {
-    padding: 2,
-    marginLeft: -4,
-  },
-  dateCheckbox: {
-    width: 21,
-    height: 21,
-    borderRadius: 10,
-    borderWidth: 1.25,
-    borderColor: "#d1d5db",
-    backgroundColor: "#f9fafb",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dateCheckboxDone: {
-    backgroundColor: "#3c87f7",
-    borderColor: "#3c87f7",
-  },
-  dateLabelPressable: {
-    flexShrink: 0,
-    paddingVertical: 4,
-    marginRight: Spacing.two,
-  },
-  dateLabelsScroll: {
-    flex: 1,
-    minWidth: 0,
-  },
-  dateLabelsScrollContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.one,
-    paddingRight: Spacing.one,
-  },
-  dateLabel: {
-    fontSize: 15,
-    color: "#9ca3af",
-  },
-  dateLabelSet: {
-    color: "#a5a5a5",
-    fontWeight: "500",
-  },
-  loader: {
-    marginTop: Spacing.four,
-  },
-  titleRow: {
-    position: "relative",
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: Spacing.two,
-    marginTop: -9,
-    marginBottom: 3,
-    paddingTop: 1,
-  },
-  taskTitleInput: {
-    flex: 1,
-    fontSize: 27,
-    lineHeight: 36,
-    fontWeight: "700",
-    color: "#111827",
-    padding: 0,
-  },
-  taskTitleInputWithCalendarColor: {
-    paddingRight: calendarColorTitleReserveSpace,
-  },
-  notesInput: {
-    fontSize: 17,
-    lineHeight: 26,
-    color: "#374151",
-    padding: 0,
-  },
-  detailImage: {
-    width: "100%",
-    height: 240,
-    borderRadius: 18,
-    marginBottom: Spacing.three,
-    backgroundColor: "#f3f4f6",
-  },
-  linkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: Spacing.three,
-  },
-  detailLink: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: "#2563eb",
-    flexShrink: 1,
-  },
-  labelChip: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 2.75,
-    flexShrink: 0,
-  },
-  labelChipPressed: {
-    opacity: 0.85,
-  },
-  labelChipText: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-  },
-  toolbar: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
-    paddingTop: Spacing.two,
-  },
-  toolbarControls: {
-    paddingHorizontal: Spacing.three,
-    minHeight: TASK_DETAIL_TOOLBAR_BODY_HEIGHT - Spacing.two,
-    justifyContent: "flex-end",
-    paddingBottom: TOOLBAR_ROW_NUDGE_DOWN,
-  },
-  iconRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-    minWidth: 0,
-  },
-  toolbarLabeledItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 0,
-    minHeight: 24,
-  },
-  flagAnchor: {
-    position: "relative",
-    zIndex: 31,
-    elevation: 31,
-    justifyContent: "center",
-  },
-  toolbarCaption: {
-    fontSize: 9,
-    marginLeft: 3,
-    lineHeight: 11,
-    color: "#9ca3af",
-  },
-  toolbarVoiceItem: {
-    marginLeft: "auto",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  subtasksSection: {
-    marginTop: 18,
-    paddingHorizontal: Spacing.three,
-  },
-  subtasksHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 4,
-  },
-  subtasksChevron: {
-    transform: [{ rotate: "0deg" }],
-  },
-  subtasksChevronExpanded: {
-    transform: [{ rotate: "90deg" }],
-  },
-  subtasksHeaderText: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: "#9ca3af",
-    fontWeight: "500",
-  },
-  subtasksContent: {
-    marginTop: 6,
-    gap: 8,
-  },
-  subtasksLoader: {
-    alignSelf: "flex-start",
-    marginBottom: 4,
-  },
-  subtaskRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 34,
-  },
-  subtaskName: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 22,
-    color: "#626b83",
-  },
-  subtaskNameDone: {
-    color: "#9ca3af",
-    textDecorationLine: "line-through",
-  },
-  subtaskDraftCheckbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: "#dad4d5",
-    backgroundColor: "#ffffff",
-  },
-  subtaskAddInput: {
-    flex: 1,
-    fontSize: 16,
-    lineHeight: 22,
-    color: "#111827",
-    paddingVertical: 4,
-  },
-});

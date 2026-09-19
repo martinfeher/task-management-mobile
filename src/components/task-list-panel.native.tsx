@@ -56,6 +56,8 @@ import { getTaskShareUrl } from "@/lib/task-link";
 import { useTaskListSubtasksExpanded } from "@/hooks/use-task-list-subtasks-expanded";
 import {
   blocksToTasks,
+  getBlockOrderVersion,
+  reorderBlocks,
   tasksToBlocks,
   type TaskBlock,
 } from "@/lib/task-blocks";
@@ -112,14 +114,18 @@ export function TaskListPanel({
   );
   const pinned = taskData?.pinned ?? [];
   const tasks = taskData?.tasks ?? [];
-  const pinnedBlocks = useMemo(
+  const pinnedBlocksFromData = useMemo(
     () => tasksToBlocks(taskData?.pinned ?? []),
     [taskData?.pinned],
   );
-  const taskBlocks = useMemo(
+  const taskBlocksFromData = useMemo(
     () => tasksToBlocks(taskData?.tasks ?? []),
     [taskData?.tasks],
   );
+  const [pinnedBlocks, setPinnedBlocks] = useState<TaskBlock[]>([]);
+  const [taskBlocks, setTaskBlocks] = useState<TaskBlock[]>([]);
+  const pinnedBlocksVersionRef = useRef("");
+  const taskBlocksVersionRef = useRef("");
   const allListTasks = useMemo(
     () => [...pinned, ...tasks],
     [pinned, tasks],
@@ -130,6 +136,21 @@ export function TaskListPanel({
   const [contextMenuBackdropReady, setContextMenuBackdropReady] =
     useState(false);
   const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    const pinnedVersion = getBlockOrderVersion(pinnedBlocksFromData);
+    if (pinnedVersion !== pinnedBlocksVersionRef.current) {
+      pinnedBlocksVersionRef.current = pinnedVersion;
+      setPinnedBlocks(pinnedBlocksFromData);
+    }
+
+    const taskVersion = getBlockOrderVersion(taskBlocksFromData);
+    if (taskVersion !== taskBlocksVersionRef.current) {
+      taskBlocksVersionRef.current = taskVersion;
+      setTaskBlocks(taskBlocksFromData);
+    }
+  }, [pinnedBlocksFromData, taskBlocksFromData]);
+
   const [movePickerOpen, setMovePickerOpen] = useState(false);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -239,6 +260,38 @@ export function TaskListPanel({
     setIsDragging(true);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, [closeContextMenu]);
+
+  const handlePinnedDragEnd = useCallback(
+    ({ data, from, to }: { data: TaskBlock[]; from: number; to: number }) => {
+      isDraggingRef.current = false;
+      setIsDragging(false);
+
+      const nextBlocks = reorderBlocks(pinnedBlocks, data, from, to);
+      const nextVersion = getBlockOrderVersion(nextBlocks);
+      if (nextVersion === pinnedBlocksVersionRef.current) return;
+
+      pinnedBlocksVersionRef.current = nextVersion;
+      setPinnedBlocks(nextBlocks);
+      onReorderTasks?.("pinned", blocksToTasks(nextBlocks));
+    },
+    [onReorderTasks, pinnedBlocks],
+  );
+
+  const handleTasksDragEnd = useCallback(
+    ({ data, from, to }: { data: TaskBlock[]; from: number; to: number }) => {
+      isDraggingRef.current = false;
+      setIsDragging(false);
+
+      const nextBlocks = reorderBlocks(taskBlocks, data, from, to);
+      const nextVersion = getBlockOrderVersion(nextBlocks);
+      if (nextVersion === taskBlocksVersionRef.current) return;
+
+      taskBlocksVersionRef.current = nextVersion;
+      setTaskBlocks(nextBlocks);
+      onReorderTasks?.("tasks", blocksToTasks(nextBlocks));
+    },
+    [onReorderTasks, taskBlocks],
+  );
 
   const dismissContextMenuForTask = useCallback(
     (task: TaskItem) => {
@@ -478,13 +531,10 @@ export function TaskListPanel({
                   data={pinnedBlocks}
                   keyExtractor={(item) => `pinned-${item.id}`}
                   onDragBegin={handleDragBegin}
-                  onDragEnd={({ data }) => {
-                    isDraggingRef.current = false;
-                    setIsDragging(false);
-                    onReorderTasks?.("pinned", blocksToTasks(data));
-                  }}
+                  onDragEnd={handlePinnedDragEnd}
                   renderItem={renderBlockItem}
                   animationConfig={DROP_ANIMATION_CONFIG}
+                  activationDistance={12}
                   scrollEnabled={false}
                 />
               </>
@@ -495,13 +545,10 @@ export function TaskListPanel({
                 data={taskBlocks}
                 keyExtractor={(item) => item.id}
                 onDragBegin={handleDragBegin}
-                onDragEnd={({ data }) => {
-                  isDraggingRef.current = false;
-                  setIsDragging(false);
-                  onReorderTasks?.("tasks", blocksToTasks(data));
-                }}
+                onDragEnd={handleTasksDragEnd}
                 renderItem={renderBlockItem}
                 animationConfig={DROP_ANIMATION_CONFIG}
+                activationDistance={12}
                 scrollEnabled={false}
               />
             ) : null}

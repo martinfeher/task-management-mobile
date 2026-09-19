@@ -5,8 +5,8 @@ import { AppSymbol } from "@/components/app-symbol";
 import { Spacing } from "@/constants/theme";
 import type { HistoryActionsRegistration } from "@/contexts/history-actions-toolbar-context";
 
-const HISTORY_ACTION_ICON_SIZE = 16;
-const ACTION_BUTTON_SIZE = 34;
+const HISTORY_ACTION_ICON_SIZE = 19;
+const ACTION_BUTTON_SIZE = 37;
 
 type HistoryActionsHostProps = {
   registration: HistoryActionsRegistration | null;

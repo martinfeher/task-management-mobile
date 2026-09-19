@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -35,6 +42,11 @@ import {
   getCurrentMinutesFromMidnight,
   getTopForCalendarMinutes,
 } from "@/lib/calendar-time-grid";
+import {
+  recallCalendarGridScroll,
+  rememberCalendarGridScroll,
+  resolveCalendarGridScrollTarget,
+} from "@/lib/calendar-grid-scroll";
 import { toDateKey } from "@/lib/task-dates";
 import type { TaskItem } from "@/types/todo";
 
@@ -145,11 +157,11 @@ export function CalendarTimeGridView({
 }: CalendarTimeGridViewProps) {
   const scrollRef = useRef<ScrollView>(null);
   const scrollYRef = useRef(0);
-  const lastAutoScrollDaysKeyRef = useRef<string | null>(null);
+  const previousDaysKeyRef = useRef<string | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const interactionCountRef = useRef(0);
   const taskInteractionActive = useSharedValue(0);
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const hours = useMemo(() => getCalendarDisplayHours(), []);
   const gridHeight = getCalendarGridHeightPx();
   const dayDateKeys = useMemo(() => days.map((day) => toDateKey(day)), [days]);
@@ -228,23 +240,42 @@ export function CalendarTimeGridView({
 
   const daysKey = dayDateKeys.join("|");
 
+  const restoreScrollPosition = useCallback(
+    (animated = false) => {
+      const targetY = scrollYRef.current;
+      scrollRef.current?.scrollTo({ y: targetY, animated });
+    },
+    [],
+  );
+
   useEffect(() => {
     if (loading) return;
+
+    const isNewPeriod = previousDaysKeyRef.current !== daysKey;
+    previousDaysKeyRef.current = daysKey;
+
+    const targetY = isNewPeriod
+      ? resolveCalendarGridScrollTarget(
+          daysKey,
+          Math.max(0, nowTop - CALENDAR_HOUR_HEIGHT * 2),
+        )
+      : (recallCalendarGridScroll(daysKey) ?? scrollYRef.current);
+
+    scrollYRef.current = targetY;
+
     const timeout = setTimeout(() => {
-      const isNewPeriod = lastAutoScrollDaysKeyRef.current !== daysKey;
-
-      if (isNewPeriod) {
-        const initialY = Math.max(0, nowTop - CALENDAR_HOUR_HEIGHT * 2);
-        lastAutoScrollDaysKeyRef.current = daysKey;
-        scrollYRef.current = initialY;
-        scrollRef.current?.scrollTo({ y: initialY, animated: false });
-        return;
-      }
-
-      scrollRef.current?.scrollTo({ y: scrollYRef.current, animated: false });
+      restoreScrollPosition(false);
     }, 0);
+
     return () => clearTimeout(timeout);
-  }, [daysKey, loading, nowTop]);
+  }, [daysKey, loading, nowTop, restoreScrollPosition]);
+
+  useLayoutEffect(() => {
+    if (loading) return;
+    requestAnimationFrame(() => {
+      restoreScrollPosition(false);
+    });
+  }, [loading, restoreScrollPosition, windowHeight]);
 
   return (
     <GestureDetector gesture={swipeGesture}>
@@ -302,16 +333,16 @@ export function CalendarTimeGridView({
             })}
         </View>
 
-        {loading ? (
-          <ActivityIndicator color="#3c87f7" style={styles.loader} />
-        ) : (
+        <View style={styles.scrollHost}>
           <ScrollView
             ref={scrollRef}
             style={styles.scroll}
-            scrollEnabled={scrollEnabled}
+            scrollEnabled={scrollEnabled && !loading}
             scrollEventThrottle={16}
             onScroll={(event) => {
-              scrollYRef.current = event.nativeEvent.contentOffset.y;
+              const nextY = event.nativeEvent.contentOffset.y;
+              scrollYRef.current = nextY;
+              rememberCalendarGridScroll(daysKey, nextY);
             }}
             contentContainerStyle={{ paddingBottom: 120 }}
             refreshControl={
@@ -384,7 +415,12 @@ export function CalendarTimeGridView({
               })}
             </View>
           </ScrollView>
-        )}
+          {loading ? (
+            <View pointerEvents="none" style={styles.loaderOverlay}>
+              <ActivityIndicator color="#3c87f7" />
+            </View>
+          ) : null}
+        </View>
       </View>
     </GestureDetector>
   );
@@ -478,8 +514,18 @@ const styles = StyleSheet.create({
     gap: 4,
     flexShrink: 0,
   },
+  scrollHost: {
+    flex: 1,
+    position: "relative",
+  },
   scroll: {
     flex: 1,
+  },
+  loaderOverlay: {
+    ...StyleSheet.absoluteFill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.72)",
   },
   gridRow: {
     flexDirection: "row",
@@ -531,8 +577,5 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 2,
     backgroundColor: "#a3a3a3",
-  },
-  loader: {
-    marginTop: 24,
   },
 });

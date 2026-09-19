@@ -39,34 +39,25 @@ export function SidebarRow({
 }: SidebarRowProps) {
   return (
     <View
-      className={`mb-px ${nested ? "ml-[13px]" : "ml-[3px]"} mr-1.5 min-h-[45px] flex-row items-center gap-2 rounded-[3px] border-l-2 px-3 ${
+      className={`mb-px ${nested ? "ml-[13px]" : "ml-[3px]"} mr-1.5 min-h-[45px] flex-row items-stretch gap-2 border-l-2 px-3 ${
         selected
-          ? "border-l-lists-accent-border bg-lists-selected/50"
-          : "border-l-transparent"
+          ? "rounded-l-none rounded-r-[11px] border-l-lists-accent-border bg-lists-selected"
+          : "rounded-[3px] border-l-transparent"
       }`}
     >
-      {icon ? (
-        <Pressable
-          onPress={onPress}
-          onLongPress={onLongPress}
-          delayLongPress={150}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={title}
-          className="h-[22px] w-[22px] shrink-0 items-center justify-center active:opacity-85"
-        >
-          {icon}
-        </Pressable>
-      ) : null}
-
       <Pressable
         onPress={onPress}
         onLongPress={onLongPress}
         delayLongPress={150}
         accessibilityRole="button"
         accessibilityLabel={title}
-        className="min-h-[22px] min-w-0 flex-1 flex-row items-center gap-2 active:opacity-85"
+        className="min-w-0 flex-1 flex-row items-center gap-2 active:opacity-85"
       >
+        {icon ? (
+          <View className="h-[22px] w-[22px] shrink-0 items-center justify-center">
+            {icon}
+          </View>
+        ) : null}
         <Text
           className={`flex-1 shrink text-[17px] mb-[1px] leading-[22px] ${
             selected
@@ -75,7 +66,10 @@ export function SidebarRow({
                 ? "font-normal text-[#676a6f]"
                 : "font-normal text-zinc-700"
           }`}
-          style={selected ? { color: selectedColor } : undefined}
+          style={{
+            marginLeft: -1.5,
+            ...(selected ? { color: selectedColor } : null),
+          }}
           numberOfLines={1}
           {...(Platform.OS === "android"
             ? {
@@ -105,10 +99,9 @@ export function SidebarRow({
       {showMenu ? (
         <Pressable
           onPress={onPressMenu}
-          hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={`Options for ${title}`}
-          className="h-7 w-7 items-center justify-center rounded-lg active:bg-zinc-200/80"
+          className="w-7 shrink-0 items-center justify-center self-stretch rounded-lg active:bg-zinc-200/80"
         >
           <View style={{ marginLeft: 7 }}>
             <AppSymbol
