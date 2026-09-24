@@ -11,6 +11,10 @@ function isTasksPathname(pathname: string) {
   return pathname === "/tasks" || pathname.endsWith("/tasks");
 }
 
+function isListsTabPathname(pathname: string) {
+  return pathname === "/" || pathname === "/index";
+}
+
 export function ListsDrawerOverlay() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -27,15 +31,14 @@ export function ListsDrawerOverlay() {
     }
   }, [flushDrawerCloseAction, listsDrawerOpen]);
 
-  if (isTasksPathname(pathname)) {
-    return null;
-  }
-
-  if (!listsDrawerOpen) {
+  const onTasks = isTasksPathname(pathname);
+  const onListsTab = isListsTabPathname(pathname);
+  if (!onTasks && !onListsTab && !listsDrawerOpen) {
     return null;
   }
 
   const tabBarOffset = TAB_BAR_HEIGHT + insets.bottom;
+  const allowTouchPassthrough = onTasks && !listsDrawerOpen;
 
   return (
     <View
@@ -45,7 +48,11 @@ export function ListsDrawerOverlay() {
         open={listsDrawerOpen}
         onOpen={openListsDrawerPanel}
         onClose={openTasksForDrawerSelection}
-        style={styles.drawerHost}>
+        swipeEnabled={onTasks || onListsTab}
+        style={[
+          styles.drawerHost,
+          allowTouchPassthrough && styles.drawerHostPassthrough,
+        ]}>
         <View pointerEvents="none" style={styles.backdropContent} />
       </ListsDrawerShell>
     </View>
@@ -58,6 +65,9 @@ const styles = StyleSheet.create({
   },
   drawerHost: {
     flex: 1,
+  },
+  drawerHostPassthrough: {
+    pointerEvents: "box-none",
   },
   backdropContent: {
     flex: 1,

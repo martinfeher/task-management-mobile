@@ -385,7 +385,10 @@ export function CalendarUpcomingView({
                   }}
                 >
                   <View className="px-4 py-1">
-                    <ThemedText className="text-base font-bold text-[#5f5f5f]">
+                    <ThemedText
+                      className="text-base font-bold"
+                      style={{ color: "#b3b3b3" }}
+                    >
                       Overdue
                     </ThemedText>
                   </View>
@@ -403,7 +406,6 @@ export function CalendarUpcomingView({
             }
 
             const title = formatDaySectionTitle(section.date, today);
-            const isMuted = section.date > addDays(today, 1);
 
             return (
               <View
@@ -416,16 +418,15 @@ export function CalendarUpcomingView({
                 }}
               >
                 <ThemedText
-                  className={`px-4 py-1 text-base font-bold text-[#5f5f5f] ${
-                    isMuted ? "font-semibold text-gray-400" : ""
-                  }`}
+                  className="px-4 py-1 text-base font-bold"
+                  style={{ color: "#b3b3b3" }}
                 >
                   {title}
                 </ThemedText>
                 {section.tasks.length === 0 ? (
                   <ThemedText
-                    themeColor="textSecondary"
                     className="px-4 pb-2 text-[15px]"
+                    style={{ color: "#a2a2a2" }}
                   >
                     No tasks
                   </ThemedText>

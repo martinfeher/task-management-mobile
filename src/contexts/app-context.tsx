@@ -103,6 +103,8 @@ type AppContextValue = {
   openTasksForDrawerSelection: () => void;
   /** Navigate to Lists tab (drawer opens from there). */
   openListsDrawer: () => void;
+  /** Slide the lists drawer open (used when the Lists tab gains focus). */
+  animateListsDrawerOpen: () => void;
   reorderSidebarTopLevel: (sourceIndex: number, dropIndex: number) => void;
   reorderTasks: (section: "tasks" | "pinned", tasks: TaskItem[]) => void;
   calendarTasks: TaskItem[];
@@ -559,13 +561,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [loadTasksForView],
   );
 
-  const openListsDrawer = useCallback(() => {
-    router.navigate("/");
-  }, []);
-
   const openListsDrawerPanel = useCallback(() => {
+    listsDrawerOpenRef.current = true;
     setListsDrawerOpen(true);
   }, []);
+
+  const animateListsDrawerOpen = useCallback(() => {
+    if (listsDrawerOpenRef.current) {
+      setListsDrawerOpen(true);
+      return;
+    }
+
+    listsDrawerOpenRef.current = false;
+    setListsDrawerOpen(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        listsDrawerOpenRef.current = true;
+        setListsDrawerOpen(true);
+      });
+    });
+  }, []);
+
+  const openListsDrawer = useCallback(() => {
+    const onTasks = lastTabHrefRef.current.includes("/tasks");
+
+    if (onTasks && !listsDrawerOpenRef.current) {
+      openListsDrawerPanel();
+      window.setTimeout(() => {
+        router.navigate("/");
+      }, 320);
+      return;
+    }
+
+    router.navigate("/");
+  }, [openListsDrawerPanel]);
 
   const openTasksForDrawerSelection = useCallback(() => {
     if (!listsDrawerOpenRef.current) {
@@ -828,6 +857,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       closeListsDrawer,
       openTasksForDrawerSelection,
       openListsDrawer,
+      animateListsDrawerOpen,
       reorderSidebarTopLevel,
       reorderTasks,
       calendarTasks,
@@ -879,6 +909,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       closeListsDrawer,
       openTasksForDrawerSelection,
       openListsDrawer,
+      animateListsDrawerOpen,
       reorderSidebarTopLevel,
       reorderTasks,
       calendarTasks,

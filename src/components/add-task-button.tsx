@@ -22,8 +22,7 @@ const FAB_SIZE = ADD_TASK_FAB_SIZE;
 const FAB_RADIUS = FAB_SIZE / 2;
 const FAB_TINT = "#007AFF";
 
-const USE_EXPO_LIQUID_GLASS =
-  Platform.OS === "ios" && isLiquidGlassAvailable();
+const USE_EXPO_LIQUID_GLASS = Platform.OS === "ios" && isLiquidGlassAvailable();
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -115,7 +114,10 @@ export function AddTaskButton({
       onPress={handlePress}
       style={[
         styles.fab,
-        { bottom: fabBottom - FAB_BOTTOM_NUDGE, right: FAB_RIGHT_INSET },
+        {
+          bottom: fabBottom - FAB_BOTTOM_NUDGE,
+          right: FAB_RIGHT_INSET + 4,
+        },
         animatedStyle,
       ]}
     >
@@ -138,13 +140,13 @@ const styles = StyleSheet.create({
         shadowColor: "#000000",
         shadowOpacity: 0.35,
         shadowRadius: 12,
-        shadowOffset: { width: 0, height: 4 },
+        shadowOffset: { width: 0, height: 9 },
       },
       android: {
-        elevation: 8,
+        elevation: 10,
       },
       default: {
-        boxShadow: "0px 4px 12px 0px rgba(0, 0, 0, 0.1)",
+        boxShadow: "0px 5px 7px 0px rgba(0, 0, 0, 0.1)",
       },
     }),
   },

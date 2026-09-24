@@ -3,7 +3,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
@@ -22,17 +21,15 @@ export type CalendarViewPickerAnchor = {
 export const CALENDAR_VIEW_OPTIONS: {
   id: CalendarViewMode;
   label: string;
-  description: string;
 }[] = [
-  { id: "day", label: "Day", description: "Single day time grid" },
-  { id: "threeDay", label: "3-Day", description: "Three day time grid" },
-  { id: "week", label: "Week", description: "Seven day time grid" },
-  { id: "month", label: "Month", description: "Month overview" },
+  { id: "day", label: "Day" },
+  { id: "threeDay", label: "3-Day" },
+  { id: "week", label: "Week" },
+  { id: "month", label: "Month" },
 ];
 
-const POPUP_WIDTH = 280;
+const POPUP_WIDTH = 168;
 const POPUP_GAP = 10;
-const POPUP_MAX_HEIGHT = 420;
 const SCREEN_INSET = 12;
 
 type CalendarViewPickerSheetProps = {
@@ -61,10 +58,6 @@ function getPopupStyle(anchor: CalendarViewPickerAnchor) {
     right,
     bottom,
     width: POPUP_WIDTH,
-    maxHeight: Math.min(
-      POPUP_MAX_HEIGHT,
-      anchor.y - POPUP_GAP - SCREEN_INSET,
-    ),
   };
 }
 
@@ -83,58 +76,45 @@ export function CalendarViewPickerSheet({
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
       <View style={[styles.popup, getPopupStyle(anchor)]}>
-        <ThemedText style={styles.title}>Calendar view</ThemedText>
-        <ScrollView
-          bounces={false}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ selected: isUpcomingActive }}
+          onPress={() => {
+            onSelectUpcoming();
+            onClose();
+          }}
+          style={[styles.option, isUpcomingActive && styles.optionSelected]}
         >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: isUpcomingActive }}
-            onPress={() => {
-              onSelectUpcoming();
-              onClose();
-            }}
-            style={[styles.option, isUpcomingActive && styles.optionSelected]}
+          <ThemedText
+            style={[
+              styles.optionLabel,
+              isUpcomingActive && styles.optionLabelSelected,
+            ]}
           >
-            <ThemedText
-              style={[
-                styles.optionLabel,
-                isUpcomingActive && styles.optionLabelSelected,
-              ]}
+            Upcoming
+          </ThemedText>
+        </Pressable>
+        {CALENDAR_VIEW_OPTIONS.map((option) => {
+          const selected = !isUpcomingActive && activeView === option.id;
+          return (
+            <Pressable
+              key={option.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              onPress={() => {
+                onSelectView(option.id);
+                onClose();
+              }}
+              style={[styles.option, selected && styles.optionSelected]}
             >
-              Upcoming
-            </ThemedText>
-            <ThemedText style={styles.optionDescription}>
-              Overdue, today, and scheduled days
-            </ThemedText>
-          </Pressable>
-          {CALENDAR_VIEW_OPTIONS.map((option) => {
-            const selected = !isUpcomingActive && activeView === option.id;
-            return (
-              <Pressable
-                key={option.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                onPress={() => {
-                  onSelectView(option.id);
-                  onClose();
-                }}
-                style={[styles.option, selected && styles.optionSelected]}
+              <ThemedText
+                style={[styles.optionLabel, selected && styles.optionLabelSelected]}
               >
-                <ThemedText
-                  style={[styles.optionLabel, selected && styles.optionLabelSelected]}
-                >
-                  {option.label}
-                </ThemedText>
-                <ThemedText style={styles.optionDescription}>
-                  {option.description}
-                </ThemedText>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                {option.label}
+              </ThemedText>
+            </Pressable>
+          );
+        })}
       </View>
     </Modal>
   );
@@ -149,9 +129,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     backgroundColor: "#ffffff",
     borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
     gap: 4,
     ...Platform.select({
       ios: {
@@ -168,19 +147,11 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  title: {
-    fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 4,
-    paddingHorizontal: 2,
-    color: "#111827",
-  },
   option: {
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     backgroundColor: "#f9fafb",
-    marginBottom: 6,
   },
   optionSelected: {
     backgroundColor: "#e8f2fc",
@@ -192,10 +163,5 @@ const styles = StyleSheet.create({
   },
   optionLabelSelected: {
     color: "#2563eb",
-  },
-  optionDescription: {
-    marginTop: 2,
-    fontSize: 12,
-    color: "#6b7280",
   },
 });

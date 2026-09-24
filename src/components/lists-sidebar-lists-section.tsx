@@ -3,9 +3,10 @@ import { Alert, Pressable, Text, View } from "react-native";
 
 import { AppSymbol } from "@/components/app-symbol";
 import { BiChevronDownIcon } from "@/components/bi-chevron-down-icon";
-import { ListIcon } from "@/components/lists-sidebar-shared";
+import { MdChecklistIcon } from "@/components/md-checklist-icon";
 import { SidebarRow } from "@/components/sidebar-row";
 import { findInboxList } from "@/lib/inbox-list";
+
 import {
   buildSidebarTopLevelEntries,
   getListsForFolder,
@@ -210,7 +211,7 @@ export function ListsSidebarListRow({
       nested={nested}
       icon={
         <View style={{ marginLeft: -3 }}>
-          <ListIcon
+          <MdChecklistIcon
             size={17}
             color={selected ? "#8a919d" : nested ? "#b3b8ca" : "#b3b8ca"}
           />

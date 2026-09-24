@@ -8,7 +8,8 @@ import { ThemedText } from "@/components/themed-text";
 import { formatTaskDueDateParts } from "@/lib/format-due-date";
 import { getLabelDotColor } from "@/lib/label-colors";
 import type { TaskItem, TaskLabel } from "@/types/todo";
-import { useEffect, useRef, useState } from "react";
+import { BlurView } from "expo-blur";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Platform,
   Pressable,
@@ -20,16 +21,18 @@ import {
 import Animated, {
   cancelAnimation,
   Easing,
+  interpolateColor,
   useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
+  type SharedValue,
 } from "react-native-reanimated";
 import Svg, { Path, Rect } from "react-native-svg";
 
 const CONTEXT_MENU_HOLD_MS = 250;
-export const TASK_ROW_DEFAULT_LONG_PRESS_MS = CONTEXT_MENU_HOLD_MS / 1.5;
+export const TASK_ROW_DEFAULT_LONG_PRESS_MS = CONTEXT_MENU_HOLD_MS / 1;
 const MOVE_CLOSE_THRESHOLD_PX = 15;
 /** Vertical finger movement that interrupts the context menu and starts drag. */
 const DRAG_VERTICAL_ACTIVATION_PX = 1;
@@ -40,7 +43,10 @@ const HOLD_SHADOW_MAX_OPACITY = 0.22;
 const HOLD_SHADOW_COLOR = "#4b5669";
 const HOLD_SHADOW_MAX_ELEVATION = 4;
 const DRAG_TRANSLATE_X = 14;
+const DRAG_BACKGROUND_COLOR = "rgba(255, 255, 255, 0.65)";
 const DRAG_BORDER_COLOR = "#f3f3f3";
+const DRAG_SECONDARY_BLUR_RADIUS = 0.5;
+const DRAG_NATIVE_BLUR_INTENSITY = 6;
 const DRAG_LIFT_SPRING = {
   damping: 22,
   stiffness: 260,
@@ -63,6 +69,55 @@ const NO_SURFACE_SHADOW = Platform.select({
 const AnimatedView = Animated.createAnimatedComponent(View);
 
 const TASK_ROW_HORIZONTAL_INSET = 14;
+
+type TaskRowDragBlurSurfaceProps = {
+  dragLiftProgress: SharedValue<number>;
+  style?: StyleProp<ViewStyle>;
+  children: ReactNode;
+};
+
+function TaskRowDragBlurSurface({
+  dragLiftProgress,
+  style,
+  children,
+}: TaskRowDragBlurSurfaceProps) {
+  const contentBlurStyle = useAnimatedStyle(() => {
+    const amount = dragLiftProgress.value * DRAG_SECONDARY_BLUR_RADIUS;
+    if (Platform.OS === "web" && amount > 0) {
+      return {
+        filter: `blur(${amount}px)`,
+      } as ViewStyle;
+    }
+    return {};
+  });
+
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: dragLiftProgress.value > 0.01 ? 1 : 0,
+  }));
+
+  return (
+    <Animated.View style={[style, styles.dragBlurHost, contentBlurStyle]}>
+      {children}
+      {Platform.OS !== "web" ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            styles.dragBlurOverlay,
+            overlayStyle,
+          ]}
+        >
+          <BlurView
+            intensity={DRAG_NATIVE_BLUR_INTENSITY}
+            tint="light"
+            style={StyleSheet.absoluteFill}
+            experimentalBlurMethod="dimezisBlurView"
+          />
+        </Animated.View>
+      ) : null}
+    </Animated.View>
+  );
+}
 
 type TaskRowProps = {
   task: TaskItem;
@@ -257,7 +312,11 @@ export function TaskRow({
       borderRadius: lift * 15,
       borderWidth: lift,
       borderColor: DRAG_BORDER_COLOR,
-      backgroundColor: "#ffffff",
+      backgroundColor: interpolateColor(
+        lift,
+        [0, 1],
+        ["#ffffff", DRAG_BACKGROUND_COLOR],
+      ),
       ...NO_SURFACE_SHADOW,
     };
   });
@@ -634,7 +693,10 @@ export function TaskRow({
         {showSublineRow ? (
           <View style={styles.sublineRow}>
             {showSubtaskCollapse ? (
-              <View style={styles.subtaskCollapseGroup}>
+              <TaskRowDragBlurSurface
+                dragLiftProgress={dragLiftProgress}
+                style={styles.subtaskCollapseGroup}
+              >
                 <Pressable
                   style={styles.subtaskCollapseButton}
                   accessibilityRole="button"
@@ -691,11 +753,12 @@ export function TaskRow({
                     />
                   </Svg>
                 </Pressable>
-              </View>
+              </TaskRowDragBlurSurface>
             ) : null}
 
             {dueDateParts ? (
-              <View
+              <TaskRowDragBlurSurface
+                dragLiftProgress={dragLiftProgress}
                 style={[
                   styles.dueDateRow,
                   showSubtaskCollapse && styles.dueDateRowWithSubtasks,
@@ -720,7 +783,7 @@ export function TaskRow({
                     {dueDateParts.timeLabel}
                   </ThemedText>
                 ) : null}
-              </View>
+              </TaskRowDragBlurSurface>
             ) : null}
           </View>
         ) : null}
@@ -929,5 +992,12 @@ const styles = StyleSheet.create({
   },
   dueDateCompleted: {
     color: "#c4c4c4",
+  },
+  dragBlurHost: {
+    position: "relative",
+    overflow: "hidden",
+  },
+  dragBlurOverlay: {
+    zIndex: 1,
   },
 });

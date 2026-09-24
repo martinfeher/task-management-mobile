@@ -19,7 +19,6 @@ import { ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTaskButton } from "@/components/add-task-button";
-import { ListsDrawerShell } from "@/components/lists-drawer-shell";
 import {
   TASK_CONTEXT_MENU_ESTIMATED_HEIGHT,
   TASK_CONTEXT_MENU_WIDTH,
@@ -39,6 +38,7 @@ import {
   useToggleComplete,
   type TaskListPanelProps,
 } from "@/components/task-list-panel-shared";
+import { TaskDropPlaceholder } from "@/components/task-drop-placeholder";
 import { TaskRow } from "@/components/task-row";
 import { ThemedText } from "@/components/themed-text";
 import { getAddTaskFabReservedHeight } from "@/constants/tab-bar";
@@ -97,10 +97,7 @@ export function TaskListPanel({
     sidebarData,
     loadTasksForView,
     loadSidebar,
-    listsDrawerOpen,
     openListsDrawer,
-    openListsDrawerPanel,
-    openTasksForDrawerSelection,
     deleteTask,
   } = useApp();
   const insets = useSafeAreaInsets();
@@ -327,6 +324,11 @@ export function TaskListPanel({
     [closeContextMenu, contextMenu, onOpenTask],
   );
 
+  const renderDropPlaceholder = useCallback(
+    () => <TaskDropPlaceholder />,
+    [],
+  );
+
   const renderBlockItem = useCallback(
     ({ item, drag, isActive }: RenderItemParams<TaskBlock>) => {
       const subtaskCount = subtaskCountByParentId.get(item.root.id) ?? 0;
@@ -514,17 +516,11 @@ export function TaskListPanel({
   );
 
   return (
-    <ListsDrawerShell
-      open={listsDrawerOpen}
-      onOpen={openListsDrawerPanel}
-      onClose={openTasksForDrawerSelection}
-      style={styles.drawerHost}
-    >
-      <View collapsable={false} style={{ flex: 1 }}>
-        <TaskListShell
-          title={getPanelTitle(selectedView, taskData)}
-          onOpenLists={openListsDrawer}
-        >
+    <View collapsable={false} style={{ flex: 1 }}>
+      <TaskListShell
+        title={getPanelTitle(selectedView, taskData)}
+        onOpenLists={openListsDrawer}
+      >
         {blockingState ?? (
           <NestableScrollContainer
             ref={scrollRef as never}
@@ -548,6 +544,7 @@ export function TaskListPanel({
                   onPlaceholderIndexChange={handlePlaceholderIndexChange}
                   onDragEnd={handlePinnedDragEnd}
                   renderItem={renderBlockItem}
+                  renderPlaceholder={renderDropPlaceholder}
                   animationConfig={DROP_ANIMATION_CONFIG}
                   activationDistance={12}
                   scrollEnabled={false}
@@ -563,6 +560,7 @@ export function TaskListPanel({
                 onPlaceholderIndexChange={handlePlaceholderIndexChange}
                 onDragEnd={handleTasksDragEnd}
                 renderItem={renderBlockItem}
+                renderPlaceholder={renderDropPlaceholder}
                 animationConfig={DROP_ANIMATION_CONFIG}
                 activationDistance={12}
                 scrollEnabled={false}
@@ -648,15 +646,11 @@ export function TaskListPanel({
           onClose={closeContextMenu}
         />
       ) : null}
-      </View>
-    </ListsDrawerShell>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  drawerHost: {
-    flex: 1,
-  },
   scrollContainer: {
     flex: 1,
   },

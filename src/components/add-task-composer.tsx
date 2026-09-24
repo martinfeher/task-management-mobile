@@ -37,7 +37,7 @@ type AddTaskComposerProps = {
   onClose: () => void;
 };
 
-const ICON_COLOR = "#5a6578";
+const ICON_COLOR = "#8f8f8f";
 const ACTIVE_ICON_COLOR = "#4873c7";
 const TOOLBAR_LABELED_ICON_SIZE = 25.5;
 const TOOLBAR_UTILITY_ICON_SIZE = 25.5;
@@ -771,7 +771,7 @@ const styles = StyleSheet.create({
   },
   listPickerBold: {
     fontWeight: "600",
-    color: "#424242",
+    color: "#686868",
   },
   titleInput: {
     fontSize: 22,
@@ -865,7 +865,7 @@ const styles = StyleSheet.create({
   addButton: {
     width: 38,
     height: 38,
-    borderRadius: 11,
+    borderRadius: 12,
     backgroundColor: "#7676E6",
     alignItems: "center",
     justifyContent: "center",

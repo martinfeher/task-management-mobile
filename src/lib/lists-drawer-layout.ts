@@ -10,8 +10,13 @@ export function computeListsDrawerWidth(windowWidth: number) {
 }
 
 /** Share of screen width (from the left edge) where a swipe can begin. */
-const LISTS_DRAWER_SWIPE_EDGE_RATIO = 0.5;
+const LISTS_DRAWER_SWIPE_EDGE_RATIO = 10;
+/** Extra swipe-start width (px) extending the edge zone toward the center. */
+const LISTS_DRAWER_SWIPE_EDGE_EXTRA_PX = 150;
 
 export function computeListsDrawerSwipeEdgeWidth(windowWidth: number) {
-  return Math.round(windowWidth * LISTS_DRAWER_SWIPE_EDGE_RATIO);
+  return (
+    Math.round(windowWidth * LISTS_DRAWER_SWIPE_EDGE_RATIO) +
+    LISTS_DRAWER_SWIPE_EDGE_EXTRA_PX
+  );
 }

@@ -6,16 +6,16 @@ import { useApp } from "@/contexts/app-context";
 
 /** Lists tab opens the drawer and stays selected. */
 export default function ListsScreen() {
-  const { setListsDrawerOpen } = useApp();
+  const { animateListsDrawerOpen, setListsDrawerOpen } = useApp();
 
   useFocusEffect(
     useCallback(() => {
-      setListsDrawerOpen(true);
+      animateListsDrawerOpen();
       return () => {
         setListsDrawerOpen(false);
       };
-    }, [setListsDrawerOpen]),
+    }, [animateListsDrawerOpen, setListsDrawerOpen]),
   );
 
-  return <View style={{ flex: 1, backgroundColor: "#ffffff" }} />;
+  return <View pointerEvents="none" style={{ flex: 1, backgroundColor: "transparent" }} />;
 }

@@ -3,13 +3,14 @@ import { StyleSheet, Text, useColorScheme } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LastTabTracker, TAB_ITEMS } from "@/components/main-tabs-config";
-import { ListsDrawerOverlay } from "@/components/lists-drawer-overlay";
 import { Colors } from "@/constants/theme";
+import { useApp } from "@/contexts/app-context";
 
 export default function WebTabsLayout() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme === "dark" ? "dark" : "light"];
   const insets = useSafeAreaInsets();
+  const { lastTabHref, listsDrawerOpen, openListsDrawerPanel } = useApp();
 
   return (
     <>
@@ -18,13 +19,25 @@ export default function WebTabsLayout() {
         <TabSlot style={styles.slot} />
         <TabList style={[styles.tabList, { paddingBottom: Math.max(insets.bottom, 8) }]}>
           {TAB_ITEMS.map((tab) => (
-            <TabTrigger key={tab.name} name={tab.name} href={tab.href} style={styles.tabTrigger}>
+            <TabTrigger
+              key={tab.name}
+              name={tab.name}
+              href={tab.href}
+              style={styles.tabTrigger}
+              onPress={
+                tab.name === "index" &&
+                lastTabHref.includes("/tasks") &&
+                !listsDrawerOpen
+                  ? () => {
+                      openListsDrawerPanel();
+                    }
+                  : undefined
+              }>
               <Text style={[styles.tabLabel, { color: colors.textSecondary }]}>{tab.label}</Text>
             </TabTrigger>
           ))}
         </TabList>
       </Tabs>
-      <ListsDrawerOverlay />
     </>
   );
 }

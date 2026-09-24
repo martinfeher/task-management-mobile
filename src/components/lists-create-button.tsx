@@ -74,7 +74,7 @@ export function ListsCreateButton({
         onPress={() => setMenuOpen((open) => !open)}
       >
         <LiquidGlassSurface borderRadius={16} isInteractive>
-          <View className="flex-row items-center gap-1.5 px-[9px] py-2">
+          <View className="flex-row items-center gap-1.5 px-[10px] py-[8px]">
             <View
               className="items-center justify-center"
               style={{ width: CREATE_ICON_SIZE, height: CREATE_ICON_SIZE }}
