@@ -4,7 +4,6 @@ import { RiArrowDropRightLineIcon } from "@/components/ri-arrow-drop-right-line-
 import { TaskCheckbox } from "@/components/task-checkbox";
 import type { TaskContextMenuAnchor } from "@/components/task-context-menu";
 import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
-import { TaskListSubtaskIcon } from "@/components/task-list-subtask-icon";
 import { ThemedText } from "@/components/themed-text";
 import { formatTaskDueDateParts } from "@/lib/format-due-date";
 import { getLabelDotColor } from "@/lib/label-colors";
@@ -24,11 +23,13 @@ import Animated, {
   useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
+import Svg, { Path, Rect } from "react-native-svg";
 
 const CONTEXT_MENU_HOLD_MS = 250;
-export const TASK_ROW_DEFAULT_LONG_PRESS_MS = CONTEXT_MENU_HOLD_MS;
+export const TASK_ROW_DEFAULT_LONG_PRESS_MS = CONTEXT_MENU_HOLD_MS / 1.5;
 const MOVE_CLOSE_THRESHOLD_PX = 15;
 /** Vertical finger movement that interrupts the context menu and starts drag. */
 const DRAG_VERTICAL_ACTIVATION_PX = 1;
@@ -38,6 +39,13 @@ const HOLD_SHADOW_MAX_RADIUS = 8;
 const HOLD_SHADOW_MAX_OPACITY = 0.22;
 const HOLD_SHADOW_COLOR = "#4b5669";
 const HOLD_SHADOW_MAX_ELEVATION = 4;
+const DRAG_TRANSLATE_X = 14;
+const DRAG_BORDER_COLOR = "#f3f3f3";
+const DRAG_LIFT_SPRING = {
+  damping: 22,
+  stiffness: 260,
+  mass: 0.7,
+} as const;
 const IS_IOS = Platform.OS === "ios";
 
 const NO_SURFACE_SHADOW = Platform.select({
@@ -134,6 +142,7 @@ export function TaskRow({
   const moveThresholdFiredRef = useRef(false);
   const pressActiveRef = useRef(false);
   const holdProgress = useSharedValue(0);
+  const dragLiftProgress = useSharedValue(0);
   const isDraggingSv = useSharedValue(isDragging);
   const pressDelayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -143,6 +152,8 @@ export function TaskRow({
   const dragActivatedRef = useRef(false);
   const dragArmedRef = useRef(false);
   const dragIntentRef = useRef(false);
+  const blockPressRef = useRef(false);
+  const pressInAtRef = useRef(0);
   const pressStartedAtRef = useRef(0);
   const canLongPress = Boolean(onOpenContextMenu || onDrag);
   const usesSplitHoldTiming =
@@ -171,6 +182,10 @@ export function TaskRow({
     isDraggingSv.value = isDragging;
     if (!isDragging) {
       dragActivatedRef.current = false;
+      dragLiftProgress.value = withTiming(0, {
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+      });
       return;
     }
 
@@ -178,24 +193,25 @@ export function TaskRow({
       clearTimeout(contextMenuTimerRef.current);
       contextMenuTimerRef.current = null;
     }
-  }, [isDragging, isDraggingSv]);
+
+    dragLiftProgress.value = withSpring(1, DRAG_LIFT_SPRING);
+  }, [dragLiftProgress, isDragging, isDraggingSv]);
 
   useAnimatedReaction(
     () => isDraggingSv.value,
     (current, previous) => {
-      if (current || previous) {
-        cancelAnimation(holdProgress);
-        holdProgress.value = 0;
+      if (current && !previous) {
+        holdProgress.value = withTiming(0, {
+          duration: 160,
+          easing: Easing.out(Easing.cubic),
+        });
       }
     },
   );
 
   const holdShadowStyle = useAnimatedStyle(() => {
-    if (isDraggingSv.value) {
-      return NO_SURFACE_SHADOW;
-    }
-
-    const progress = holdProgress.value;
+    const lift = dragLiftProgress.value;
+    const progress = holdProgress.value * (1 - lift);
     if (progress <= 0) {
       return NO_SURFACE_SHADOW;
     }
@@ -214,7 +230,7 @@ export function TaskRow({
         shadowRadius:
           HOLD_SHADOW_MIN_RADIUS +
           progress * (HOLD_SHADOW_MAX_RADIUS - HOLD_SHADOW_MIN_RADIUS),
-        shadowOffset: { width: 0, height: 1 },
+        shadowOffset: { width: 0, height: 0 },
       };
     }
 
@@ -225,30 +241,22 @@ export function TaskRow({
   });
 
   const dragSurfaceStyle = useAnimatedStyle(() => {
-    if (isDraggingSv.value) {
-      if (IS_IOS) {
-        return {
-          opacity: 0.92,
-          borderRadius: 15,
-          backgroundColor: "#ffffff",
-          shadowColor: "#000000",
-          shadowOpacity: 0.14,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 2 },
-        };
-      }
-
+    const lift = dragLiftProgress.value;
+    if (lift <= 0) {
       return {
-        opacity: 0.92,
-        borderRadius: 15,
+        transform: [{ translateX: 0 }],
+        borderRadius: 0,
+        borderWidth: 0,
         backgroundColor: "#ffffff",
-        elevation: 4,
+        ...NO_SURFACE_SHADOW,
       };
     }
 
     return {
-      opacity: 1,
-      borderRadius: 0,
+      transform: [{ translateX: lift * DRAG_TRANSLATE_X }],
+      borderRadius: lift * 15,
+      borderWidth: lift,
+      borderColor: DRAG_BORDER_COLOR,
       backgroundColor: "#ffffff",
       ...NO_SURFACE_SHADOW,
     };
@@ -260,7 +268,7 @@ export function TaskRow({
     holdProgress.value = 0;
     holdProgress.value = withTiming(1, {
       duration: holdShadowDurationMs,
-      easing: Easing.linear,
+      easing: Easing.out(Easing.cubic),
     });
   }
 
@@ -331,6 +339,7 @@ export function TaskRow({
     dragArmedRef.current = false;
     resetHoldShadow();
     menuOpenedThisGestureRef.current = true;
+    blockPressRef.current = true;
     if (onOpenContextMenu) {
       rowRef.current?.measureInWindow((x, y, width, height) => {
         if (dragActivatedRef.current || isDragging || hasDragIntentMovement()) {
@@ -345,6 +354,7 @@ export function TaskRow({
   function triggerDrag() {
     if (!onDrag || dragActivatedRef.current) return;
     dragActivatedRef.current = true;
+    blockPressRef.current = true;
     clearHoldShadowImmediate();
     clearHoldTimers();
     onDrag();
@@ -385,6 +395,7 @@ export function TaskRow({
     if (usesSplitHoldTiming) return;
     clearHoldShadowImmediate();
     menuOpenedThisGestureRef.current = true;
+    blockPressRef.current = true;
     if (onOpenContextMenu) {
       rowRef.current?.measureInWindow((x, y, width, height) => {
         onOpenContextMenu(task, { x, y, width, height });
@@ -471,6 +482,7 @@ export function TaskRow({
     0,
     task.labels.length - visibleLabels.length,
   );
+  const subtaskIconColor = subtasksExpanded ? "#aeaeb4" : "#cbccd8";
 
   const rowContents = (
     <>
@@ -513,6 +525,8 @@ export function TaskRow({
           ]}
           onPressIn={(event) => {
             menuOpenedThisGestureRef.current = false;
+            blockPressRef.current = false;
+            pressInAtRef.current = Date.now();
             if (!usesSplitHoldTiming) return;
 
             const { pageX, pageY } = event.nativeEvent;
@@ -524,6 +538,17 @@ export function TaskRow({
           }}
           onPress={() => {
             if (menuOpenedThisGestureRef.current) return;
+            if (blockPressRef.current) {
+              blockPressRef.current = false;
+              return;
+            }
+            if (
+              usesSplitHoldTiming &&
+              onDrag &&
+              Date.now() - pressInAtRef.current >= longPressDelayMs
+            ) {
+              return;
+            }
             onPress?.(task);
           }}
           onLongPress={
@@ -625,22 +650,57 @@ export function TaskRow({
                     <RiArrowDropRightLineIcon size={21} color="#babbbd" />
                   )}
                 </Pressable>
-                {!subtasksExpanded ? (
-                  <Pressable
-                    style={styles.subtaskBranchButton}
-                    accessibilityRole="button"
-                    accessibilityLabel="Show subtasks"
-                    accessibilityState={{ expanded: false }}
-                    onPress={() => onToggleSubtasksExpanded?.()}
-                  >
-                    <TaskListSubtaskIcon size={13} color="#afafaf" />
-                  </Pressable>
-                ) : null}
+                <Pressable
+                  style={[
+                    styles.subtaskBranchButton,
+                    styles.subtaskBranchIconOffset,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    subtasksExpanded ? "Collapse subtasks" : "Show subtasks"
+                  }
+                  accessibilityState={{ expanded: subtasksExpanded }}
+                  onPress={() => onToggleSubtasksExpanded?.()}
+                >
+                  <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
+                    <Rect
+                      x="16"
+                      y="9"
+                      width="4"
+                      height="4"
+                      rx="2"
+                      transform="rotate(90 16 9)"
+                      stroke={subtaskIconColor}
+                    />
+                    <Rect
+                      x="20"
+                      y="17"
+                      width="4"
+                      height="4"
+                      rx="2"
+                      transform="rotate(90 20 17)"
+                      stroke={subtaskIconColor}
+                    />
+                    <Path
+                      d="M5 4V15C5 16.8856 5 17.8284 5.58579 18.4142C6.17157 19 7.11438 19 9 19H16"
+                      stroke={subtaskIconColor}
+                    />
+                    <Path
+                      d="M5 7V7C5 8.88562 5 9.82843 5.58579 10.4142C6.17157 11 7.11438 11 9 11H12"
+                      stroke={subtaskIconColor}
+                    />
+                  </Svg>
+                </Pressable>
               </View>
             ) : null}
 
             {dueDateParts ? (
-              <View style={styles.dueDateRow}>
+              <View
+                style={[
+                  styles.dueDateRow,
+                  showSubtaskCollapse && styles.dueDateRowWithSubtasks,
+                ]}
+              >
                 <ThemedText
                   style={[styles.dueDate, checked && styles.dueDateCompleted]}
                   numberOfLines={1}
@@ -754,6 +814,9 @@ const styles = StyleSheet.create({
     marginLeft: -9,
     marginRight: 2,
   },
+  subtaskBranchIconOffset: {
+    marginLeft: -3,
+  },
   checkboxHit: {
     paddingVertical: 7,
     paddingRight: 9,
@@ -850,6 +913,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     marginTop: 1.5,
+  },
+  dueDateRowWithSubtasks: {
+    marginLeft: 6,
   },
   dueDate: {
     fontSize: 10.5,

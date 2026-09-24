@@ -10,12 +10,14 @@ type TaskCheckboxProps = {
   checked: boolean;
   onPress: () => void;
   accessibilityLabel: string;
+  uncheckedBackgroundColor?: string;
 };
 
 export function TaskCheckbox({
   checked,
   onPress,
   accessibilityLabel,
+  uncheckedBackgroundColor = "#ffffff",
 }: TaskCheckboxProps) {
   return (
     <Pressable
@@ -25,7 +27,13 @@ export function TaskCheckbox({
       accessibilityState={{ checked }}
       accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [pressed && styles.pressed]}>
-      <View style={[styles.box, checked && styles.boxChecked]}>
+      <View
+        style={[
+          styles.box,
+          !checked && { backgroundColor: uncheckedBackgroundColor },
+          checked && styles.boxChecked,
+        ]}
+      >
         {checked ? (
           <AppSymbol ios="checkmark" android="check" size={12} tintColor="#ffffff" />
         ) : null}

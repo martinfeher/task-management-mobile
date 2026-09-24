@@ -14,12 +14,14 @@ export function saveSubtasksExpanded(taskId: string, expanded: boolean) {
 
 export function resolveSubtasksExpandedState(
   taskId: string,
-  subtaskCount: number,
+  _subtaskCount: number,
   savedByTaskId: Record<string, boolean> = readSubtasksExpandedByTask(),
 ) {
   const saved = savedByTaskId[taskId];
   if (saved !== undefined) return saved;
-  return subtaskCount > 0;
+  // Collapsed by default on first task-list visit each app session; toggles are
+  // persisted in expandedByTaskIdCache for the rest of the session.
+  return false;
 }
 
 export function countIncompleteSubtasksByParentId(tasks: TaskItem[]) {

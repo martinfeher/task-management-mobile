@@ -159,6 +159,7 @@ export function TaskListPanel({
   const contextTask = activeTask;
   const contextMenuTaskIdRef = useRef<string | null>(null);
   const isDraggingRef = useRef(isDragging);
+  const dragPlaceholderIndexRef = useRef<number | null>(null);
   const backdropReadyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -254,16 +255,28 @@ export function TaskListPanel({
     [scheduleBackdropReady, windowHeight, windowWidth],
   );
 
-  const handleDragBegin = useCallback(() => {
-    isDraggingRef.current = true;
-    closeContextMenu();
-    setIsDragging(true);
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [closeContextMenu]);
+  const handleDragBegin = useCallback(
+    (index: number) => {
+      isDraggingRef.current = true;
+      dragPlaceholderIndexRef.current = index;
+      closeContextMenu();
+      setIsDragging(true);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    },
+    [closeContextMenu],
+  );
+
+  const handlePlaceholderIndexChange = useCallback((placeholderIndex: number) => {
+    if (dragPlaceholderIndexRef.current === placeholderIndex) return;
+
+    dragPlaceholderIndexRef.current = placeholderIndex;
+    void Haptics.selectionAsync();
+  }, []);
 
   const handlePinnedDragEnd = useCallback(
     ({ data, from, to }: { data: TaskBlock[]; from: number; to: number }) => {
       isDraggingRef.current = false;
+      dragPlaceholderIndexRef.current = null;
       setIsDragging(false);
 
       const nextBlocks = reorderBlocks(pinnedBlocks, data, from, to);
@@ -280,6 +293,7 @@ export function TaskListPanel({
   const handleTasksDragEnd = useCallback(
     ({ data, from, to }: { data: TaskBlock[]; from: number; to: number }) => {
       isDraggingRef.current = false;
+      dragPlaceholderIndexRef.current = null;
       setIsDragging(false);
 
       const nextBlocks = reorderBlocks(taskBlocks, data, from, to);
@@ -322,7 +336,7 @@ export function TaskListPanel({
         : [];
 
       return (
-        <ScaleDecorator activeScale={0.975}>
+        <ScaleDecorator activeScale={1}>
           <TaskRow
             task={item.root}
             showListName={showListName}
@@ -531,6 +545,7 @@ export function TaskListPanel({
                   data={pinnedBlocks}
                   keyExtractor={(item) => `pinned-${item.id}`}
                   onDragBegin={handleDragBegin}
+                  onPlaceholderIndexChange={handlePlaceholderIndexChange}
                   onDragEnd={handlePinnedDragEnd}
                   renderItem={renderBlockItem}
                   animationConfig={DROP_ANIMATION_CONFIG}
@@ -545,6 +560,7 @@ export function TaskListPanel({
                 data={taskBlocks}
                 keyExtractor={(item) => item.id}
                 onDragBegin={handleDragBegin}
+                onPlaceholderIndexChange={handlePlaceholderIndexChange}
                 onDragEnd={handleTasksDragEnd}
                 renderItem={renderBlockItem}
                 animationConfig={DROP_ANIMATION_CONFIG}

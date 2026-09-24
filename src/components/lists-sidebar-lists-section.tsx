@@ -170,6 +170,7 @@ export function ListsFolderRow({
           style={{
             transform: [{ rotate: expanded ? "0deg" : "-90deg" }],
           }}
+          className="mr-2"
         >
           <BiChevronDownIcon size={16} color="#c0c5e0" />
         </View>
@@ -203,6 +204,7 @@ export function ListsSidebarListRow({
     <SidebarRow
       title={list.name}
       count={list.taskCount}
+      countNudgeLeft={nested ? 34 : undefined}
       selected={selected}
       selectedTitleClassName="font-normal text-zinc-700"
       nested={nested}

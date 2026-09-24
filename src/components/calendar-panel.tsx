@@ -1,4 +1,48 @@
+import { AddTaskButton } from "@/components/add-task-button";
 import { AppSymbol } from "@/components/app-symbol";
+import { CalendarTimeGridView } from "@/components/calendar-time-grid-view";
+import type { TaskScheduleUpdate } from "@/components/calendar-timed-task-block";
+import { CalendarUpcomingView } from "@/components/calendar-upcoming-view";
+import {
+  CalendarViewPickerSheet,
+  type CalendarViewMode,
+  type CalendarViewPickerAnchor,
+} from "@/components/calendar-view-picker-sheet";
+import { IoCalendarClearOutlineIcon } from "@/components/io-calendar-clear-outline-icon";
+import {
+  TaskContextMenu,
+  type TaskContextMenuAnchor,
+} from "@/components/task-context-menu";
+import {
+  TaskDatePickerSheet,
+  type TaskScheduleSelection,
+} from "@/components/task-date-picker-sheet";
+import { TaskLabelPicker } from "@/components/task-label-picker";
+import { TaskListPicker } from "@/components/task-list-picker";
+import { TaskRow } from "@/components/task-row";
+import { ThemedText } from "@/components/themed-text";
+import {
+  ADD_TASK_FAB_SIZE,
+  FAB_BOTTOM_NUDGE,
+  FAB_RIGHT_INSET,
+  getAddTaskFabReservedHeight,
+  getFabBottomOffset,
+} from "@/constants/tab-bar";
+import { Spacing } from "@/constants/theme";
+import { useApp } from "@/contexts/app-context";
+import {
+  fetchLabels,
+  moveTaskToList,
+  toggleTaskImportant,
+  toggleTaskLabel,
+  updateTaskPinned,
+  updateTaskPriority,
+  updateTaskSchedule,
+} from "@/lib/api";
+import { applyTaskReminder } from "@/lib/notifications";
+import { addDays, startOfDay, startOfWeek, toDateKey } from "@/lib/task-dates";
+import { buildTasksByDate } from "@/lib/task-repeat";
+import type { TaskItem, TaskLabel } from "@/types/todo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,38 +55,10 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-
-import { AddTaskButton } from "@/components/add-task-button";
-import { CiCalendarIcon } from "@/components/ci-calendar-icon";
-import { CalendarTimeGridView } from "@/components/calendar-time-grid-view";
-import type { TaskScheduleUpdate } from "@/components/calendar-timed-task-block";
 import {
-  CalendarViewPickerSheet,
-  type CalendarViewMode,
-} from "@/components/calendar-view-picker-sheet";
-import { TaskContextMenu, type TaskContextMenuAnchor } from "@/components/task-context-menu";
-import { TaskDatePickerSheet, type TaskScheduleSelection } from "@/components/task-date-picker-sheet";
-import { TaskLabelPicker } from "@/components/task-label-picker";
-import { TaskListPicker } from "@/components/task-list-picker";
-import { TaskRow } from "@/components/task-row";
-import { ThemedText } from "@/components/themed-text";
-import { Spacing } from "@/constants/theme";
-import {
-  fetchLabels,
-  moveTaskToList,
-  toggleTaskImportant,
-  toggleTaskLabel,
-  updateTaskSchedule,
-  updateTaskPinned,
-  updateTaskPriority,
-} from "@/lib/api";
-import { applyTaskReminder } from "@/lib/notifications";
-import { addDays, startOfDay, startOfWeek, toDateKey } from "@/lib/task-dates";
-import { buildTasksByDate } from "@/lib/task-repeat";
-import { useApp } from "@/contexts/app-context";
-import type { TaskItem, TaskLabel } from "@/types/todo";
-
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS_INITIAL_AFTER = 6;
 const MONTHS_LOAD_BATCH = 6;
@@ -70,7 +86,11 @@ function getMonthGrid(year: number, month: number) {
   });
 }
 
-function formatPeriodLabel(viewMode: CalendarViewMode, selectedDate: Date, monthDate: Date) {
+function formatPeriodLabel(
+  viewMode: CalendarViewMode,
+  selectedDate: Date,
+  monthDate: Date,
+) {
   if (viewMode === "month") {
     return monthDate.toLocaleDateString(undefined, {
       month: "long",
@@ -98,7 +118,9 @@ function formatPeriodLabel(viewMode: CalendarViewMode, selectedDate: Date, month
       month: sameMonth ? undefined : "short",
       day: "numeric",
       year:
-        selectedDate.getFullYear() === end.getFullYear() ? undefined : "numeric",
+        selectedDate.getFullYear() === end.getFullYear()
+          ? undefined
+          : "numeric",
     });
     return `${startLabel} – ${endLabel}`;
   }
@@ -113,12 +135,24 @@ function formatPeriodLabel(viewMode: CalendarViewMode, selectedDate: Date, month
   const endLabel = weekEnd.toLocaleDateString(undefined, {
     month: sameMonth ? undefined : "short",
     day: "numeric",
-    year: weekStart.getFullYear() === weekEnd.getFullYear() ? undefined : "numeric",
+    year:
+      weekStart.getFullYear() === weekEnd.getFullYear() ? undefined : "numeric",
   });
   return `${startLabel} – ${endLabel}`;
 }
 
+const CALENDAR_FAB_BUTTON_SIZE = 48;
+const CALENDAR_FAB_BUTTON_RENDER_SIZE = CALENDAR_FAB_BUTTON_SIZE * 1.13;
+const CALENDAR_FAB_ICON_GAP = 12;
+
 export function CalendarPanel() {
+  const insets = useSafeAreaInsets();
+  const fabBottom = getFabBottomOffset(insets.bottom, false);
+  const calendarFabIconBottom =
+    fabBottom - FAB_BOTTOM_NUDGE + ADD_TASK_FAB_SIZE + CALENDAR_FAB_ICON_GAP;
+  const calendarFabIconRight =
+    FAB_RIGHT_INSET + (ADD_TASK_FAB_SIZE - CALENDAR_FAB_BUTTON_RENDER_SIZE) / 2;
+
   const {
     openTask,
     startAddingTask,
@@ -139,11 +173,17 @@ export function CalendarPanel() {
     [openTask],
   );
   const [viewMode, setViewMode] = useState<CalendarViewMode>("threeDay");
+  const [isUpcomingView, setIsUpcomingView] = useState(false);
   const [viewPickerOpen, setViewPickerOpen] = useState(false);
+  const [viewPickerAnchor, setViewPickerAnchor] =
+    useState<CalendarViewPickerAnchor | null>(null);
+  const viewPickerButtonRef = useRef<View>(null);
   const [monthDate, setMonthDate] = useState(() => startOfDay(new Date()));
   const [monthsBefore, setMonthsBefore] = useState(0);
   const [monthsAfter, setMonthsAfter] = useState(MONTHS_INITIAL_AFTER);
-  const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() =>
+    startOfDay(new Date()),
+  );
   const monthScrollRef = useRef<ScrollView>(null);
   const prependScrollRestoreRef = useRef<number | null>(null);
   const loadingMonthsRef = useRef(false);
@@ -173,12 +213,15 @@ export function CalendarPanel() {
       new Date(monthDate.getFullYear(), monthDate.getMonth(), 1),
     );
 
-    return Array.from({ length: monthsBefore + monthsAfter + 1 }, (_, index) => {
-      const offset = index - monthsBefore;
-      return startOfDay(
-        new Date(anchor.getFullYear(), anchor.getMonth() + offset, 1),
-      );
-    });
+    return Array.from(
+      { length: monthsBefore + monthsAfter + 1 },
+      (_, index) => {
+        const offset = index - monthsBefore;
+        return startOfDay(
+          new Date(anchor.getFullYear(), anchor.getMonth() + offset, 1),
+        );
+      },
+    );
   }, [monthDate, monthsAfter, monthsBefore]);
 
   useEffect(() => {
@@ -235,7 +278,14 @@ export function CalendarPanel() {
     }
 
     return buildTasksByDate(calendarTasks, rangeStart, rangeEnd);
-  }, [calendarTasks, gridDays, monthDays, monthSequence, selectedDate, viewMode]);
+  }, [
+    calendarTasks,
+    gridDays,
+    monthDays,
+    monthSequence,
+    selectedDate,
+    viewMode,
+  ]);
 
   const selectedDateKey = toDateKey(selectedDate);
   const selectedDayTasks = tasksByDate.get(selectedDateKey) ?? [];
@@ -328,6 +378,7 @@ export function CalendarPanel() {
   }
 
   function handleSelectViewMode(nextView: CalendarViewMode) {
+    setIsUpcomingView(false);
     setViewMode(nextView);
     if (nextView === "month") {
       setMonthDate(
@@ -350,7 +401,10 @@ export function CalendarPanel() {
     setSelectedDate((current) => startOfDay(addDays(current, delta)));
   }, []);
 
-  async function handleUpdateTaskSchedule(task: TaskItem, update: TaskScheduleUpdate) {
+  async function handleUpdateTaskSchedule(
+    task: TaskItem,
+    update: TaskScheduleUpdate,
+  ) {
     const original = calendarTasks.find((item) => item.id === task.id);
     const previousTasks = calendarTasks;
     patchCalendarTask(task.id, {
@@ -488,181 +542,256 @@ export function CalendarPanel() {
   const assignedLabelIds = new Set(
     (contextTask?.labels ?? []).map((label) => label.id),
   );
+  const listBottomPadding = getAddTaskFabReservedHeight(insets.bottom);
+
+  function handleSelectUpcomingView() {
+    setIsUpcomingView(true);
+  }
+
+  function handleOpenViewPicker() {
+    viewPickerButtonRef.current?.measureInWindow((x, y, width, height) => {
+      setViewPickerAnchor({ x, y, width, height });
+      setViewPickerOpen(true);
+    });
+  }
+
+  function handleCloseViewPicker() {
+    setViewPickerOpen(false);
+    setViewPickerAnchor(null);
+  }
 
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
         <View style={styles.header}>
-          <ThemedText style={styles.headerTitle}>Calendar</ThemedText>
+          <ThemedText style={styles.headerTitle}>
+            {isUpcomingView ? "Upcoming" : "Calendar"}
+          </ThemedText>
           <View style={styles.headerActions}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Change calendar view"
-              style={styles.headerIconButton}
-              onPress={() => setViewPickerOpen(true)}>
-              <CiCalendarIcon size={20} color="#374151" />
-            </Pressable>
-            <Pressable style={styles.addButton} onPress={handleAddTaskOnSelectedDay}>
-              <AppSymbol ios="plus" android="add" size={20} tintColor="#2563eb" />
-            </Pressable>
+            {!isUpcomingView ? (
+              <Pressable
+                style={styles.addButton}
+                onPress={handleAddTaskOnSelectedDay}
+              >
+                <AppSymbol
+                  ios="plus"
+                  android="add"
+                  size={20}
+                  tintColor="#2563eb"
+                />
+              </Pressable>
+            ) : null}
           </View>
         </View>
 
-        <View style={styles.periodHeader}>
-          <Pressable style={styles.periodNavButton} onPress={handlePreviousPeriod}>
-            <AppSymbol ios="chevron.left" android="chevron-left" size={20} tintColor="#374151" />
-          </Pressable>
-          <ThemedText style={styles.periodLabel} numberOfLines={1}>
-            {periodLabel}
-          </ThemedText>
-          <Pressable style={styles.periodNavButton} onPress={handleNextPeriod}>
-            <AppSymbol ios="chevron.right" android="chevron-right" size={20} tintColor="#374151" />
-          </Pressable>
-        </View>
-
-        {isTimeGridView ? (
-          <CalendarTimeGridView
-            days={gridDays}
-            tasksByDate={tasksByDate}
-            selectedDate={selectedDate}
+        {isUpcomingView ? (
+          <CalendarUpcomingView
+            tasks={calendarTasks}
             loading={calendarLoading}
             refreshing={calendarRefreshing}
-            onSelectDate={setSelectedDate}
-            onPressTask={openCalendarTask}
-            onScheduleChange={(task, update) => void handleUpdateTaskSchedule(task, update)}
-            onShiftDay={handleShiftDay}
+            listBottomPadding={listBottomPadding}
             onRefresh={() => void loadCalendarTasks(true)}
+            onPressTask={openCalendarTask}
+            onToggleComplete={(taskId, completed) => {
+              if (completed) {
+                void completeTask(taskId).then(() => loadCalendarTasks(true));
+              } else {
+                void uncompleteTask(taskId).then(() => loadCalendarTasks(true));
+              }
+            }}
+            onOpenContextMenu={(nextTask, anchor) =>
+              setContextMenu({ task: nextTask, anchor })
+            }
+            onSelectDate={setSelectedDate}
           />
         ) : null}
 
-        {viewMode === "month" ? (
+        {!isUpcomingView ? (
           <>
-            <View style={styles.weekdayRow}>
-              {WEEKDAY_LABELS.map((label) => (
-                <ThemedText key={label} style={styles.weekdayLabel}>
-                  {label}
-                </ThemedText>
-              ))}
+            <View style={styles.periodHeader}>
+              <Pressable
+                style={styles.periodNavButton}
+                onPress={handlePreviousPeriod}
+              >
+                <AppSymbol
+                  ios="chevron.left"
+                  android="chevron-left"
+                  size={20}
+                  tintColor="#374151"
+                />
+              </Pressable>
+              <ThemedText style={styles.periodLabel} numberOfLines={1}>
+                {periodLabel}
+              </ThemedText>
+              <Pressable
+                style={styles.periodNavButton}
+                onPress={handleNextPeriod}
+              >
+                <AppSymbol
+                  ios="chevron.right"
+                  android="chevron-right"
+                  size={20}
+                  tintColor="#374151"
+                />
+              </Pressable>
             </View>
 
-            <ScrollView
-              ref={monthScrollRef}
-              style={styles.monthScroll}
-              contentContainerStyle={styles.monthScrollContent}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator
-              scrollEventThrottle={16}
-              onScroll={handleMonthScroll}
-            >
-              {monthSequence.map((visibleMonth, monthIndex) => {
-                const visibleMonthDays = getMonthGrid(
-                  visibleMonth.getFullYear(),
-                  visibleMonth.getMonth(),
-                );
-                const visibleMonthLabel = visibleMonth.toLocaleDateString(
-                  undefined,
-                  {
-                    month: "long",
-                    year: "numeric",
-                  },
-                );
-
-                return (
-                  <View
-                    key={toDateKey(visibleMonth)}
-                    style={styles.monthBlock}
-                  >
-                    {monthIndex > 0 ? (
-                      <ThemedText style={styles.monthBlockLabel}>
-                        {visibleMonthLabel}
-                      </ThemedText>
-                    ) : null}
-                    <View style={styles.monthGrid}>
-                      {visibleMonthDays.map((day) => {
-                        const key = toDateKey(day);
-                        const inMonth = day.getMonth() === visibleMonth.getMonth();
-                        const selected = isSameDay(day, selectedDate);
-                        const isToday = isSameDay(day, new Date());
-                        const count = tasksByDate.get(key)?.length ?? 0;
-
-                        return (
-                          <Pressable
-                            key={`${toDateKey(visibleMonth)}-${key}`}
-                            style={[
-                              styles.dayCell,
-                              selected && styles.dayCellSelected,
-                            ]}
-                            onPress={() => setSelectedDate(day)}
-                          >
-                            <ThemedText
-                              style={[
-                                styles.dayNumber,
-                                !inMonth && styles.dayNumberMuted,
-                                isToday && styles.dayNumberToday,
-                                selected && styles.dayNumberSelected,
-                              ]}
-                            >
-                              {day.getDate()}
-                            </ThemedText>
-                            {count > 0 && !selected ? (
-                              <View style={styles.taskDot} />
-                            ) : null}
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                );
-              })}
-            </ScrollView>
-          </>
-        ) : null}
-
-        {viewMode === "month" ? (
-          <ScrollView
-            style={styles.dayTasks}
-            contentContainerStyle={styles.dayTasksContent}
-            refreshControl={
-              <RefreshControl
+            {isTimeGridView ? (
+              <CalendarTimeGridView
+                days={gridDays}
+                tasksByDate={tasksByDate}
+                selectedDate={selectedDate}
+                loading={calendarLoading}
                 refreshing={calendarRefreshing}
+                onSelectDate={setSelectedDate}
+                onPressTask={openCalendarTask}
+                onScheduleChange={(task, update) =>
+                  void handleUpdateTaskSchedule(task, update)
+                }
+                onShiftDay={handleShiftDay}
                 onRefresh={() => void loadCalendarTasks(true)}
               />
-            }>
-            <ThemedText style={styles.dayTasksTitle}>
-              {selectedDate.toLocaleDateString(undefined, {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-              })}
-            </ThemedText>
+            ) : null}
 
-            {calendarLoading ? (
-              <ActivityIndicator color="#3c87f7" style={styles.loader} />
-            ) : selectedDayTasks.length === 0 ? (
-              <ThemedText themeColor="textSecondary" style={styles.emptyDay}>
-                No scheduled tasks
-              </ThemedText>
-            ) : (
-              selectedDayTasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  showListName
-                  onPress={openCalendarTask}
-                  onToggleComplete={(taskId, completed) => {
-                    if (completed) {
-                      void completeTask(taskId).then(() => loadCalendarTasks(true));
-                    } else {
-                      void uncompleteTask(taskId).then(() => loadCalendarTasks(true));
-                    }
-                  }}
-                  onOpenContextMenu={(nextTask, anchor) =>
-                    setContextMenu({ task: nextTask, anchor })
-                  }
-                />
-              ))
-            )}
-          </ScrollView>
+            {viewMode === "month" ? (
+              <>
+                <View style={styles.weekdayRow}>
+                  {WEEKDAY_LABELS.map((label) => (
+                    <ThemedText key={label} style={styles.weekdayLabel}>
+                      {label}
+                    </ThemedText>
+                  ))}
+                </View>
+
+                <ScrollView
+                  ref={monthScrollRef}
+                  style={styles.monthScroll}
+                  contentContainerStyle={styles.monthScrollContent}
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                  scrollEventThrottle={16}
+                  onScroll={handleMonthScroll}
+                >
+                  {monthSequence.map((visibleMonth, monthIndex) => {
+                    const visibleMonthDays = getMonthGrid(
+                      visibleMonth.getFullYear(),
+                      visibleMonth.getMonth(),
+                    );
+                    const visibleMonthLabel = visibleMonth.toLocaleDateString(
+                      undefined,
+                      {
+                        month: "long",
+                        year: "numeric",
+                      },
+                    );
+
+                    return (
+                      <View
+                        key={toDateKey(visibleMonth)}
+                        style={styles.monthBlock}
+                      >
+                        {monthIndex > 0 ? (
+                          <ThemedText style={styles.monthBlockLabel}>
+                            {visibleMonthLabel}
+                          </ThemedText>
+                        ) : null}
+                        <View style={styles.monthGrid}>
+                          {visibleMonthDays.map((day) => {
+                            const key = toDateKey(day);
+                            const inMonth =
+                              day.getMonth() === visibleMonth.getMonth();
+                            const selected = isSameDay(day, selectedDate);
+                            const isToday = isSameDay(day, new Date());
+                            const count = tasksByDate.get(key)?.length ?? 0;
+
+                            return (
+                              <Pressable
+                                key={`${toDateKey(visibleMonth)}-${key}`}
+                                style={[
+                                  styles.dayCell,
+                                  selected && styles.dayCellSelected,
+                                ]}
+                                onPress={() => setSelectedDate(day)}
+                              >
+                                <ThemedText
+                                  style={[
+                                    styles.dayNumber,
+                                    !inMonth && styles.dayNumberMuted,
+                                    isToday && styles.dayNumberToday,
+                                    selected && styles.dayNumberSelected,
+                                  ]}
+                                >
+                                  {day.getDate()}
+                                </ThemedText>
+                                {count > 0 && !selected ? (
+                                  <View style={styles.taskDot} />
+                                ) : null}
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            ) : null}
+
+            {viewMode === "month" ? (
+              <ScrollView
+                style={styles.dayTasks}
+                contentContainerStyle={styles.dayTasksContent}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={calendarRefreshing}
+                    onRefresh={() => void loadCalendarTasks(true)}
+                  />
+                }
+              >
+                <ThemedText style={styles.dayTasksTitle}>
+                  {selectedDate.toLocaleDateString(undefined, {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </ThemedText>
+
+                {calendarLoading ? (
+                  <ActivityIndicator color="#3c87f7" style={styles.loader} />
+                ) : selectedDayTasks.length === 0 ? (
+                  <ThemedText
+                    themeColor="textSecondary"
+                    style={styles.emptyDay}
+                  >
+                    No scheduled tasks
+                  </ThemedText>
+                ) : (
+                  selectedDayTasks.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      showListName
+                      onPress={openCalendarTask}
+                      onToggleComplete={(taskId, completed) => {
+                        if (completed) {
+                          void completeTask(taskId).then(() =>
+                            loadCalendarTasks(true),
+                          );
+                        } else {
+                          void uncompleteTask(taskId).then(() =>
+                            loadCalendarTasks(true),
+                          );
+                        }
+                      }}
+                      onOpenContextMenu={(nextTask, anchor) =>
+                        setContextMenu({ task: nextTask, anchor })
+                      }
+                    />
+                  ))
+                )}
+              </ScrollView>
+            ) : null}
+          </>
         ) : null}
       </SafeAreaView>
 
@@ -702,7 +831,9 @@ export function CalendarPanel() {
         <TaskLabelPicker
           labels={allLabels}
           assignedLabelIds={assignedLabelIds}
-          onToggleLabel={(labelId, assigned) => void handleToggleLabel(labelId, assigned)}
+          onToggleLabel={(labelId, assigned) =>
+            void handleToggleLabel(labelId, assigned)
+          }
           onClose={closeContextMenu}
         />
       ) : null}
@@ -728,9 +859,28 @@ export function CalendarPanel() {
       <CalendarViewPickerSheet
         visible={viewPickerOpen}
         activeView={viewMode}
+        isUpcomingActive={isUpcomingView}
+        anchor={viewPickerAnchor}
         onSelectView={handleSelectViewMode}
-        onClose={() => setViewPickerOpen(false)}
+        onSelectUpcoming={handleSelectUpcomingView}
+        onClose={handleCloseViewPicker}
       />
+
+      <Pressable
+        ref={viewPickerButtonRef}
+        accessibilityRole="button"
+        accessibilityLabel="Change calendar view"
+        hitSlop={8}
+        className="absolute z-20 size-13.5 mr-1 mb-1 items-center justify-center rounded-full bg-[#F5F5F8]"
+        style={{
+          bottom: calendarFabIconBottom,
+          right: calendarFabIconRight,
+          elevation: 20,
+        }}
+        onPress={handleOpenViewPicker}
+      >
+        <IoCalendarClearOutlineIcon size={29} color="#D5D7E3" />
+      </Pressable>
 
       <AddTaskButton onPress={handleAddTaskOnSelectedDay} />
     </View>

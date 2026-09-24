@@ -1,3 +1,7 @@
+import { AppSymbol } from "@/components/app-symbol";
+import { FiFlagIcon } from "@/components/fi-flag-icon";
+import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
+import { ThemedText } from "@/components/themed-text";
 import {
   Pressable,
   StyleSheet,
@@ -5,10 +9,6 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { FiFlagIcon } from "@/components/fi-flag-icon";
-import { AppSymbol } from "@/components/app-symbol";
-import { ThemedText } from "@/components/themed-text";
-import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
 
 type TaskPriorityFlagPopupProps = {
   selected: number | null;
@@ -41,9 +41,7 @@ export function PriorityFlagToolbarIcon({
   const color =
     priority != null ? getTaskPriorityColor(priority) : defaultColor;
 
-  return (
-    <FiFlagIcon size={size} color={color} strokeWidth={1.75} />
-  );
+  return <FiFlagIcon size={size} color={color} strokeWidth={1.75} />;
 }
 
 function PriorityFlagOption({
@@ -64,7 +62,8 @@ function PriorityFlagOption({
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={styles.flagSlot}>
+      style={styles.flagSlot}
+    >
       <AppSymbol
         ios={filled ? "flag.fill" : "flag"}
         android={filled ? "flag" : "outlined-flag"}
@@ -122,7 +121,11 @@ export function TaskPriorityFlagPopup({
         accessibilityRole="button"
         accessibilityLabel="Clear priority"
         onPress={() => onSelect(null)}
-        style={({ pressed }) => [styles.noneRow, pressed && styles.noneRowPressed]}>
+        style={({ pressed }) => [
+          styles.noneRow,
+          pressed && styles.noneRowPressed,
+        ]}
+      >
         <ThemedText style={styles.noneText}>None</ThemedText>
       </Pressable>
     </View>
@@ -212,7 +215,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   noneRowPressed: {
-    opacity: 0.65,
+    opacity: 0.5,
   },
   noneText: {
     fontSize: 16,

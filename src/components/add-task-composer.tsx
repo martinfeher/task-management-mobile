@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Svg, { Path, Rect } from "react-native-svg";
 
 import { AppSymbol } from "@/components/app-symbol";
 import { IoMdTimeIcon } from "@/components/io-md-time-icon";
@@ -22,7 +23,6 @@ import { TaskDatePickerSheet } from "@/components/task-date-picker-sheet";
 import { TaskLabelPicker } from "@/components/task-label-picker";
 import { TaskListPicker } from "@/components/task-list-picker";
 import { getTaskPriorityColor } from "@/components/task-priority-flag-popup";
-import { TbSubtaskIcon } from "@/components/tb-subtask-icon";
 import { ThemedText } from "@/components/themed-text";
 import { useApp } from "@/contexts/app-context";
 import { fetchLabels } from "@/lib/api";
@@ -580,7 +580,34 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                               style={styles.moreMenuRow}
                               onPress={handleToolbarSubtask}
                             >
-                              <TbSubtaskIcon size={18} color={ICON_COLOR} />
+                              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                                <Rect
+                                  x="16"
+                                  y="9"
+                                  width="4"
+                                  height="4"
+                                  rx="2"
+                                  transform="rotate(90 16 9)"
+                                  stroke={ICON_COLOR}
+                                />
+                                <Rect
+                                  x="20"
+                                  y="17"
+                                  width="4"
+                                  height="4"
+                                  rx="2"
+                                  transform="rotate(90 20 17)"
+                                  stroke={ICON_COLOR}
+                                />
+                                <Path
+                                  d="M5 4V15C5 16.8856 5 17.8284 5.58579 18.4142C6.17157 19 7.11438 19 9 19H16"
+                                  stroke={ICON_COLOR}
+                                />
+                                <Path
+                                  d="M5 7V7C5 8.88562 5 9.82843 5.58579 10.4142C6.17157 11 7.11438 11 9 11H12"
+                                  stroke={ICON_COLOR}
+                                />
+                              </Svg>
                               <ThemedText style={styles.moreMenuRowText}>
                                 subtasks
                               </ThemedText>

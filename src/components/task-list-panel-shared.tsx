@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     paddingTop: LIST_NAV_ICON_INSET,
     marginBottom: LIST_NAV_ICON_INSET,
-    marginLeft: -19,
+    marginLeft: -13,
   },
   headerTitle: {
     fontSize: 20,

@@ -451,6 +451,8 @@ export async function createSubtask(parentId: string, name: string) {
     throw new Error(`Failed to create subtask (${response.status})`);
   }
 
+  invalidateTaskCaches();
+
   return response.json() as Promise<TaskItem>;
 }
 

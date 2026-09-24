@@ -224,6 +224,7 @@ export function TaskDetailScreen() {
   const navigation = useNavigation();
   const {
     handleTaskCompleted,
+    openTask,
     selectView,
     suppressNextSearchOpen,
     sidebarData,
@@ -261,6 +262,8 @@ export function TaskDetailScreen() {
   const [subtaskInputOpen, setSubtaskInputOpen] = useState(false);
   const [subtaskName, setSubtaskName] = useState("");
   const subtaskInputRef = useRef<TextInput>(null);
+  const addingSubtaskRef = useRef(false);
+  const scrollViewRef = useRef<ScrollView>(null);
   const [allLabels, setAllLabels] = useState<TaskLabel[]>([]);
 
   const pickerSchedule = useMemo(
@@ -1467,21 +1470,39 @@ export function TaskDetailScreen() {
     [calendarColor, setCalendarTaskColor],
   );
 
-  const loadSubtasks = useCallback(async () => {
-    if (!detail) return;
-    setSubtasksLoading(true);
-    try {
-      const data = await fetchTasks({ type: "list", id: detail.listId });
-      const items = [...data.pinned, ...data.tasks].filter(
-        (task) => task.parentId === detail.id,
-      );
-      setSubtasks(items);
-    } catch {
-      setSubtasks([]);
-    } finally {
-      setSubtasksLoading(false);
-    }
-  }, [detail]);
+  const loadSubtasks = useCallback(
+    async (options?: { openIfActive?: boolean }) => {
+      if (!detail) return [];
+      setSubtasksLoading(true);
+      try {
+        const data = await fetchTasks(
+          { type: "list", id: detail.listId },
+          { force: true },
+        );
+        const items = [...data.pinned, ...data.tasks].filter(
+          (task) => task.parentId === detail.id && !task.completed,
+        );
+        setSubtasks(items);
+        if (options?.openIfActive && items.some((task) => !task.completed)) {
+          setSubtasksSectionOpen(true);
+          setSubtasksExpanded(true);
+          setSubtaskInputOpen(false);
+        }
+        return items;
+      } catch {
+        setSubtasks([]);
+        return [];
+      } finally {
+        setSubtasksLoading(false);
+      }
+    },
+    [detail],
+  );
+
+  useEffect(() => {
+    if (!detail || loading) return;
+    void loadSubtasks({ openIfActive: true });
+  }, [detail?.id, detail?.listId, loading, loadSubtasks]);
 
   const openSubtasksSection = useCallback(() => {
     setSubtasksSectionOpen(true);
@@ -1492,6 +1513,7 @@ export function TaskDetailScreen() {
   }, [loadSubtasks]);
 
   const openNewSubtaskInput = useCallback(() => {
+    setSubtasksSectionOpen(true);
     setSubtasksExpanded(true);
     setSubtaskInputOpen(true);
     setSubtaskName("");
@@ -1509,17 +1531,26 @@ export function TaskDetailScreen() {
   }, [subtaskInputOpen, subtasksExpanded, subtasksSectionOpen]);
 
   const handleAddSubtask = async () => {
-    if (!detail) return;
+    if (!detail || addingSubtaskRef.current) return;
     const trimmed = subtaskName.trim();
     if (!trimmed) return;
+
+    addingSubtaskRef.current = true;
     try {
-      await createSubtask(detail.id, trimmed);
+      const created = await createSubtask(detail.id, trimmed);
       setSubtaskName("");
-      await loadSubtasks();
+      setSubtasks((current) =>
+        current.some((item) => item.id === created.id)
+          ? current
+          : [...current, created],
+      );
       handleTaskCompleted();
+      await loadSubtasks();
       subtaskInputRef.current?.focus();
     } catch {
       Alert.alert("Couldn't add subtask");
+    } finally {
+      addingSubtaskRef.current = false;
     }
   };
 
@@ -1530,9 +1561,11 @@ export function TaskDetailScreen() {
     try {
       await toggleTaskCompleted(subtask.id, completed);
       setSubtasks((current) =>
-        current.map((item) =>
-          item.id === subtask.id ? { ...item, completed } : item,
-        ),
+        completed
+          ? current.filter((item) => item.id !== subtask.id)
+          : current.map((item) =>
+              item.id === subtask.id ? { ...item, completed } : item,
+            ),
       );
       handleTaskCompleted();
     } catch {
@@ -1712,19 +1745,31 @@ export function TaskDetailScreen() {
 
   const sheetMinHeight = windowHeight * TASK_SHEET_MIN_HEIGHT_FRACTION;
   const sheetMaxScrollHeight = windowHeight * TASK_SHEET_MAX_HEIGHT_FRACTION;
-  const toolbarSafeAreaStyle =
-    keyboardHeight > 0
+  const subtasksKeyboardLayoutActive =
+    keyboardHeight > 0 && subtasksSectionOpen && subtasksExpanded;
+  const toolbarPinnedToKeyboard = expandedFullscreen && keyboardHeight > 0;
+  const toolbarSafeAreaStyle = toolbarPinnedToKeyboard
+    ? { paddingBottom: 0 }
+    : keyboardHeight > 0
       ? { paddingBottom: Spacing.two }
-      : insets.bottom > 0
-        ? {
-            marginBottom: -(insets.bottom + TOOLBAR_BOTTOM_SHIFT),
-            paddingBottom: toolbarFooterInset,
-          }
-        : { paddingBottom: Spacing.two };
+      : expandedFullscreen
+        ? { paddingBottom: Math.max(insets.bottom, Spacing.two) }
+        : insets.bottom > 0
+          ? {
+              marginBottom: -(insets.bottom + TOOLBAR_BOTTOM_SHIFT),
+              paddingBottom: toolbarFooterInset,
+            }
+          : { paddingBottom: Spacing.two };
   const toolbarTotalHeight =
     TASK_DETAIL_TOOLBAR_BODY_HEIGHT +
     toolbarFooterInset +
     (saveStatusLabel ? 22 : 0);
+  const showDetailToolbar =
+    !subtasksKeyboardLayoutActive || toolbarPinnedToKeyboard;
+  const layoutToolbarHeight =
+    subtasksKeyboardLayoutActive && !toolbarPinnedToKeyboard
+      ? 0
+      : toolbarTotalHeight;
   const expandedContainerHeight = Math.max(
     sheetMinHeight,
     windowHeight - insets.top,
@@ -1735,8 +1780,29 @@ export function TaskDetailScreen() {
   );
   const maxScrollHeight = Math.max(
     160,
-    sheetMaxScrollHeight - toolbarTotalHeight - TASK_DETAIL_HANDLE_HEIGHT,
+    sheetMaxScrollHeight - layoutToolbarHeight - TASK_DETAIL_HANDLE_HEIGHT,
   );
+  const subtasksKeyboardVerticalOffset =
+    Platform.OS === "ios" ? (sheetTopY ?? insets.top) : 0;
+
+  useEffect(() => {
+    if (!subtasksKeyboardLayoutActive) return;
+
+    measureSheetTop();
+    const timer = setTimeout(
+      () => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      },
+      Platform.OS === "ios" ? 80 : 120,
+    );
+    return () => clearTimeout(timer);
+  }, [
+    subtasksKeyboardLayoutActive,
+    keyboardHeight,
+    subtaskInputOpen,
+    measureSheetTop,
+  ]);
+
   const expandedNotesHeight = Math.max(280, expandedScrollHeight - 170);
   const expandedTaskBodyHeight = expandedNotesHeight + 72;
 
@@ -1802,6 +1868,193 @@ export function TaskDetailScreen() {
     )
   ) : null;
 
+  const subtasksSectionEdgeStyle = {
+    marginLeft: -Spacing.three,
+    marginRight: -(Spacing.three - 2),
+  };
+
+  const subtasksSectionOuterStyle = {
+    ...subtasksSectionEdgeStyle,
+    overflow: "visible" as const,
+  };
+
+  const subtasksSectionCardStyle = Platform.select({
+    ios: {
+      backgroundColor: "#f6f6f9",
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 2.5 },
+      shadowOpacity: 0.09,
+      shadowRadius: 7,
+    },
+    android: {
+      backgroundColor: "#f6f6f9",
+      elevation: 2,
+    },
+    default: {
+      backgroundColor: "#f6f6f9",
+      boxShadow: "0px 3px 11px rgba(0, 0, 0, 0.1)",
+    },
+  });
+
+  const renderSubtasksMarkCompleteButton = (options?: {
+    offsetLeft?: number;
+  }) =>
+    !loading && detail ? (
+      <Pressable
+        onPress={handleDateCheckboxPress}
+        accessibilityRole="button"
+        accessibilityLabel={
+          detail.completed ? "Mark task incomplete" : "Mark task complete"
+        }
+        className="absolute z-20 h-9 w-9 items-center justify-center rounded-full border border-[#e3e3e3] bg-[#f7f7f7] active:opacity-85"
+        style={{
+          top: -44,
+          right: 10 + (options?.offsetLeft ?? 0),
+        }}
+      >
+        <AppSymbol
+          ios="checkmark"
+          android="check"
+          size={16}
+          tintColor="#6b7280"
+        />
+      </Pressable>
+    ) : null;
+
+  const renderSubtasksHeader = (options?: {
+    plusOffsetLeft?: number;
+    labelOffsetRight?: number;
+    collapsed?: boolean;
+  }) => (
+    <View
+      className={`flex-row items-center justify-between ${
+        options?.collapsed ? "min-h-[27px] py-0" : "py-1"
+      }`}
+    >
+      <Pressable
+        className={`min-w-0 flex-1 flex-row items-center gap-1.5 ${
+          options?.collapsed ? "min-h-[27px]" : "pb-1"
+        }`}
+        onPress={() => setSubtasksExpanded((expanded) => !expanded)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: subtasksExpanded }}
+        accessibilityLabel="Sub-tasks"
+        style={
+          options?.labelOffsetRight
+            ? { marginLeft: options.labelOffsetRight }
+            : undefined
+        }
+      >
+        <Text
+          className="text-[13px] font-medium text-[#545657]"
+          style={{ lineHeight: options?.collapsed ? 15 : 16 }}
+          {...(options?.collapsed && Platform.OS === "android"
+            ? { includeFontPadding: false }
+            : null)}
+        >
+          sub-tasks
+        </Text>
+        <View
+          className={`items-center justify-center ${
+            subtasksExpanded ? "rotate-90" : "rotate-0"
+          } ml-4`}
+        >
+          <AppSymbol
+            ios="chevron.right"
+            android="chevron-right"
+            size={15}
+            tintColor="#9ca3af"
+          />
+        </View>
+      </Pressable>
+      <Pressable
+        className="h-6 w-6 -mr-[9px] items-center justify-center active:opacity-55"
+        accessibilityRole="button"
+        accessibilityLabel="Add subtask"
+        hitSlop={8}
+        onPress={openNewSubtaskInput}
+        style={
+          options?.plusOffsetLeft
+            ? { marginRight: options.plusOffsetLeft }
+            : undefined
+        }
+      >
+        <LuPlusIcon size={25} color="#8c929e" strokeWidth={1.5} />
+      </Pressable>
+    </View>
+  );
+
+  const renderSubtasksList = () => (
+    <View className="mt-0.5 gap-2">
+      {subtasksLoading ? (
+        <ActivityIndicator
+          size="small"
+          color="#4873c7"
+          className="mb-1 self-start"
+        />
+      ) : null}
+      {subtasks.map((subtask) => (
+        <View
+          key={subtask.id}
+          className="min-h-[33px] flex-row items-center gap-2.5"
+        >
+          <TaskCheckbox
+            checked={false}
+            uncheckedBackgroundColor="#F6F6F9"
+            accessibilityLabel={`Mark ${subtask.name} complete`}
+            onPress={() => void handleToggleSubtaskComplete(subtask, true)}
+          />
+          <Pressable
+            className="min-w-0 flex-1 justify-center active:opacity-70"
+            accessibilityRole="button"
+            accessibilityLabel={`Open subtask ${subtask.name}`}
+            onPress={() =>
+              openTask({
+                ...subtask,
+                listName: subtask.listName ?? detail?.listName ?? "",
+              })
+            }
+          >
+            <ThemedText
+              style={{
+                fontSize: 14,
+                lineHeight: 16,
+                fontWeight: "400",
+                color: "#505050",
+              }}
+              numberOfLines={2}
+            >
+              {subtask.name}
+            </ThemedText>
+          </Pressable>
+        </View>
+      ))}
+      {subtaskInputOpen ? (
+        <View className="min-h-[34px] flex-row items-center gap-2.5">
+          <View className="h-[22px] w-[22px] rounded-xl border-[1.5px] border-[#dad4d5] bg-[#F6F6F9]" />
+          <TextInput
+            ref={subtaskInputRef}
+            value={subtaskName}
+            onChangeText={setSubtaskName}
+            autoFocus
+            className="flex-1 py-1 text-base leading-[22px] text-gray-900"
+            returnKeyType="done"
+            blurOnSubmit={false}
+            onSubmitEditing={() => void handleAddSubtask()}
+            onBlur={() => {
+              const trimmed = subtaskName.trim();
+              if (!trimmed) {
+                setSubtaskInputOpen(false);
+                return;
+              }
+              void handleAddSubtask();
+            }}
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+
   return (
     <>
       <KeyboardAvoidingView
@@ -1811,7 +2064,12 @@ export function TaskDetailScreen() {
           expandedFullscreen && { minHeight: expandedContainerHeight },
         ]}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
+        enabled={!toolbarPinnedToKeyboard}
+        keyboardVerticalOffset={
+          subtasksKeyboardLayoutActive && !toolbarPinnedToKeyboard
+            ? subtasksKeyboardVerticalOffset
+            : 0
+        }
       >
         <View
           ref={sheetContainerRef}
@@ -1848,10 +2106,11 @@ export function TaskDetailScreen() {
           </Pressable>
 
           <ScrollView
+            ref={scrollViewRef}
             style={
               expandedFullscreen
-                ? { minHeight: expandedScrollHeight }
-                : { maxHeight: maxScrollHeight }
+                ? { flex: 1 }
+                : { flex: 1, maxHeight: maxScrollHeight }
             }
             contentContainerStyle={
               expandedFullscreen
@@ -1860,12 +2119,20 @@ export function TaskDetailScreen() {
                     flexGrow: 1,
                     paddingLeft: Spacing.three,
                     paddingRight: Spacing.three - 2,
-                    paddingBottom: Spacing.two,
+                    paddingBottom: toolbarPinnedToKeyboard
+                      ? toolbarTotalHeight + Spacing.two
+                      : subtasksKeyboardLayoutActive
+                        ? Spacing.three
+                        : Spacing.two,
                   }
                 : {
                     paddingLeft: Spacing.three,
                     paddingRight: Spacing.three - 2,
-                    paddingBottom: Spacing.two,
+                    paddingBottom: toolbarPinnedToKeyboard
+                      ? toolbarTotalHeight + Spacing.two
+                      : subtasksKeyboardLayoutActive
+                        ? Spacing.three
+                        : Spacing.two,
                   }
             }
             keyboardShouldPersistTaps="handled"
@@ -1988,53 +2255,25 @@ export function TaskDetailScreen() {
                       blurOnSubmit
                       returnKeyType="done"
                     />
-                    <View className="ml-[6px] mt-[5px] shrink-0 items-end gap-1.5 self-start">
-                      <Pressable
-                        className="active:opacity-70"
-                        accessibilityRole="button"
-                        accessibilityLabel="Link subtasks"
-                        onPress={() => void openSubtasksSection()}
-                      >
-                        <ThemedText
-                          style={{
-                            color: "#bbbbcc",
-                            fontSize: SUBTASKS_LINK_FONT_SIZE,
-                          }}
-                        >
-                          + subtask
-                        </ThemedText>
-                      </Pressable>
-                      {subtasksSectionOpen && !loading && detail ? (
+                    {!(subtasksSectionOpen && subtasksExpanded) ? (
+                      <View className="ml-[6px] mt-[8px] shrink-0 items-end gap-1.5 self-start">
                         <Pressable
-                          onPress={handleDateCheckboxPress}
+                          className="active:opacity-70"
                           accessibilityRole="button"
-                          accessibilityLabel={
-                            detail.completed
-                              ? "Mark task incomplete"
-                              : "Mark task complete"
-                          }
-                          className="flex-row items-center gap-[5px] rounded-full border border-[#e3e3e3] bg-[#f7f7f7] px-3.5 py-[5px] active:opacity-85"
+                          accessibilityLabel="Link subtasks"
+                          onPress={() => void openSubtasksSection()}
                         >
-                          <AppSymbol
-                            ios="checkmark"
-                            android="check"
-                            size={12}
-                            tintColor="#6b7280"
-                          />
                           <ThemedText
                             style={{
-                              color: "#6b7280",
-                              fontSize: 11,
-                              fontWeight: "500",
+                              color: "#bbbbcc",
+                              fontSize: SUBTASKS_LINK_FONT_SIZE,
                             }}
                           >
-                            {detail.completed
-                              ? "Mark incomplete"
-                              : "Mark complete"}
+                            + subtask
                           </ThemedText>
                         </Pressable>
-                      ) : null}
-                    </View>
+                      </View>
+                    ) : null}
                     {openedFromCalendar ? (
                       <CalendarColorControl
                         color={calendarColor}
@@ -2189,110 +2428,19 @@ export function TaskDetailScreen() {
                   ) : null}
                 </View>
 
-                {subtasksSectionOpen ? (
-                  <View className="mt-[18px] bg-[#ececf5] rounded-[11px] px-1 pt-1">
-                    <View className="flex-row items-center justify-between py-1 mx-2">
-                      <Pressable
-                        className="min-w-0 flex-1 flex-row items-center gap-1.5"
-                        onPress={() =>
-                          setSubtasksExpanded((expanded) => !expanded)
-                        }
-                        accessibilityRole="button"
-                        accessibilityState={{ expanded: subtasksExpanded }}
-                        accessibilityLabel="Sub-tasks"
-                      >
-                        <View
-                          className={
-                            subtasksExpanded ? "rotate-90" : "rotate-0"
-                          }
-                        >
-                          <AppSymbol
-                            ios="chevron.right"
-                            android="chevron-right"
-                            size={16}
-                            tintColor="#9ca3af"
-                          />
-                        </View>
-                        <Text className="text-[11px] font-medium leading-4 text-[#787b7d]">
-                          sub-tasks
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        className="h-6 w-6 items-center justify-center active:opacity-55"
-                        accessibilityRole="button"
-                        accessibilityLabel="Add subtask"
-                        hitSlop={8}
-                        onPress={openNewSubtaskInput}
-                      >
-                        <LuPlusIcon
-                          size={16}
-                          color="#9ca3af"
-                          strokeWidth={1.5}
-                        />
-                      </Pressable>
+                {subtasksSectionOpen && subtasksExpanded ? (
+                  <View
+                    className="relative mt-[18px] mb-2 px-1"
+                    style={subtasksSectionOuterStyle}
+                  >
+                    {renderSubtasksMarkCompleteButton()}
+                    <View
+                      className="rounded-t-[19px] rounded-b-[19px] px-5 py-2 -mb-[16px] border border-[#e8e8ed]"
+                      style={subtasksSectionCardStyle}
+                    >
+                      {renderSubtasksHeader()}
+                      {renderSubtasksList()}
                     </View>
-                    {subtasksExpanded ? (
-                      <View className="mt-0.5 gap-2">
-                        {subtasksLoading ? (
-                          <ActivityIndicator
-                            size="small"
-                            color="#4873c7"
-                            className="mb-1 self-start"
-                          />
-                        ) : null}
-                        {subtasks.map((subtask) => (
-                          <View
-                            key={subtask.id}
-                            className="min-h-[34px] flex-row items-center gap-2.5"
-                          >
-                            <TaskCheckbox
-                              checked={subtask.completed}
-                              accessibilityLabel={
-                                subtask.completed
-                                  ? `Mark ${subtask.name} incomplete`
-                                  : `Mark ${subtask.name} complete`
-                              }
-                              onPress={() =>
-                                void handleToggleSubtaskComplete(
-                                  subtask,
-                                  !subtask.completed,
-                                )
-                              }
-                            />
-                            <ThemedText
-                              className={`flex-1 text-sm leading-[22px] text-[#626b83] ${
-                                subtask.completed
-                                  ? "text-gray-400 line-through"
-                                  : ""
-                              }`}
-                              numberOfLines={2}
-                            >
-                              {subtask.name}
-                            </ThemedText>
-                          </View>
-                        ))}
-                        {subtaskInputOpen ? (
-                          <View className="min-h-[34px] flex-row items-center gap-2.5">
-                            <View className="h-[22px] w-[22px] rounded-xl border-[1.5px] border-[#dad4d5] bg-white" />
-                            <TextInput
-                              ref={subtaskInputRef}
-                              value={subtaskName}
-                              onChangeText={setSubtaskName}
-                              autoFocus
-                              className="flex-1 py-1 text-base leading-[22px] text-gray-900"
-                              returnKeyType="done"
-                              blurOnSubmit={false}
-                              onSubmitEditing={() => void handleAddSubtask()}
-                              onBlur={() => {
-                                if (!subtaskName.trim()) {
-                                  setSubtaskInputOpen(false);
-                                }
-                              }}
-                            />
-                          </View>
-                        ) : null}
-                      </View>
-                    ) : null}
                   </View>
                 ) : null}
 
@@ -2338,6 +2486,25 @@ export function TaskDetailScreen() {
             )}
           </ScrollView>
 
+          {subtasksSectionOpen && !subtasksExpanded ? (
+            <View
+              className="relative shrink-0 mb-1 px-1"
+              style={subtasksSectionOuterStyle}
+            >
+              {renderSubtasksMarkCompleteButton({ offsetLeft: 12 })}
+              <View
+                className="rounded-t-[19px] rounded-b-[19px] px-5 py-2"
+                style={subtasksSectionCardStyle}
+              >
+                {renderSubtasksHeader({
+                  plusOffsetLeft: 10,
+                  labelOffsetRight: 14,
+                  collapsed: true,
+                })}
+              </View>
+            </View>
+          ) : null}
+
           {!loading && detail && !subtasksSectionOpen ? (
             <Pressable
               onPress={handleDateCheckboxPress}
@@ -2369,89 +2536,104 @@ export function TaskDetailScreen() {
             </Pressable>
           ) : null}
 
-          <View
-            className="border-t border-gray-200 bg-white pt-2"
-            style={toolbarSafeAreaStyle}
-          >
-            {saveStatusLabel ? (
-              <ThemedText
-                className={`px-4 pb-1 text-xs text-gray-500 ${
-                  saveStatus === "error" ? "text-red-600" : ""
-                }`}
-              >
-                {saveStatusLabel}
-              </ThemedText>
-            ) : null}
+          {showDetailToolbar ? (
             <View
-              className="justify-end px-4"
-              style={{
-                minHeight: TASK_DETAIL_TOOLBAR_BODY_HEIGHT - Spacing.two,
-              }}
-            >
-              <View className="min-w-0 flex-row items-start gap-8">
-                <DetailToolbarLabeledItem
-                  accessibilityLabel="Date"
-                  label="Date"
-                  onPress={() => setDatePickerOpen(true)}
-                >
-                  <IoMdTimeIcon size={28} color={TOOLBAR_ICON_COLOR} />
-                </DetailToolbarLabeledItem>
-                <View className="relative z-[31] justify-center">
-                  <DetailToolbarLabeledItem
-                    accessibilityLabel="Priority"
-                    label="Priority"
-                    labelColor={
-                      detail?.priority != null
-                        ? getTaskPriorityColor(detail.priority)
-                        : undefined
+              className="shrink-0 border-t border-gray-200 bg-white pt-2"
+              style={[
+                toolbarSafeAreaStyle,
+                toolbarPinnedToKeyboard
+                  ? {
+                      position: "absolute",
+                      left: 0,
+                      right: 0,
+                      bottom: keyboardHeight,
+                      zIndex: 25,
                     }
-                    onPress={() => setPriorityMenuOpen((open) => !open)}
+                  : null,
+              ]}
+            >
+              {saveStatusLabel ? (
+                <ThemedText
+                  className={`px-4 pb-1 text-xs text-gray-500 ${
+                    saveStatus === "error" ? "text-red-600" : ""
+                  }`}
+                >
+                  {saveStatusLabel}
+                </ThemedText>
+              ) : null}
+              <View
+                className="relative justify-end pl-4"
+                style={{
+                  minHeight: TASK_DETAIL_TOOLBAR_BODY_HEIGHT - Spacing.two,
+                }}
+              >
+                <View className="min-w-0 flex-row items-start gap-8 pr-11">
+                  <DetailToolbarLabeledItem
+                    accessibilityLabel="Date"
+                    label="Date"
+                    onPress={() => setDatePickerOpen(true)}
                   >
-                    <PriorityFlagToolbarIcon
+                    <IoMdTimeIcon size={28} color={TOOLBAR_ICON_COLOR} />
+                  </DetailToolbarLabeledItem>
+                  <View className="relative z-[31] justify-center">
+                    <DetailToolbarLabeledItem
+                      accessibilityLabel="Priority"
+                      label="Priority"
+                      labelColor={
+                        detail?.priority != null
+                          ? getTaskPriorityColor(detail.priority)
+                          : undefined
+                      }
+                      onPress={() => setPriorityMenuOpen((open) => !open)}
+                    >
+                      <PriorityFlagToolbarIcon
+                        size={TOOLBAR_LABELED_ICON_SIZE}
+                        priority={null}
+                        defaultColor={TOOLBAR_ICON_COLOR}
+                      />
+                    </DetailToolbarLabeledItem>
+                    {priorityMenuOpen ? (
+                      <TaskPriorityFlagPopup
+                        embedded
+                        selected={detail?.priority ?? null}
+                        onSelect={(priority) =>
+                          void handleSetPriority(priority)
+                        }
+                        onClose={() => setPriorityMenuOpen(false)}
+                        style={{
+                          position: "absolute",
+                          bottom: 40,
+                          left: -24,
+                          zIndex: 32,
+                          elevation: 32,
+                        }}
+                      />
+                    ) : null}
+                  </View>
+                  <DetailToolbarLabeledItem
+                    accessibilityLabel="Labels"
+                    label="label"
+                    onPress={() => setLabelPickerOpen(true)}
+                  >
+                    <AppSymbol
+                      ios="tag"
+                      android="local-offer"
                       size={TOOLBAR_LABELED_ICON_SIZE}
-                      priority={null}
-                      defaultColor={TOOLBAR_ICON_COLOR}
+                      tintColor={TOOLBAR_ICON_COLOR}
                     />
                   </DetailToolbarLabeledItem>
-                  {priorityMenuOpen ? (
-                    <TaskPriorityFlagPopup
-                      embedded
-                      selected={detail?.priority ?? null}
-                      onSelect={(priority) => void handleSetPriority(priority)}
-                      onClose={() => setPriorityMenuOpen(false)}
-                      style={{
-                        position: "absolute",
-                        bottom: 40,
-                        left: -24,
-                        zIndex: 32,
-                        elevation: 32,
-                      }}
+                  <DetailToolbarLabeledItem
+                    accessibilityLabel="Files"
+                    label="Files"
+                    onPress={handleAttachment}
+                  >
+                    <RiAttachment2Icon
+                      size={TOOLBAR_UTILITY_ICON_SIZE}
+                      color={TOOLBAR_ICON_COLOR}
                     />
-                  ) : null}
+                  </DetailToolbarLabeledItem>
                 </View>
-                <DetailToolbarLabeledItem
-                  accessibilityLabel="Labels"
-                  label="label"
-                  onPress={() => setLabelPickerOpen(true)}
-                >
-                  <AppSymbol
-                    ios="tag"
-                    android="local-offer"
-                    size={TOOLBAR_LABELED_ICON_SIZE}
-                    tintColor={TOOLBAR_ICON_COLOR}
-                  />
-                </DetailToolbarLabeledItem>
-                <DetailToolbarLabeledItem
-                  accessibilityLabel="Files"
-                  label="Files"
-                  onPress={handleAttachment}
-                >
-                  <RiAttachment2Icon
-                    size={TOOLBAR_UTILITY_ICON_SIZE}
-                    color={TOOLBAR_ICON_COLOR}
-                  />
-                </DetailToolbarLabeledItem>
-                <View className="ml-[20px]">
+                <View className="absolute top-0 right-[5px]">
                   <DetailToolbarLabeledItem
                     accessibilityLabel="Voice note"
                     label="Voice"
@@ -2468,7 +2650,7 @@ export function TaskDetailScreen() {
                 </View>
               </View>
             </View>
-          </View>
+          ) : null}
           {priorityMenuOpen ? (
             <Pressable
               className="absolute inset-0 z-30"
