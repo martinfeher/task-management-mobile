@@ -38,6 +38,7 @@ import {
   useToggleComplete,
   type TaskListPanelProps,
 } from "@/components/task-list-panel-shared";
+import { ListsDrawerShell } from "@/components/lists-drawer-shell";
 import { TaskDropPlaceholder } from "@/components/task-drop-placeholder";
 import { TaskRow } from "@/components/task-row";
 import { ThemedText } from "@/components/themed-text";
@@ -97,7 +98,10 @@ export function TaskListPanel({
     sidebarData,
     loadTasksForView,
     loadSidebar,
+    listsDrawerOpen,
     openListsDrawer,
+    openListsDrawerPanel,
+    openTasksForDrawerSelection,
     deleteTask,
   } = useApp();
   const insets = useSafeAreaInsets();
@@ -516,11 +520,17 @@ export function TaskListPanel({
   );
 
   return (
-    <View collapsable={false} style={{ flex: 1 }}>
-      <TaskListShell
-        title={getPanelTitle(selectedView, taskData)}
-        onOpenLists={openListsDrawer}
-      >
+    <ListsDrawerShell
+      open={listsDrawerOpen}
+      onOpen={openListsDrawerPanel}
+      onClose={openTasksForDrawerSelection}
+      style={styles.drawerHost}
+    >
+      <View collapsable={false} style={{ flex: 1 }}>
+        <TaskListShell
+          title={getPanelTitle(selectedView, taskData)}
+          onOpenLists={openListsDrawer}
+        >
         {blockingState ?? (
           <NestableScrollContainer
             ref={scrollRef as never}
@@ -646,11 +656,15 @@ export function TaskListPanel({
           onClose={closeContextMenu}
         />
       ) : null}
-    </View>
+      </View>
+    </ListsDrawerShell>
   );
 }
 
 const styles = StyleSheet.create({
+  drawerHost: {
+    flex: 1,
+  },
   scrollContainer: {
     flex: 1,
   },

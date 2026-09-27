@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 
+import { BiChevronDownIcon } from "@/components/bi-chevron-down-icon";
 import type { TaskContextMenuAnchor } from "@/components/task-context-menu";
 import { TaskRow } from "@/components/task-row";
 import { ThemedText } from "@/components/themed-text";
@@ -62,10 +63,10 @@ function formatDaySectionTitle(date: Date, today: Date) {
   const weekday = date.toLocaleDateString(undefined, { weekday: "long" });
 
   if (isSameDay(date, today)) {
-    return `${dateLabel} · Today · ${weekday}`;
+    return `Today `;
   }
   if (isSameDay(date, tomorrow)) {
-    return `${dateLabel} · Tomorrow · ${weekday}`;
+    return `Tomorrow`;
   }
   return `${dateLabel} · ${weekday}`;
 }
@@ -97,6 +98,7 @@ export function CalendarUpcomingView({
   const [upcomingDaysCount, setUpcomingDaysCount] = useState(
     UPCOMING_DAYS_INITIAL,
   );
+  const [overdueExpanded, setOverdueExpanded] = useState(false);
   const [visibleSectionDate, setVisibleSectionDate] = useState(today);
   const [selectedStripDate, setSelectedStripDate] = useState(today);
 
@@ -266,6 +268,7 @@ export function CalendarUpcomingView({
         key={task.id}
         task={task}
         showListName
+        priorityBeforeAssignedLabels
         onPress={onPressTask}
         onToggleComplete={onToggleComplete}
         onOpenContextMenu={onOpenContextMenu}
@@ -276,20 +279,42 @@ export function CalendarUpcomingView({
   return (
     <View className="flex-1">
       <View className="shrink-0 grow-0 border-b border-[#e5e7eb]">
-        <View className="px-4 pb-0.5">
-          <ThemedText className="text-[15px] font-semibold text-gray-900">
+        <View className="flex-row items-center justify-between px-4 pb-0.5">
+          <ThemedText className="text-[15px] font-semibold text-gray-600">
             {stripMonthLabel}
           </ThemedText>
+          <View className="items-end" style={{ marginTop: -4 }}>
+            {!isSameDay(selectedStripDate, today) ? (
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel="Go to today"
+                hitSlop={8}
+                onPress={() => handleSelectStripDate(today)}
+              >
+                <ThemedText
+                  style={{
+                    fontSize: 6,
+                    color: "#cfcfde",
+                  }}
+                >
+                  today
+                </ThemedText>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
 
         <View className="flex-row pb-0.5">
           {WEEKDAY_LABELS.map((label, index) => (
             <View
               key={`${label}-${index}`}
-              className="items-center"
+              className="items-center text-zinc-600"
               style={{ width: dayCellWidth }}
             >
-              <ThemedText className="text-xs font-semibold text-gray-400">
+              <ThemedText
+                className="text-xs font-semibold"
+                style={{ color: "#787878" }}
+              >
                 {label}
               </ThemedText>
             </View>
@@ -308,7 +333,7 @@ export function CalendarUpcomingView({
           contentContainerStyle={{ width: screenWidth * stripPages.length }}
         >
           {stripPages.map((page, pageIndex) => (
-            <View key={pageIndex} style={{ width: screenWidth }}>
+            <View key={pageIndex} className="mt-2" style={{ width: screenWidth }}>
               {[0, 1].map((rowIndex) => (
                 <View key={rowIndex} className="flex-row">
                   {page.slice(rowIndex * 7, rowIndex * 7 + 7).map((day) => {
@@ -324,14 +349,17 @@ export function CalendarUpcomingView({
                         onPress={() => handleSelectStripDate(day)}
                       >
                         <View
-                          className={`size-8 items-center justify-center rounded-full ${
-                            isSelected ? "bg-[#6f81c1]" : ""
+                          className={`size-[36px] items-center justify-center rounded-full ${
+                            isSelected ? "bg-[#898ea0]" : ""
                           }`}
                         >
                           <ThemedText
-                            className={`text-[15px] font-medium text-gray-900 ${
-                              isSelected ? "font-bold text-white" : ""
+                            className={`text-[15px] font-medium ${
+                              isSelected ? "font-bold" : ""
                             }`}
+                            style={{
+                              color: isSelected ? "#ffffff" : "#b8b8b8",
+                            }}
                           >
                             {day.getDate()}
                           </ThemedText>
@@ -367,12 +395,12 @@ export function CalendarUpcomingView({
         ) : (
           sections.map((section) => {
             if (section.kind === "overdue") {
-              const visibleOverdueTasks = section.tasks.slice(
-                0,
-                OVERDUE_VISIBLE_LIMIT,
-              );
-              const hiddenOverdueCount =
-                section.tasks.length - visibleOverdueTasks.length;
+              const visibleOverdueTasks = overdueExpanded
+                ? section.tasks
+                : section.tasks.slice(0, OVERDUE_VISIBLE_LIMIT);
+              const hasHiddenOverdueTasks =
+                !overdueExpanded &&
+                section.tasks.length > OVERDUE_VISIBLE_LIMIT;
 
               return (
                 <View
@@ -386,20 +414,23 @@ export function CalendarUpcomingView({
                 >
                   <View className="px-4 py-1">
                     <ThemedText
-                      className="text-base font-bold"
+                      className="text-[11px] font-bold"
                       style={{ color: "#b3b3b3" }}
                     >
                       Overdue
                     </ThemedText>
                   </View>
                   {visibleOverdueTasks.map(renderTaskRow)}
-                  {hiddenOverdueCount > 0 ? (
-                    <ThemedText
-                      themeColor="textSecondary"
-                      className="px-4 pb-2 text-sm"
+                  {hasHiddenOverdueTasks ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Show all overdue tasks"
+                      className="items-start px-4 pb-2 pt-0.5"
+                      hitSlop={8}
+                      onPress={() => setOverdueExpanded(true)}
                     >
-                      +{hiddenOverdueCount} more overdue
-                    </ThemedText>
+                      <BiChevronDownIcon size={20} color="#CCD1D4" />
+                    </Pressable>
                   ) : null}
                 </View>
               );
@@ -418,15 +449,15 @@ export function CalendarUpcomingView({
                 }}
               >
                 <ThemedText
-                  className="px-4 py-1 text-base font-bold"
-                  style={{ color: "#b3b3b3" }}
+                  className="px-4 py-0 text-[10px] font-bold"
+                  style={{ color: "#A5A8AC" }}
                 >
                   {title}
                 </ThemedText>
                 {section.tasks.length === 0 ? (
                   <ThemedText
-                    className="px-4 pb-2 text-[15px]"
-                    style={{ color: "#a2a2a2" }}
+                    className="px-4 py-0 -mt-[2px]"
+                    style={{ color: "#C6C9CB", fontSize: 10 }}
                   >
                     No tasks
                   </ThemedText>

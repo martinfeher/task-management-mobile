@@ -9,6 +9,8 @@ import {
   type CalendarViewPickerAnchor,
 } from "@/components/calendar-view-picker-sheet";
 import { IoCalendarClearOutlineIcon } from "@/components/io-calendar-clear-outline-icon";
+import { LiquidGlassSurface } from "@/components/liquid-glass-surface";
+import { CalendarUpcomingIcon } from "@/components/calendar-upcoming-icon";
 import {
   TaskContextMenu,
   type TaskContextMenuAnchor,
@@ -49,6 +51,7 @@ import {
   Alert,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -143,13 +146,19 @@ function formatPeriodLabel(
 
 const CALENDAR_FAB_BUTTON_SIZE = 48;
 const CALENDAR_FAB_BUTTON_RENDER_SIZE = CALENDAR_FAB_BUTTON_SIZE * 1.13;
+const CALENDAR_FAB_BORDER_RADIUS = CALENDAR_FAB_BUTTON_RENDER_SIZE / 2;
+const CALENDAR_FAB_ICON_COLOR = "rgba(180, 180, 220, 0.85)";
 const CALENDAR_FAB_ICON_GAP = 12;
 
 export function CalendarPanel() {
   const insets = useSafeAreaInsets();
   const fabBottom = getFabBottomOffset(insets.bottom, false);
-  const calendarFabIconBottom =
+  const calendarFabUpcomingBottom =
     fabBottom - FAB_BOTTOM_NUDGE + ADD_TASK_FAB_SIZE + CALENDAR_FAB_ICON_GAP;
+  const calendarFabViewPickerBottom =
+    calendarFabUpcomingBottom +
+    CALENDAR_FAB_BUTTON_RENDER_SIZE +
+    CALENDAR_FAB_ICON_GAP;
   const calendarFabIconRight =
     FAB_RIGHT_INSET + (ADD_TASK_FAB_SIZE - CALENDAR_FAB_BUTTON_RENDER_SIZE) / 2;
 
@@ -172,8 +181,14 @@ export function CalendarPanel() {
     (task: TaskItem) => openTask(task, { fromCalendar: true }),
     [openTask],
   );
+  const openUpcomingTask = useCallback(
+    (task: TaskItem) =>
+      openTask(task, { fromCalendar: true, fromUpcoming: true }),
+    [openTask],
+  );
   const [viewMode, setViewMode] = useState<CalendarViewMode>("threeDay");
   const [isUpcomingView, setIsUpcomingView] = useState(false);
+  const [upcomingSessionKey, setUpcomingSessionKey] = useState(0);
   const [viewPickerOpen, setViewPickerOpen] = useState(false);
   const [viewPickerAnchor, setViewPickerAnchor] =
     useState<CalendarViewPickerAnchor | null>(null);
@@ -545,6 +560,7 @@ export function CalendarPanel() {
   const listBottomPadding = getAddTaskFabReservedHeight(insets.bottom);
 
   function handleSelectUpcomingView() {
+    setUpcomingSessionKey((key) => key + 1);
     setIsUpcomingView(true);
   }
 
@@ -563,35 +579,24 @@ export function CalendarPanel() {
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-        <View style={styles.header}>
-          <ThemedText style={styles.headerTitle}>
-            {isUpcomingView ? "Upcoming" : "Calendar"}
-          </ThemedText>
-          <View style={styles.headerActions}>
-            {!isUpcomingView ? (
-              <Pressable
-                style={styles.addButton}
-                onPress={handleAddTaskOnSelectedDay}
-              >
-                <AppSymbol
-                  ios="plus"
-                  android="add"
-                  size={20}
-                  tintColor="#2563eb"
-                />
-              </Pressable>
-            ) : null}
+        {!isUpcomingView ? (
+          <View style={styles.header}>
+            <ThemedText style={styles.headerTitle} className="text-gray-600">
+              Calendar
+            </ThemedText>
           </View>
-        </View>
+        ) : null}
 
         {isUpcomingView ? (
           <CalendarUpcomingView
+            key={upcomingSessionKey}
+         
             tasks={calendarTasks}
             loading={calendarLoading}
             refreshing={calendarRefreshing}
             listBottomPadding={listBottomPadding}
             onRefresh={() => void loadCalendarTasks(true)}
-            onPressTask={openCalendarTask}
+            onPressTask={openUpcomingTask}
             onToggleComplete={(taskId, completed) => {
               if (completed) {
                 void completeTask(taskId).then(() => loadCalendarTasks(true));
@@ -804,7 +809,9 @@ export function CalendarPanel() {
           onClose={closeContextMenu}
           onRename={() => {
             setContextMenu(null);
-            openCalendarTask(contextMenu.task);
+            (isUpcomingView ? openUpcomingTask : openCalendarTask)(
+              contextMenu.task,
+            );
           }}
           onChangeDate={() => {
             setRescheduleTask(contextMenu.task);
@@ -859,10 +866,9 @@ export function CalendarPanel() {
       <CalendarViewPickerSheet
         visible={viewPickerOpen}
         activeView={viewMode}
-        isUpcomingActive={isUpcomingView}
+        hideActiveHighlight={isUpcomingView}
         anchor={viewPickerAnchor}
         onSelectView={handleSelectViewMode}
-        onSelectUpcoming={handleSelectUpcomingView}
         onClose={handleCloseViewPicker}
       />
 
@@ -871,16 +877,62 @@ export function CalendarPanel() {
         accessibilityRole="button"
         accessibilityLabel="Change calendar view"
         hitSlop={8}
-        className="absolute z-20 size-13.5 mr-1 mb-1 items-center justify-center rounded-full bg-[#F5F5F8]"
-        style={{
-          bottom: calendarFabIconBottom,
-          right: calendarFabIconRight,
-          elevation: 20,
-        }}
+        className="absolute z-20 mr-2 mb-1"
+        style={[
+          styles.calendarFabButtonShadow,
+          {
+            bottom: isUpcomingView
+              ? calendarFabUpcomingBottom
+              : calendarFabViewPickerBottom,
+            right: calendarFabIconRight,
+          },
+        ]}
         onPress={handleOpenViewPicker}
       >
-        <IoCalendarClearOutlineIcon size={29} color="#D5D7E3" />
+        <LiquidGlassSurface
+          borderRadius={CALENDAR_FAB_BORDER_RADIUS}
+          isInteractive
+          style={[styles.calendarFabGlass, styles.calendarFabGlassSurface]}
+        >
+          <View style={styles.calendarFabIconSlot}>
+            <IoCalendarClearOutlineIcon
+              size={29}
+              color={'#CECED9'}
+            />
+          </View>
+        </LiquidGlassSurface>
       </Pressable>
+
+      {!isUpcomingView ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Show upcoming calendar view"
+          hitSlop={8}
+          className="absolute z-20 mr-2 mb-1"
+          style={[
+            styles.calendarFabButtonShadow,
+            {
+              bottom: calendarFabUpcomingBottom,
+              right: calendarFabIconRight,
+            },
+          ]}
+          onPress={handleSelectUpcomingView}
+        >
+          <LiquidGlassSurface
+            borderRadius={CALENDAR_FAB_BORDER_RADIUS}
+            isInteractive
+            style={[styles.calendarFabUpcomingGlass, styles.calendarFabGlassSurface]}
+          >
+            <View style={styles.calendarFabUpcomingIconSlot}>
+              <CalendarUpcomingIcon
+                size={22}
+                color={'#DCDCE6' }
+              />
+            </View>
+            <ThemedText style={styles.upcomingFabLabel}>Upcoming</ThemedText>
+          </LiquidGlassSurface>
+        </Pressable>
+      ) : null}
 
       <AddTaskButton onPress={handleAddTaskOnSelectedDay} />
     </View>
@@ -904,13 +956,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "700",
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    color: "#46494F",
   },
   headerIconButton: {
     width: 36,
@@ -920,13 +968,64 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#eff6ff",
+  calendarFabButtonShadow: {
+    zIndex: 20,
+    elevation: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#A5A5A7",
+        shadowOpacity: 0.2,
+        shadowRadius: 7,
+        shadowOffset: { width: 0, height: 9 },
+      },
+      android: {
+        elevation: 10,
+      },
+      default: {
+        boxShadow: "0px 3px 5px 0px rgba(0, 0, 0, 0.1)",
+      },
+    }),
+  },
+  calendarFabGlassSurface: {
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+    ...Platform.select({
+      default: {
+        boxShadow: "none",
+      },
+    }),
+  },
+  calendarFabGlass: {
+    width: CALENDAR_FAB_BUTTON_RENDER_SIZE,
+    height: CALENDAR_FAB_BUTTON_RENDER_SIZE,
     alignItems: "center",
     justifyContent: "center",
+  },
+  calendarFabIconSlot: {
+    width: CALENDAR_FAB_BUTTON_RENDER_SIZE,
+    height: CALENDAR_FAB_BUTTON_RENDER_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calendarFabUpcomingGlass: {
+    width: CALENDAR_FAB_BUTTON_RENDER_SIZE,
+    height: CALENDAR_FAB_BUTTON_RENDER_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  calendarFabUpcomingIconSlot: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  upcomingFabLabel: {
+    marginTop: 1,
+    fontSize: 6,
+    lineHeight: 10,
+    fontWeight: "500",
+    color: CALENDAR_FAB_ICON_COLOR,
+    textAlign: "center",
   },
   periodHeader: {
     flexDirection: "row",

@@ -43,6 +43,7 @@ export const TEXT_FORMAT_TOOLBAR_HEIGHT = 49;
 const MAIN_TOOLBAR_ICON_SIZE = 23;
 const MAIN_TOOLBAR_CHECKLIST_ICON_SIZE = MAIN_TOOLBAR_ICON_SIZE + 2;
 const MAIN_TOOLBAR_LETTER_SIZE = 22;
+const TOOLBAR_ROW_ICON_COLOR = "#787879";
 
 type TextFormatToolbarProps = {
   visible: boolean;
@@ -760,7 +761,7 @@ function FormatToolbarButtons({
         active={activeSubmenu === "color"}
         onKeepKeyboardFocus={onKeepKeyboardFocus}
         onPress={() => onOpenSubmenu(activeSubmenu === "color" ? null : "color")}>
-        <ColorTrigger color="#374151" />
+        <ColorTrigger color={TOOLBAR_ROW_ICON_COLOR} />
       </FormatButton>
 
       <FormatButton
@@ -771,7 +772,10 @@ function FormatToolbarButtons({
         onPress={() =>
           onOpenSubmenu(activeSubmenu === "highlight" ? null : "highlight")
         }>
-        <PiHighlighterLightIcon size={MAIN_TOOLBAR_ICON_SIZE} color="#374151" />
+        <PiHighlighterLightIcon
+          size={MAIN_TOOLBAR_ICON_SIZE}
+          color={TOOLBAR_ROW_ICON_COLOR}
+        />
       </FormatButton>
 
       <FormatButton
@@ -783,7 +787,7 @@ function FormatToolbarButtons({
           ios="checkmark.circle"
           android="check-circle-outline"
           size={MAIN_TOOLBAR_CHECKLIST_ICON_SIZE}
-          tintColor="#374151"
+          tintColor={TOOLBAR_ROW_ICON_COLOR}
         />
       </FormatButton>
 
@@ -798,7 +802,7 @@ function FormatToolbarButtons({
             ios="link"
             android="link"
             size={MAIN_TOOLBAR_ICON_SIZE}
-            tintColor="#374151"
+            tintColor={TOOLBAR_ROW_ICON_COLOR}
           />
         </FormatButton>
       </View>
@@ -838,7 +842,7 @@ function FormatToolbarButtons({
           ios="list.bullet"
           android="format-list-bulleted"
           size={MAIN_TOOLBAR_ICON_SIZE}
-          tintColor="#374151"
+          tintColor={TOOLBAR_ROW_ICON_COLOR}
         />
       </FormatButton>
 
@@ -851,7 +855,7 @@ function FormatToolbarButtons({
           ios="list.number"
           android="format-list-numbered"
           size={MAIN_TOOLBAR_ICON_SIZE}
-          tintColor="#374151"
+          tintColor={TOOLBAR_ROW_ICON_COLOR}
         />
       </FormatButton>
 
@@ -860,7 +864,10 @@ function FormatToolbarButtons({
         label="Clear formatting"
         onKeepKeyboardFocus={onKeepKeyboardFocus}
         onPress={() => onFormat("clearFormatting")}>
-        <FluentClearFormattingIcon size={MAIN_TOOLBAR_ICON_SIZE} color="#374151" />
+        <FluentClearFormattingIcon
+          size={MAIN_TOOLBAR_ICON_SIZE}
+          color={TOOLBAR_ROW_ICON_COLOR}
+        />
       </FormatButton>
 
       <FormatButton
@@ -1139,7 +1146,7 @@ export function TextFormatToolbar({
                 ios="chevron.right"
                 android="chevron-right"
                 size={12}
-                tintColor="#6b7280"
+                tintColor={TOOLBAR_ROW_ICON_COLOR}
               />
             </View>
           </LiquidGlassSurface>
@@ -1163,7 +1170,7 @@ export function TextFormatToolbar({
                 ios="chevron.right"
                 android="chevron-right"
                 size={12}
-                tintColor="#9ca3af"
+                tintColor={TOOLBAR_ROW_ICON_COLOR}
               />
             </View>
           </View>
@@ -1304,6 +1311,7 @@ const styles = StyleSheet.create({
   },
   mainToolbarLetter: {
     fontSize: MAIN_TOOLBAR_LETTER_SIZE,
+    color: TOOLBAR_ROW_ICON_COLOR,
   },
   formatLetterActive: {
     color: "#2563eb",
@@ -1336,7 +1344,7 @@ const styles = StyleSheet.create({
   colorTriggerLetter: {
     fontSize: 21,
     fontWeight: "700",
-    color: "#374151",
+    color: TOOLBAR_ROW_ICON_COLOR,
     lineHeight: 23,
   },
   colorTriggerBar: {
@@ -1348,12 +1356,12 @@ const styles = StyleSheet.create({
   fontSizeTrigger: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#374151",
+    color: TOOLBAR_ROW_ICON_COLOR,
   },
   blockTypeTrigger: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#374151",
+    color: TOOLBAR_ROW_ICON_COLOR,
   },
   headingTrigger: {
     fontSize: 17,
@@ -1370,13 +1378,13 @@ const styles = StyleSheet.create({
   fontFamilyTrigger: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#374151",
+    color: TOOLBAR_ROW_ICON_COLOR,
     maxWidth: 72,
   },
   overflowTrigger: {
     fontSize: 22,
     fontWeight: "600",
-    color: "#63636b",
+    color: TOOLBAR_ROW_ICON_COLOR,
     letterSpacing: 1,
   },
   blockTypeList: {

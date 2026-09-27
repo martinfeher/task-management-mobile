@@ -1,5 +1,6 @@
 import { AppSymbol } from "@/components/app-symbol";
 import { MdKeyboardArrowDownIcon } from "@/components/md-keyboard-arrow-down-icon";
+import { PiNoteLightIcon } from "@/components/pi-note-light-icon";
 import { RiArrowDropRightLineIcon } from "@/components/ri-arrow-drop-right-line-icon";
 import { TaskCheckbox } from "@/components/task-checkbox";
 import type { TaskContextMenuAnchor } from "@/components/task-context-menu";
@@ -143,6 +144,8 @@ type TaskRowProps = {
   subtasksExpanded?: boolean;
   onToggleSubtasksExpanded?: () => void;
   showSubtaskCollapseToggle?: boolean;
+  /** Put the priority flag immediately before assigned label chips. */
+  priorityBeforeAssignedLabels?: boolean;
 };
 
 function TaskLabelChip({ label }: { label: TaskLabel }) {
@@ -175,6 +178,7 @@ export function TaskRow({
   subtasksExpanded = false,
   onToggleSubtasksExpanded,
   showSubtaskCollapseToggle = false,
+  priorityBeforeAssignedLabels = false,
 }: TaskRowProps) {
   const dueDateParts = formatTaskDueDateParts(
     task.dueDate,
@@ -188,8 +192,9 @@ export function TaskRow({
     Boolean(onToggleSubtasksExpanded);
   const showSublineRow = showSubtaskCollapse || hasDueDate;
   const useCompactRowLayout = !hasDueDate && !showSubtaskCollapse;
+  const isNote = Boolean(task.isNote);
   const [optimisticChecked, setOptimisticChecked] = useState(false);
-  const checked = task.completed || optimisticChecked;
+  const checked = !isNote && (task.completed || optimisticChecked);
   const rowRef = useRef<View>(null);
   const menuOpenedThisGestureRef = useRef(false);
   const pressOriginRef = useRef<{ x: number; y: number } | null>(null);
@@ -543,6 +548,37 @@ export function TaskRow({
   );
   const subtaskIconColor = subtasksExpanded ? "#aeaeb4" : "#cbccd8";
 
+  const priorityFlag =
+    task.priority != null ? (
+      <AppSymbol
+        ios="flag.fill"
+        android="flag"
+        size={12}
+        tintColor={
+          TASK_PRIORITY_OPTIONS.find((option) => option.level === task.priority)
+            ?.color ?? "#9ca3af"
+        }
+      />
+    ) : null;
+
+  const listNameNode =
+    showListName && task.listName ? (
+      <ThemedText style={styles.listName} numberOfLines={1}>
+        {task.listName}
+      </ThemedText>
+    ) : null;
+
+  const assignedLabelNodes = (
+    <>
+      {visibleLabels.map((label) => (
+        <TaskLabelChip key={label.id} label={label} />
+      ))}
+      {hiddenLabelCount > 0 ? (
+        <ThemedText style={styles.moreLabels}>+{hiddenLabelCount}</ThemedText>
+      ) : null}
+    </>
+  );
+
   const rowContents = (
     <>
       <View
@@ -551,23 +587,32 @@ export function TaskRow({
           useCompactRowLayout && styles.checkboxHitNoDueDate,
         ]}
       >
-        <TaskCheckbox
-          checked={checked}
-          onPress={() => {
-            if (checked) {
-              setOptimisticChecked(false);
-              onToggleComplete?.(task.id, false);
-              return;
+        {isNote ? (
+          <View
+            accessibilityLabel="Note"
+            style={styles.noteIconWrap}
+          >
+            <PiNoteLightIcon size={21} color="#b4b4bf" />
+          </View>
+        ) : (
+          <TaskCheckbox
+            checked={checked}
+            onPress={() => {
+              if (checked) {
+                setOptimisticChecked(false);
+                onToggleComplete?.(task.id, false);
+                return;
+              }
+              setOptimisticChecked(true);
+              onToggleComplete?.(task.id, true);
+            }}
+            accessibilityLabel={
+              checked
+                ? `Mark ${task.name} incomplete`
+                : `Mark ${task.name} complete`
             }
-            setOptimisticChecked(true);
-            onToggleComplete?.(task.id, true);
-          }}
-          accessibilityLabel={
-            checked
-              ? `Mark ${task.name} incomplete`
-              : `Mark ${task.name} complete`
-          }
-        />
+          />
+        )}
       </View>
 
       <View
@@ -648,7 +693,8 @@ export function TaskRow({
               <ThemedText
                 style={[
                   styles.title,
-                  task.depth > 0 && styles.subtaskTitle,
+                  task.depth > 0 && !isNote && styles.subtaskTitle,
+                  isNote && styles.noteTitle,
                   useCompactRowLayout && styles.titleNoDueDate,
                   checked && styles.titleCompleted,
                 ]}
@@ -658,33 +704,20 @@ export function TaskRow({
               </ThemedText>
 
               <View style={styles.meta}>
-                {showListName && task.listName ? (
-                  <ThemedText style={styles.listName} numberOfLines={1}>
-                    {task.listName}
-                  </ThemedText>
-                ) : null}
+                {priorityBeforeAssignedLabels ? (
+                  <>
+                    {listNameNode}
+                    {assignedLabelNodes}
+                    {priorityFlag}
 
-                {task.priority != null ? (
-                  <AppSymbol
-                    ios="flag.fill"
-                    android="flag"
-                    size={12}
-                    tintColor={
-                      TASK_PRIORITY_OPTIONS.find(
-                        (option) => option.level === task.priority,
-                      )?.color ?? "#9ca3af"
-                    }
-                  />
-                ) : null}
-
-                {visibleLabels.map((label) => (
-                  <TaskLabelChip key={label.id} label={label} />
-                ))}
-                {hiddenLabelCount > 0 ? (
-                  <ThemedText style={styles.moreLabels}>
-                    +{hiddenLabelCount}
-                  </ThemedText>
-                ) : null}
+                  </>
+                ) : (
+                  <>
+                    {listNameNode}
+                    {assignedLabelNodes}
+                    {priorityFlag}
+                  </>
+                )}
               </View>
             </View>
           </View>
@@ -885,6 +918,12 @@ const styles = StyleSheet.create({
     paddingRight: 9,
     justifyContent: "center",
   },
+  noteIconWrap: {
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   contentColumn: {
     flex: 1,
     alignSelf: "stretch",
@@ -937,6 +976,9 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 20.5,
     color: "#7c7d8f",
+  },
+  noteTitle: {
+    color: "#b4b4bf",
   },
   titleCompleted: {
     textDecorationLine: "line-through",

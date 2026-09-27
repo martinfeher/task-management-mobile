@@ -41,6 +41,7 @@ export type TaskLabel = {
 export type TaskItem = {
   id: string;
   name: string;
+  isNote?: boolean;
   completed: boolean;
   dueDate: string | null;
   dueTimeMinutes?: number | null;

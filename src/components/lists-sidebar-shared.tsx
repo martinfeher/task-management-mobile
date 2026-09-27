@@ -16,6 +16,7 @@ import { withUniwind } from "uniwind";
 import { AppSymbol } from "@/components/app-symbol";
 import { BiChevronDownIcon } from "@/components/bi-chevron-down-icon";
 import { BsCalendar4DateIcon } from "@/components/bs-calendar4-date-icon";
+import { IoMdPricetagIcon } from "@/components/io-md-pricetag-icon";
 import { ListsCreateButton } from "@/components/lists-create-button";
 import { LuInboxIcon } from "@/components/lu-inbox-icon";
 import { LuPlusIcon } from "@/components/lu-plus-icon";
@@ -210,6 +211,7 @@ export function ListsPinnedRows({
             size={17}
             day={new Date().getDate()}
             color={todaySelected ? "#797979" : "#acafc3"}
+            strokeWidth={2}
           />
         }
         onPress={() => onSelectView({ type: "today" })}
@@ -249,7 +251,7 @@ export function ListsPinnedRows({
 
       <View className="mx-4 my-2 h-px bg-lists-divider" />
 
-      <Text className="px-4 pb-1 text-xs font-medium text-lists-muted">
+      <Text className="px-4 pb-1 -mb-1.5 text-xs font-medium text-[#CCD1D4]">
         Lists
       </Text>
     </>
@@ -396,6 +398,12 @@ export function ListsLabelsSection({
                 alwaysShowCount
                 colorDot={colorDot}
                 selected={selected}
+                selectedTitleClassName="font-normal text-zinc-700"
+                icon={
+                  <View style={{ marginLeft: -3 }}>
+                    <IoMdPricetagIcon size={17} color="#E6E5F0" />
+                  </View>
+                }
                 showMenu={Boolean(
                   onRenameLabel || onDeleteLabel || onChangeLabelColor,
                 )}
@@ -428,7 +436,7 @@ function LabelsSectionHeader({
         accessibilityState={{ expanded }}
         accessibilityLabel="Labels"
       >
-        <Text className="text-[11px] font-semibold uppercase tracking-[0.06em] text-lists-muted">
+        <Text className="text-[10px] mt-[6px] font-semibold uppercase tracking-[0.06em] text-[#CCD1D4]">
           Labels
         </Text>
       </Pressable>
@@ -438,17 +446,18 @@ function LabelsSectionHeader({
       >
         {onAddLabel ? (
           <Pressable
-            className="h-6 w-6 items-center justify-center active:opacity-70"
+            className="h-6 w-6 mr-2 mt-[2px] items-center justify-center active:opacity-70"
             onPress={onAddLabel}
             accessibilityRole="button"
             accessibilityLabel="Add label"
             hitSlop={6}
           >
-            <LuPlusIcon size={17} color="#acadb2" />
+            <LuPlusIcon size={20} color="#CCD1D4" />
           </Pressable>
         ) : null}
         <Pressable
-          className="-mr-3 h-6 w-6 items-center justify-center active:opacity-70"
+          className="h-6 w-6 items-center justify-center active:opacity-70"
+          style={{ marginRight: -10 }}
           onPress={onToggle}
           accessibilityRole="button"
           accessibilityState={{ expanded }}
@@ -460,7 +469,7 @@ function LabelsSectionHeader({
               transform: [{ rotate: expanded ? "0deg" : "-90deg" }],
             }}
           >
-            <BiChevronDownIcon size={19} color="#c0c5e0" />
+            <BiChevronDownIcon size={29} color="#CCD1D4" />
           </View>
         </Pressable>
       </View>

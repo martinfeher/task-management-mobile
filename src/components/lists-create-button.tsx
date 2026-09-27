@@ -26,19 +26,21 @@ export function ListsCreateButton({
     setMenuOpen(false);
   }
 
-  function handleCreateList() {
+  function runAfterMenuClose(action: () => void) {
     closeMenu();
-    onCreateList();
+    setTimeout(action, 100);
+  }
+
+  function handleCreateList() {
+    runAfterMenuClose(onCreateList);
   }
 
   function handleCreateFolder() {
-    closeMenu();
-    onCreateFolder();
+    runAfterMenuClose(onCreateFolder);
   }
 
   function handleCreateLabel() {
-    closeMenu();
-    onCreateLabel();
+    runAfterMenuClose(onCreateLabel);
   }
 
   return (
@@ -57,7 +59,10 @@ export function ListsCreateButton({
       ) : null}
 
       {menuOpen ? (
-        <View className="absolute bottom-[51px] left-4">
+        <View
+          className="absolute bottom-[51px] left-4 z-[99999]"
+          style={{ elevation: 99999 }}
+        >
           <ListsCreateSubmenu
             onCreateList={handleCreateList}
             onCreateFolder={handleCreateFolder}

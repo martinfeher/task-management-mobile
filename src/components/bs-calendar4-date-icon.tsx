@@ -9,12 +9,14 @@ type BsCalendar4DateIconProps = {
   size?: number;
   color?: string;
   day?: number;
+  strokeWidth?: number;
 };
 
 export function BsCalendar4DateIcon({
   size = 21,
   color = "#7c92a0",
   day = new Date().getDate(),
+  strokeWidth = 0.4,
 }: BsCalendar4DateIconProps) {
   const dayLabel = String(day);
   const fontSize = dayLabel.length > 1 ? size * 0.43 : size * 0.48;
@@ -23,9 +25,13 @@ export function BsCalendar4DateIcon({
   return (
     <View style={[styles.container, { width: size, height: size }]}>
       {Platform.OS === "web" ? (
-        <BsCalendar4 size={size} color={color} />
+        <BsCalendar4
+          size={size}
+          color={color}
+          strokeWidth={0.1}
+        />
       ) : (
-        <Svg width={size} height={size} strokeWidth={0.4} viewBox="0 0 16 16">
+        <Svg width={size} height={size} strokeWidth={strokeWidth} viewBox="0 0 16 16">
           <Path d={BS_CALENDAR4_PATH} fill={color} />
         </Svg>
       )}

@@ -122,9 +122,14 @@ export function ListsDrawerContent() {
   }
 
   function promptForListName(mode: "create" | "rename", list?: SidebarListItem) {
+    if (mode === "create") {
+      openCreatePrompt();
+      return;
+    }
+
     if (Platform.OS === "ios") {
       Alert.prompt(
-        mode === "create" ? "New list" : "Rename list",
+        "Rename list",
         undefined,
         [
           { text: "Cancel", style: "cancel" },
@@ -132,19 +137,13 @@ export function ListsDrawerContent() {
             text: "Save",
             onPress: (value?: string) => {
               const trimmed = value?.trim();
-              if (!trimmed) return;
+              if (!trimmed || !list) return;
               void (async () => {
                 try {
-                  if (mode === "create") {
-                    await createList(trimmed);
-                  } else if (list) {
-                    await renameList(list.id, trimmed);
-                  }
+                  await renameList(list.id, trimmed);
                   await loadSidebar(true);
                 } catch {
-                  Alert.alert(
-                    mode === "create" ? "Couldn't create list" : "Couldn't rename list",
-                  );
+                  Alert.alert("Couldn't rename list");
                 }
               })();
             },
@@ -156,10 +155,6 @@ export function ListsDrawerContent() {
       return;
     }
 
-    if (mode === "create") {
-      openCreatePrompt();
-      return;
-    }
     if (list) {
       openRenameListPrompt(list);
     }
@@ -215,64 +210,10 @@ export function ListsDrawerContent() {
   }
 
   function promptForFolderCreate() {
-    if (Platform.OS === "ios") {
-      Alert.prompt(
-        "New folder",
-        undefined,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Save",
-            onPress: (value?: string) => {
-              const trimmed = value?.trim();
-              if (!trimmed) return;
-              void (async () => {
-                try {
-                  await createFolder(trimmed);
-                  await loadSidebar(true);
-                } catch {
-                  Alert.alert("Couldn't create folder");
-                }
-              })();
-            },
-          },
-        ],
-        "plain-text",
-      );
-      return;
-    }
-
     openCreateFolderPrompt();
   }
 
   function promptForLabelCreate() {
-    if (Platform.OS === "ios") {
-      Alert.prompt(
-        "New label",
-        undefined,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Save",
-            onPress: (value?: string) => {
-              const trimmed = value?.trim();
-              if (!trimmed) return;
-              void (async () => {
-                try {
-                  await createLabel(trimmed);
-                  await loadSidebar(true);
-                } catch {
-                  Alert.alert("Couldn't create label");
-                }
-              })();
-            },
-          },
-        ],
-        "plain-text",
-      );
-      return;
-    }
-
     openCreateLabelPrompt();
   }
 
@@ -422,7 +363,7 @@ export function ListsDrawerContent() {
         onClose={() => setColorPickerLabel(null)}
       />
 
-      {namePrompt && Platform.OS !== "ios" ? (
+      {namePrompt ? (
         <Modal transparent animationType="fade" onRequestClose={() => setNamePrompt(null)}>
           <Pressable style={styles.backdrop} onPress={() => setNamePrompt(null)} />
           <View style={styles.card}>
@@ -443,6 +384,16 @@ export function ListsDrawerContent() {
               value={nameDraft}
               onChangeText={setNameDraft}
               autoFocus
+              placeholder={
+                namePrompt.mode === "create-list"
+                  ? "List name"
+                  : namePrompt.mode === "create-folder"
+                    ? "Folder name"
+                    : namePrompt.mode === "create-label"
+                      ? "Label name"
+                      : undefined
+              }
+              placeholderTextColor="#9ca3af"
               style={styles.input}
               onSubmitEditing={() => void submitNamePrompt()}
             />

@@ -1,13 +1,13 @@
 import {
   Dimensions,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
+  Text,
   View,
 } from "react-native";
 
-import { ThemedText } from "@/components/themed-text";
+import { LiquidGlassSurface } from "@/components/liquid-glass-surface";
 
 export type CalendarViewMode = "day" | "threeDay" | "week" | "month";
 
@@ -28,46 +28,36 @@ export const CALENDAR_VIEW_OPTIONS: {
   { id: "month", label: "Month" },
 ];
 
-const POPUP_WIDTH = 168;
 const POPUP_GAP = 10;
 const SCREEN_INSET = 12;
 
 type CalendarViewPickerSheetProps = {
   visible: boolean;
   activeView: CalendarViewMode;
-  isUpcomingActive?: boolean;
+  hideActiveHighlight?: boolean;
   anchor: CalendarViewPickerAnchor | null;
   onSelectView: (view: CalendarViewMode) => void;
-  onSelectUpcoming: () => void;
   onClose: () => void;
 };
 
 function getPopupStyle(anchor: CalendarViewPickerAnchor) {
   const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
   const anchorRight = anchor.x + anchor.width;
-  const right = Math.max(
-    SCREEN_INSET,
-    windowWidth - anchorRight,
-  );
-  const bottom = Math.max(
-    SCREEN_INSET,
-    windowHeight - anchor.y + POPUP_GAP,
-  );
+  const right = Math.max(SCREEN_INSET, windowWidth - anchorRight);
+  const bottom = Math.max(SCREEN_INSET, windowHeight - anchor.y + POPUP_GAP);
 
   return {
     right,
     bottom,
-    width: POPUP_WIDTH,
   };
 }
 
 export function CalendarViewPickerSheet({
   visible,
   activeView,
-  isUpcomingActive = false,
+  hideActiveHighlight = false,
   anchor,
   onSelectView,
-  onSelectUpcoming,
   onClose,
 }: CalendarViewPickerSheetProps) {
   if (!anchor) return null;
@@ -75,46 +65,34 @@ export function CalendarViewPickerSheet({
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.popup, getPopupStyle(anchor)]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ selected: isUpcomingActive }}
-          onPress={() => {
-            onSelectUpcoming();
-            onClose();
-          }}
-          style={[styles.option, isUpcomingActive && styles.optionSelected]}
-        >
-          <ThemedText
-            style={[
-              styles.optionLabel,
-              isUpcomingActive && styles.optionLabelSelected,
-            ]}
-          >
-            Upcoming
-          </ThemedText>
-        </Pressable>
-        {CALENDAR_VIEW_OPTIONS.map((option) => {
-          const selected = !isUpcomingActive && activeView === option.id;
-          return (
-            <Pressable
-              key={option.id}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              onPress={() => {
-                onSelectView(option.id);
-                onClose();
-              }}
-              style={[styles.option, selected && styles.optionSelected]}
-            >
-              <ThemedText
-                style={[styles.optionLabel, selected && styles.optionLabelSelected]}
-              >
-                {option.label}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
+      <View style={[styles.popupAnchor, getPopupStyle(anchor)]}>
+        <LiquidGlassSurface style={styles.menu} borderRadius={13} isInteractive>
+          {CALENDAR_VIEW_OPTIONS.map((option, index) => {
+            const selected =
+              !hideActiveHighlight && activeView === option.id;
+
+            return (
+              <View key={option.id}>
+                {index > 0 ? <View style={styles.menuDivider} /> : null}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.menuRow,
+                    pressed && styles.menuRowPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`${option.label} view`}
+                  onPress={() => {
+                    onSelectView(option.id);
+                    onClose();
+                  }}
+                >
+                  <Text style={styles.menuLabel}>{option.label}</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </LiquidGlassSurface>
       </View>
     </Modal>
   );
@@ -123,45 +101,29 @@ export function CalendarViewPickerSheet({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(0, 0, 0, 0.25)",
+    backgroundColor: "transparent",
   },
-  popup: {
+  popupAnchor: {
     position: "absolute",
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    gap: 4,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000000",
-        shadowOpacity: 0.16,
-        shadowRadius: 16,
-        shadowOffset: { width: 0, height: 8 },
-      },
-      android: {
-        elevation: 12,
-      },
-      default: {
-        boxShadow: "0px 8px 24px rgba(0, 0, 0, 0.14)",
-      },
-    }),
   },
-  option: {
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: "#f9fafb",
+  menu: {
+    minWidth: 132,
   },
-  optionSelected: {
-    backgroundColor: "#e8f2fc",
+  menuRow: {
+    minHeight: 46,
+    paddingHorizontal: 16,
+    justifyContent: "center",
   },
-  optionLabel: {
-    fontSize: 15,
-    fontWeight: "600",
+  menuRowPressed: {
+    backgroundColor: "rgba(244, 244, 245, 0.45)",
+  },
+  menuLabel: {
+    fontSize: 16,
     color: "#111827",
   },
-  optionLabelSelected: {
-    color: "#2563eb",
+  menuDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(229, 231, 235, 0.85)",
+    marginHorizontal: 12,
   },
 });

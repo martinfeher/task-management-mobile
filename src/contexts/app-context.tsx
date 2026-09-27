@@ -79,7 +79,10 @@ type AppContextValue = {
   selectViewFromDrawer: (view: SelectedView) => void;
   flushDrawerCloseAction: () => void;
   loadTasksForView: (view: SelectedView, isRefresh?: boolean) => Promise<void>;
-  openTask: (task: TaskItem, options?: { fromCalendar?: boolean }) => void;
+  openTask: (
+    task: TaskItem,
+    options?: { fromCalendar?: boolean; fromUpcoming?: boolean },
+  ) => void;
   handleTaskCompleted: (taskId?: string) => void;
   completeTask: (taskId: string) => Promise<void>;
   uncompleteTask: (taskId: string) => Promise<void>;
@@ -270,30 +273,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const openTask = useCallback((task: TaskItem, options?: { fromCalendar?: boolean }) => {
-    router.push({
-      pathname: "/task/[id]",
-      params: {
-        id: task.id,
-        name: task.name,
-        listName: task.listName ?? "",
-        dueDate: task.dueDate ?? "",
-        ...(options?.fromCalendar
-          ? {
-              fromCalendar: "1",
-              calendarColor: task.calendarColor ?? "",
-              dueTimeMinutes:
-                task.dueTimeMinutes != null ? String(task.dueTimeMinutes) : "",
-              dueDurationMinutes:
-                task.dueDurationMinutes != null
-                  ? String(task.dueDurationMinutes)
-                  : "",
-              dueRepeat: task.dueRepeat ?? "",
-            }
-          : null),
-      },
-    });
-  }, []);
+  const openTask = useCallback(
+    (
+      task: TaskItem,
+      options?: { fromCalendar?: boolean; fromUpcoming?: boolean },
+    ) => {
+      router.push({
+        pathname: "/task/[id]",
+        params: {
+          id: task.id,
+          name: task.name,
+          listName: task.listName ?? "",
+          dueDate: task.dueDate ?? "",
+          ...(options?.fromCalendar
+            ? {
+                fromCalendar: "1",
+                calendarColor: task.calendarColor ?? "",
+                dueTimeMinutes:
+                  task.dueTimeMinutes != null
+                    ? String(task.dueTimeMinutes)
+                    : "",
+                dueDurationMinutes:
+                  task.dueDurationMinutes != null
+                    ? String(task.dueDurationMinutes)
+                    : "",
+                dueRepeat: task.dueRepeat ?? "",
+                ...(options.fromUpcoming ? { fromUpcoming: "1" } : null),
+              }
+            : null),
+        },
+      });
+    },
+    [],
+  );
 
   const handleTaskCompleted = useCallback(
     (taskId?: string) => {

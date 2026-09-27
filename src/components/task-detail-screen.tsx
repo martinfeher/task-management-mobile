@@ -34,7 +34,7 @@ import {
 } from "@/components/formatted-notes-input";
 import { IoMdTimeIcon } from "@/components/io-md-time-icon";
 import { LuPlusIcon } from "@/components/lu-plus-icon";
-import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
+import { VoiceInputIcon } from "@/components/voice-input-icon";
 import { TaskCheckbox } from "@/components/task-checkbox";
 import {
   TaskDatePickerSheet,
@@ -180,6 +180,7 @@ const TASK_SHEET_MIN_HEIGHT_FRACTION = 0.47;
 const TASK_SHEET_MAX_HEIGHT_FRACTION = 0.8;
 const TASK_DETAIL_HANDLE_HEIGHT = 28;
 const TASK_DETAIL_TOOLBAR_BODY_HEIGHT = 56;
+const FORMAT_TOOLBAR_ABOVE_DETAIL_GAP = 8;
 const TOOLBAR_BOTTOM_SHIFT = 13;
 const SCHEDULE_UNDO_ABOVE_GAP = 10;
 const SCHEDULE_UNDO_RIGHT_INSET = 7;
@@ -201,6 +202,7 @@ export function TaskDetailScreen() {
     listId,
     fromSearch,
     fromCalendar,
+    fromUpcoming,
     calendarColor: calendarColorParam,
     dueTimeMinutes: dueTimeMinutesParam,
     dueDurationMinutes: dueDurationMinutesParam,
@@ -213,6 +215,7 @@ export function TaskDetailScreen() {
     listId?: string;
     fromSearch?: string;
     fromCalendar?: string;
+    fromUpcoming?: string;
     calendarColor?: string;
     dueTimeMinutes?: string;
     dueDurationMinutes?: string;
@@ -237,6 +240,8 @@ export function TaskDetailScreen() {
   } = useApp();
   const closingRef = useRef(false);
   const openedFromCalendar = fromCalendar === "1";
+  const openedFromUpcoming = fromUpcoming === "1";
+  const showCalendarColorControl = openedFromCalendar && !openedFromUpcoming;
   const calendarTask = useMemo(
     () => calendarTasks.find((task) => task.id === resolvedTaskId),
     [calendarTasks, resolvedTaskId],
@@ -966,10 +971,25 @@ export function TaskDetailScreen() {
             Spacing.two,
           )
         : Spacing.two;
+  const formatToolbarSaveStatusLabel =
+    saveStatus === "saving"
+      ? "Saving…"
+      : saveStatus === "saved"
+        ? "Saved"
+        : saveStatus === "error"
+          ? "Couldn't save"
+          : null;
+  const formatToolbarDetailHeight =
+    TASK_DETAIL_TOOLBAR_BODY_HEIGHT +
+    toolbarFooterInset +
+    (formatToolbarSaveStatusLabel ? 22 : 0);
+  const formatToolbarDetailVisible =
+    !(keyboardHeight > 0 && subtasksSectionOpen && subtasksExpanded) ||
+    (expandedFullscreen && keyboardHeight > 0);
   const toolbarBottomOffset =
-    keyboardHeight > 0
-      ? keyboardHeight + 8
-      : TASK_DETAIL_TOOLBAR_BODY_HEIGHT + toolbarFooterInset;
+    (keyboardHeight > 0 ? keyboardHeight : 0) +
+    (formatToolbarDetailVisible ? formatToolbarDetailHeight : 0) +
+    FORMAT_TOOLBAR_ABOVE_DETAIL_GAP;
 
   useTextFormatToolbarRegistration(
     showFormatToolbar,
@@ -1916,7 +1936,7 @@ export function TaskDetailScreen() {
           ios="checkmark"
           android="check"
           size={16}
-          tintColor="#6b7280"
+          tintColor="#77EE88"
         />
       </Pressable>
     ) : null;
@@ -1963,7 +1983,7 @@ export function TaskDetailScreen() {
             ios="chevron.right"
             android="chevron-right"
             size={15}
-            tintColor="#9ca3af"
+            tintColor="#b7b7b7"
           />
         </View>
       </Pressable>
@@ -1979,7 +1999,7 @@ export function TaskDetailScreen() {
             : undefined
         }
       >
-        <LuPlusIcon size={25} color="#8c929e" strokeWidth={1.5} />
+        <LuPlusIcon size={25} color="#bababa" strokeWidth={1.5} />
       </Pressable>
     </View>
   );
@@ -2249,7 +2269,7 @@ export function TaskDetailScreen() {
                       }}
                       placeholder="Task name"
                       placeholderTextColor="#9ca3af"
-                      className="min-w-0 flex-1 p-0 text-[27px] font-bold leading-9"
+                      className="min-w-0 flex-1 p-0 text-[25px] font-bold leading-9"
                       style={{ color: "#454545" }}
                       multiline
                       blurOnSubmit
@@ -2274,7 +2294,7 @@ export function TaskDetailScreen() {
                         </Pressable>
                       </View>
                     ) : null}
-                    {openedFromCalendar ? (
+                    {showCalendarColorControl ? (
                       <CalendarColorControl
                         color={calendarColor}
                         pickerOpen={calendarColorPickerOpen}
@@ -2512,7 +2532,7 @@ export function TaskDetailScreen() {
               accessibilityLabel={
                 detail.completed ? "Mark task incomplete" : "Mark task complete"
               }
-              className="absolute z-20 flex-row items-center gap-[5px] rounded-full border border-[#e3e3e3] bg-[#f7f7f7] px-3.5 py-[5px] active:opacity-85"
+              className="absolute z-20 p-[12px] flex items-center justify-center rounded-full border border-[#eaedee] bg-[#f7f7f7] active:opacity-85"
               style={{
                 right: 10,
                 bottom: MARK_COMPLETE_BOTTOM_OFFSET,
@@ -2521,18 +2541,9 @@ export function TaskDetailScreen() {
               <AppSymbol
                 ios="checkmark"
                 android="check"
-                size={12}
-                tintColor="#6b7280"
+                size={16}
+                tintColor="#77EE88"
               />
-              <ThemedText
-                style={{
-                  color: "#6b7280",
-                  fontSize: 11,
-                  fontWeight: "500",
-                }}
-              >
-                {detail.completed ? "Mark incomplete" : "Mark complete"}
-              </ThemedText>
             </Pressable>
           ) : null}
 
@@ -2627,25 +2638,23 @@ export function TaskDetailScreen() {
                     label="Files"
                     onPress={handleAttachment}
                   >
-                    <RiAttachment2Icon
+                    <LuPlusIcon
                       size={TOOLBAR_UTILITY_ICON_SIZE}
                       color={TOOLBAR_ICON_COLOR}
+                      strokeWidth={1.5}
                     />
                   </DetailToolbarLabeledItem>
                 </View>
-                <View className="absolute top-0 right-[5px]">
+                <View className="absolute top-0 right-[25px]">
                   <DetailToolbarLabeledItem
                     accessibilityLabel="Voice note"
                     label="Voice"
                     showLabel={false}
                     onPress={handleVoiceNote}
                   >
-                    <AppSymbol
-                      ios="mic"
-                      android="mic"
-                      size={TOOLBAR_UTILITY_ICON_SIZE}
-                      tintColor={TOOLBAR_ICON_COLOR}
-                    />
+                    <View className="h-[43px] w-[43px] mt-[17px] items-center justify-center rounded-[13px] bg-[#8fbff0]">
+                      <VoiceInputIcon size={25} color="#ffffff" />
+                    </View>
                   </DetailToolbarLabeledItem>
                 </View>
               </View>

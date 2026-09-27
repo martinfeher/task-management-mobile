@@ -154,12 +154,12 @@ export function ListsFolderRow({
         ios={expanded ? "folder.fill" : "folder"}
         android="folder"
         size={22}
-        tintColor="#98b5c7"
+        tintColor="#BEC1C3"
         style={{ marginLeft: -1 }}
       />
       <View
         className="min-w-0 flex-1 flex-row items-center gap-1 pr-8"
-        style={{ paddingLeft: 6 }}
+        style={{ paddingLeft: 5 }}
       >
         <Text
           className="min-w-0 flex-1 text-[17px] font-normal text-zinc-700"
@@ -206,6 +206,7 @@ export function ListsSidebarListRow({
       title={list.name}
       count={list.taskCount}
       countNudgeLeft={nested ? 34 : undefined}
+      titleNudgeRight={-2}
       selected={selected}
       selectedTitleClassName="font-normal text-zinc-700"
       nested={nested}

@@ -6,6 +6,7 @@ import { ListsDrawerContent } from "@/components/lists-drawer-content";
 import {
   computeListsDrawerSwipeEdgeWidth,
   computeListsDrawerWidth,
+  LISTS_DRAWER_OVERLAY_COLOR,
 } from "@/lib/lists-drawer-layout";
 
 type ListsDrawerShellProps = {
@@ -50,6 +51,6 @@ export function ListsDrawerShell({
 
 const styles = StyleSheet.create({
   overlay: {
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    backgroundColor: LISTS_DRAWER_OVERLAY_COLOR,
   },
 });
