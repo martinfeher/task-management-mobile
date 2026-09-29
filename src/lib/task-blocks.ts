@@ -54,3 +54,26 @@ export function reorderBlocks(
 export function getBlockOrderVersion(blocks: TaskBlock[]) {
   return blocks.map((block) => block.id).join(",");
 }
+
+/** Reorder children under a parent block while preserving the rest of the list. */
+export function reorderBlockChildren(
+  tasks: TaskItem[],
+  parentId: string,
+  reorderedChildIds: string[],
+): TaskItem[] {
+  const blocks = tasksToBlocks(tasks);
+  const blockIndex = blocks.findIndex((block) => block.root.id === parentId);
+  if (blockIndex < 0) return tasks;
+
+  const block = blocks[blockIndex]!;
+  const childById = new Map(block.children.map((child) => [child.id, child]));
+  const reorderedChildren = reorderedChildIds
+    .map((id) => childById.get(id))
+    .filter((child): child is TaskItem => child != null);
+
+  if (reorderedChildren.length !== block.children.length) return tasks;
+
+  const nextBlocks = [...blocks];
+  nextBlocks[blockIndex] = { ...block, children: reorderedChildren };
+  return blocksToTasks(nextBlocks);
+}

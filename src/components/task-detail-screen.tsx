@@ -22,7 +22,19 @@ import {
   TextInput,
   useWindowDimensions,
   View,
+  type LayoutChangeEvent,
 } from "react-native";
+import DraggableFlatList, {
+  ScaleDecorator,
+  type RenderItemParams,
+} from "react-native-draggable-flatlist";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FullWindowOverlay } from "react-native-screens";
 
@@ -58,6 +70,7 @@ import {
   fetchTaskDetail,
   fetchTasks,
   moveTaskToList,
+  reorderTasks as reorderTasksRequest,
   toggleTaskCompleted,
   toggleTaskLabel,
   updateTaskCalendarColor,
@@ -66,6 +79,8 @@ import {
   updateTaskPriority,
   updateTaskSchedule,
 } from "@/lib/api";
+import { formatTaskDueDateParts } from "@/lib/format-due-date";
+import { reorderBlockChildren } from "@/lib/task-blocks";
 import { normalizeCalendarColor } from "@/lib/calendar-colors";
 import { isEnrichedNotesInputAvailable } from "@/lib/enriched-notes-support";
 import { formatTaskDueDate } from "@/lib/format-due-date";
@@ -187,6 +202,13 @@ const SCHEDULE_UNDO_RIGHT_INSET = 7;
 const SCHEDULE_UNDO_BUTTON_HEIGHT = 36;
 const SCHEDULE_UNDO_DURATION_MS = 6000;
 const SUBTASKS_LINK_FONT_SIZE = 10;
+const SUBTASKS_SECTION_BG = "#F3F9FB";
+const SUBTASKS_ACCENT = "#1cb0a9";
+const SUBTASKS_PROGRESS_TRACK = "#dcefe8";
+const SUBTASKS_PROGRESS_FILL = "#22c55e";
+const SUBTASKS_DRAWER_COLLAPSE_THRESHOLD = 36;
+const SUBTASKS_DRAWER_COLLAPSE_VELOCITY = 650;
+const SUBTASKS_DRAWER_SPRING = { damping: 24, stiffness: 320 };
 const MARK_COMPLETE_BOTTOM_OFFSET = 57;
 const MARK_COMPLETE_BUTTON_HEIGHT = 26;
 const HISTORY_ACTIONS_ABOVE_MARK_COMPLETE = 7;
@@ -266,6 +288,10 @@ export function TaskDetailScreen() {
   const [subtasksLoading, setSubtasksLoading] = useState(false);
   const [subtaskInputOpen, setSubtaskInputOpen] = useState(false);
   const [subtaskName, setSubtaskName] = useState("");
+  const [subtasksDrawerHeight, setSubtasksDrawerHeight] = useState(0);
+  const subtasksDrawerDragY = useSharedValue(0);
+  const subtasksDrawerDragStartY = useSharedValue(0);
+  const subtasksDrawerMaxUp = useSharedValue(200);
   const subtaskInputRef = useRef<TextInput>(null);
   const addingSubtaskRef = useRef(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -985,7 +1011,8 @@ export function TaskDetailScreen() {
     (formatToolbarSaveStatusLabel ? 22 : 0);
   const formatToolbarDetailVisible =
     !(keyboardHeight > 0 && subtasksSectionOpen && subtasksExpanded) ||
-    (expandedFullscreen && keyboardHeight > 0);
+    (keyboardHeight > 0 &&
+      (expandedFullscreen || (subtasksSectionOpen && subtasksExpanded)));
   const toolbarBottomOffset =
     (keyboardHeight > 0 ? keyboardHeight : 0) +
     (formatToolbarDetailVisible ? formatToolbarDetailHeight : 0) +
@@ -1119,6 +1146,8 @@ export function TaskDetailScreen() {
     setDetail(null);
     setSubtasksSectionOpen(false);
     setSubtasksExpanded(true);
+    setSubtasksDrawerHeight(0);
+    subtasksDrawerDragY.value = 0;
     setSubtasks([]);
     setSubtaskInputOpen(false);
     setSubtaskName("");
@@ -1500,7 +1529,7 @@ export function TaskDetailScreen() {
           { force: true },
         );
         const items = [...data.pinned, ...data.tasks].filter(
-          (task) => task.parentId === detail.id && !task.completed,
+          (task) => task.parentId === detail.id,
         );
         setSubtasks(items);
         if (options?.openIfActive && items.some((task) => !task.completed)) {
@@ -1544,10 +1573,21 @@ export function TaskDetailScreen() {
       return;
     }
 
-    const timer = setTimeout(() => {
-      subtaskInputRef.current?.focus();
-    }, 80);
-    return () => clearTimeout(timer);
+    // Mounting the input row resizes the sheet; focusing before that settles
+    // gets cancelled, so retry until the field actually holds focus.
+    const delays = Platform.OS === "ios" ? [220, 480] : [80, 280];
+    const timers = delays.map((delay) =>
+      setTimeout(() => {
+        if (subtaskInputRef.current?.isFocused()) return;
+        subtaskInputRef.current?.focus();
+      }, delay),
+    );
+
+    return () => {
+      for (const timer of timers) {
+        clearTimeout(timer);
+      }
+    };
   }, [subtaskInputOpen, subtasksExpanded, subtasksSectionOpen]);
 
   const handleAddSubtask = async () => {
@@ -1581,17 +1621,53 @@ export function TaskDetailScreen() {
     try {
       await toggleTaskCompleted(subtask.id, completed);
       setSubtasks((current) =>
-        completed
-          ? current.filter((item) => item.id !== subtask.id)
-          : current.map((item) =>
-              item.id === subtask.id ? { ...item, completed } : item,
-            ),
+        current.map((item) =>
+          item.id === subtask.id ? { ...item, completed } : item,
+        ),
       );
       handleTaskCompleted();
     } catch {
       Alert.alert("Couldn't update subtask");
     }
   };
+
+  const handleSubtaskDragEnd = useCallback(
+    async ({ data }: { data: TaskItem[] }) => {
+      if (!detail) return;
+
+      let previous: TaskItem[] = [];
+      setSubtasks((current) => {
+        previous = current;
+        return data;
+      });
+
+      try {
+        const listData = await fetchTasks(
+          { type: "list", id: detail.listId },
+          { force: true },
+        );
+        const section = listData.pinned.some((task) => task.id === detail.id)
+          ? ("pinned" as const)
+          : ("tasks" as const);
+        const reorderedSection = reorderBlockChildren(
+          listData[section],
+          detail.id,
+          data.map((task) => task.id),
+        );
+
+        await reorderTasksRequest({
+          listId: detail.listId,
+          section,
+          taskIds: reorderedSection.map((task) => task.id),
+        });
+        handleTaskCompleted();
+      } catch {
+        setSubtasks(previous);
+        Alert.alert("Couldn't reorder subtasks");
+      }
+    },
+    [detail, handleTaskCompleted],
+  );
 
   const handleToggleLabel = async (labelId: string, assigned: boolean) => {
     if (!detail) return;
@@ -1765,9 +1841,19 @@ export function TaskDetailScreen() {
 
   const sheetMinHeight = windowHeight * TASK_SHEET_MIN_HEIGHT_FRACTION;
   const sheetMaxScrollHeight = windowHeight * TASK_SHEET_MAX_HEIGHT_FRACTION;
+  /**
+   * iOS form sheets lift themselves above the keyboard unless they are pinned
+   * to the full-screen detent. Adding our own offset on top of that resizes the
+   * sheet mid-animation, which cancels the keyboard presentation.
+   */
+  const nativeSheetLiftsForKeyboard =
+    Platform.OS === "ios" && !expandedFullscreen;
   const subtasksKeyboardLayoutActive =
     keyboardHeight > 0 && subtasksSectionOpen && subtasksExpanded;
-  const toolbarPinnedToKeyboard = expandedFullscreen && keyboardHeight > 0;
+  const toolbarPinnedToKeyboard =
+    keyboardHeight > 0 &&
+    !nativeSheetLiftsForKeyboard &&
+    (expandedFullscreen || (subtasksSectionOpen && subtasksExpanded));
   const toolbarSafeAreaStyle = toolbarPinnedToKeyboard
     ? { paddingBottom: 0 }
     : keyboardHeight > 0
@@ -1784,31 +1870,95 @@ export function TaskDetailScreen() {
     TASK_DETAIL_TOOLBAR_BODY_HEIGHT +
     toolbarFooterInset +
     (saveStatusLabel ? 22 : 0);
-  const showDetailToolbar =
-    !subtasksKeyboardLayoutActive || toolbarPinnedToKeyboard;
-  const layoutToolbarHeight =
-    subtasksKeyboardLayoutActive && !toolbarPinnedToKeyboard
-      ? 0
-      : toolbarTotalHeight;
+  const showDetailToolbar = true;
+  const layoutToolbarHeight = toolbarTotalHeight;
+  const activeSubtasksDrawerHeight = subtasksSectionOpen
+    ? Math.max(
+        subtasksDrawerHeight,
+        subtasksExpanded ? 160 : 52,
+      )
+    : 0;
+  const sheetContentHeight = expandedFullscreen
+    ? Math.max(sheetMinHeight, windowHeight - insets.top)
+    : sheetMaxScrollHeight;
+  const scrollViewportMaxHeight = Math.max(
+    160,
+    sheetContentHeight -
+      layoutToolbarHeight -
+      TASK_DETAIL_HANDLE_HEIGHT -
+      activeSubtasksDrawerHeight,
+  );
   const expandedContainerHeight = Math.max(
     sheetMinHeight,
     windowHeight - insets.top,
   );
-  const expandedScrollHeight = Math.max(
-    240,
-    expandedContainerHeight - toolbarTotalHeight - TASK_DETAIL_HANDLE_HEIGHT,
-  );
-  const maxScrollHeight = Math.max(
-    160,
-    sheetMaxScrollHeight - layoutToolbarHeight - TASK_DETAIL_HANDLE_HEIGHT,
-  );
+  const expandedScrollHeight = Math.max(240, scrollViewportMaxHeight);
+  const subtasksInputKeyboardActive =
+    subtasksKeyboardLayoutActive && subtaskInputOpen;
+  const subtasksPinnedAboveKeyboard =
+    subtasksInputKeyboardActive && toolbarPinnedToKeyboard;
+  const subtasksKeyboardStackHeight =
+    keyboardHeight + toolbarTotalHeight + activeSubtasksDrawerHeight;
+  const maxScrollHeight =
+    subtasksInputKeyboardActive && !nativeSheetLiftsForKeyboard
+      ? Math.max(
+          120,
+          windowHeight -
+            subtasksKeyboardStackHeight -
+            TASK_DETAIL_HANDLE_HEIGHT -
+            (sheetTopY ?? insets.top) -
+            Spacing.two,
+        )
+      : scrollViewportMaxHeight;
+  const subtasksListMaxHeight =
+    subtasksInputKeyboardActive && !nativeSheetLiftsForKeyboard
+      ? Math.max(
+          72,
+          windowHeight -
+            keyboardHeight -
+            toolbarTotalHeight -
+            (sheetTopY ?? insets.top) -
+            TASK_DETAIL_HANDLE_HEIGHT -
+            220,
+        )
+      : 280;
+  const subtasksPinnedMaxHeight = subtasksPinnedAboveKeyboard
+    ? Math.max(
+        160,
+        windowHeight -
+          keyboardHeight -
+          toolbarTotalHeight -
+          (sheetTopY ?? insets.top) -
+          Spacing.two,
+      )
+    : undefined;
   const subtasksKeyboardVerticalOffset =
     Platform.OS === "ios" ? (sheetTopY ?? insets.top) : 0;
+  const subtasksDrawerMaxUpOffset = Math.max(
+    100,
+    windowHeight -
+      activeSubtasksDrawerHeight -
+      toolbarTotalHeight -
+      insets.top -
+      TASK_DETAIL_HANDLE_HEIGHT -
+      96,
+  );
 
   useEffect(() => {
-    if (!subtasksKeyboardLayoutActive) return;
+    subtasksDrawerMaxUp.value = subtasksDrawerMaxUpOffset;
+  }, [subtasksDrawerMaxUp, subtasksDrawerMaxUpOffset]);
+
+  useEffect(() => {
+    if (subtasksExpanded) return;
+    subtasksDrawerDragY.value = 0;
+  }, [subtasksDrawerDragY, subtasksExpanded]);
+
+  useEffect(() => {
+    if (!subtasksInputKeyboardActive) return;
 
     measureSheetTop();
+    if (nativeSheetLiftsForKeyboard) return;
+
     const timer = setTimeout(
       () => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -1817,9 +1967,11 @@ export function TaskDetailScreen() {
     );
     return () => clearTimeout(timer);
   }, [
-    subtasksKeyboardLayoutActive,
+    subtasksInputKeyboardActive,
+    nativeSheetLiftsForKeyboard,
     keyboardHeight,
     subtaskInputOpen,
+    subtasksDrawerHeight,
     measureSheetTop,
   ]);
 
@@ -1888,6 +2040,13 @@ export function TaskDetailScreen() {
     )
   ) : null;
 
+  const subtasksCompletedCount = useMemo(
+    () => subtasks.filter((task) => task.completed).length,
+    [subtasks],
+  );
+  const subtasksProgress =
+    subtasks.length > 0 ? subtasksCompletedCount / subtasks.length : 0;
+
   const subtasksSectionEdgeStyle = {
     marginLeft: -Spacing.three,
     marginRight: -(Spacing.three - 2),
@@ -1898,23 +2057,20 @@ export function TaskDetailScreen() {
     overflow: "visible" as const,
   };
 
-  const subtasksSectionCardStyle = Platform.select({
-    ios: {
-      backgroundColor: "#f6f6f9",
-      shadowColor: "#000000",
-      shadowOffset: { width: 0, height: 2.5 },
-      shadowOpacity: 0.09,
-      shadowRadius: 7,
+  const subtasksSectionCardStyle = {
+    backgroundColor: SUBTASKS_SECTION_BG,
+    borderColor: "#e3edf0",
+  };
+
+  const handleSubtasksDrawerLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+      if (nextHeight !== subtasksDrawerHeight) {
+        setSubtasksDrawerHeight(nextHeight);
+      }
     },
-    android: {
-      backgroundColor: "#f6f6f9",
-      elevation: 2,
-    },
-    default: {
-      backgroundColor: "#f6f6f9",
-      boxShadow: "0px 3px 11px rgba(0, 0, 0, 0.1)",
-    },
-  });
+    [subtasksDrawerHeight],
+  );
 
   const renderSubtasksMarkCompleteButton = (options?: {
     offsetLeft?: number;
@@ -1941,91 +2097,123 @@ export function TaskDetailScreen() {
       </Pressable>
     ) : null;
 
-  const renderSubtasksHeader = (options?: {
-    plusOffsetLeft?: number;
-    labelOffsetRight?: number;
-    collapsed?: boolean;
-  }) => (
-    <View
-      className={`flex-row items-center justify-between ${
-        options?.collapsed ? "min-h-[27px] py-0" : "py-1"
-      }`}
-    >
-      <Pressable
-        className={`min-w-0 flex-1 flex-row items-center gap-1.5 ${
-          options?.collapsed ? "min-h-[27px]" : "pb-1"
-        }`}
-        onPress={() => setSubtasksExpanded((expanded) => !expanded)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: subtasksExpanded }}
-        accessibilityLabel="Sub-tasks"
-        style={
-          options?.labelOffsetRight
-            ? { marginLeft: options.labelOffsetRight }
-            : undefined
-        }
-      >
-        <Text
-          className="text-[13px] font-medium text-[#545657]"
-          style={{ lineHeight: options?.collapsed ? 15 : 16 }}
-          {...(options?.collapsed && Platform.OS === "android"
-            ? { includeFontPadding: false }
-            : null)}
-        >
-          sub-tasks
-        </Text>
-        <View
-          className={`items-center justify-center ${
-            subtasksExpanded ? "rotate-90" : "rotate-0"
-          } ml-4`}
-        >
-          <AppSymbol
-            ios="chevron.right"
-            android="chevron-right"
-            size={15}
-            tintColor="#b7b7b7"
-          />
-        </View>
-      </Pressable>
-      <Pressable
-        className="h-6 w-6 -mr-[9px] items-center justify-center active:opacity-55"
-        accessibilityRole="button"
-        accessibilityLabel="Add subtask"
-        hitSlop={8}
-        onPress={openNewSubtaskInput}
-        style={
-          options?.plusOffsetLeft
-            ? { marginRight: options.plusOffsetLeft }
-            : undefined
-        }
-      >
-        <LuPlusIcon size={25} color="#bababa" strokeWidth={1.5} />
-      </Pressable>
-    </View>
+  const collapseSubtasksSection = useCallback(() => {
+    setSubtasksExpanded(false);
+    setSubtaskInputOpen(false);
+    subtasksDrawerDragY.value = 0;
+  }, [subtasksDrawerDragY]);
+
+  const toggleSubtasksExpanded = useCallback(() => {
+    setSubtasksExpanded((expanded) => {
+      if (expanded) {
+        setSubtaskInputOpen(false);
+        subtasksDrawerDragY.value = 0;
+      }
+      return !expanded;
+    });
+  }, [subtasksDrawerDragY]);
+
+  const subtasksDrawerPanGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(subtasksExpanded)
+        .activeOffsetY([-6, 6])
+        .failOffsetX([-24, 24])
+        .onBegin(() => {
+          subtasksDrawerDragStartY.value = subtasksDrawerDragY.value;
+        })
+        .onUpdate((event) => {
+          const next = subtasksDrawerDragStartY.value + event.translationY;
+          const minY = -subtasksDrawerMaxUp.value;
+          const maxY = SUBTASKS_DRAWER_COLLAPSE_THRESHOLD * 1.25;
+          subtasksDrawerDragY.value = Math.min(maxY, Math.max(minY, next));
+        })
+        .onEnd((event) => {
+          if (
+            subtasksDrawerDragY.value > SUBTASKS_DRAWER_COLLAPSE_THRESHOLD ||
+            event.velocityY > SUBTASKS_DRAWER_COLLAPSE_VELOCITY
+          ) {
+            subtasksDrawerDragY.value = withSpring(0, SUBTASKS_DRAWER_SPRING);
+            runOnJS(collapseSubtasksSection)();
+            return;
+          }
+
+          if (subtasksDrawerDragY.value < 0) {
+            subtasksDrawerDragY.value = withSpring(
+              Math.max(-subtasksDrawerMaxUp.value, subtasksDrawerDragY.value),
+              SUBTASKS_DRAWER_SPRING,
+            );
+            return;
+          }
+
+          subtasksDrawerDragY.value = withSpring(0, SUBTASKS_DRAWER_SPRING);
+        }),
+    [
+      collapseSubtasksSection,
+      subtasksDrawerDragStartY,
+      subtasksDrawerDragY,
+      subtasksDrawerMaxUp,
+      subtasksExpanded,
+    ],
   );
 
-  const renderSubtasksList = () => (
-    <View className="mt-0.5 gap-2">
-      {subtasksLoading ? (
-        <ActivityIndicator
-          size="small"
-          color="#4873c7"
-          className="mb-1 self-start"
-        />
-      ) : null}
-      {subtasks.map((subtask) => (
+  const subtasksDrawerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: subtasksDrawerDragY.value }],
+  }));
+
+  const renderSubtaskDragHandle = (onDrag: () => void) => (
+    <Pressable
+      onPressIn={onDrag}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel="Reorder subtask"
+      className="px-1 py-2 active:opacity-60"
+    >
+      <View className="gap-[3px]">
+        {[0, 1].map((row) => (
+          <View key={row} className="flex-row gap-[3px]">
+            {[0, 1, 2].map((column) => (
+              <View
+                key={column}
+                className="h-[3px] w-[3px] rounded-full bg-[#c4c4c4]"
+              />
+            ))}
+          </View>
+        ))}
+      </View>
+    </Pressable>
+  );
+
+  const renderSubtaskRow = ({
+    item: subtask,
+    drag,
+    isActive,
+  }: RenderItemParams<TaskItem>) => {
+    const dueParts = formatTaskDueDateParts(
+      subtask.dueDate,
+      subtask.dueTimeMinutes,
+    );
+
+    return (
+      <ScaleDecorator>
         <View
-          key={subtask.id}
-          className="min-h-[33px] flex-row items-center gap-2.5"
+          className="min-h-[49px] flex-row items-center gap-2.5 border-b border-[#e6eef1] px-0.5"
+          style={isActive ? { opacity: 0.92 } : undefined}
         >
           <TaskCheckbox
-            checked={false}
-            uncheckedBackgroundColor="#F6F6F9"
-            accessibilityLabel={`Mark ${subtask.name} complete`}
-            onPress={() => void handleToggleSubtaskComplete(subtask, true)}
+            checked={subtask.completed}
+            uncheckedBackgroundColor={SUBTASKS_SECTION_BG}
+            accessibilityLabel={
+              subtask.completed
+                ? `Mark ${subtask.name} incomplete`
+                : `Mark ${subtask.name} complete`
+            }
+            onPress={() =>
+              void handleToggleSubtaskComplete(subtask, !subtask.completed)
+            }
           />
           <Pressable
-            className="min-w-0 flex-1 justify-center active:opacity-70"
+            className="min-w-0 flex-1 justify-center py-1.5 active:opacity-70"
             accessibilityRole="button"
             accessibilityLabel={`Open subtask ${subtask.name}`}
             onPress={() =>
@@ -2037,43 +2225,223 @@ export function TaskDetailScreen() {
           >
             <ThemedText
               style={{
-                fontSize: 14,
-                lineHeight: 16,
+                fontSize: 15,
+                lineHeight: 18,
                 fontWeight: "400",
-                color: "#505050",
+                color: subtask.completed ? "#9ca3af" : "#505050",
+                textDecorationLine: subtask.completed ? "line-through" : "none",
               }}
               numberOfLines={2}
             >
               {subtask.name}
             </ThemedText>
+            {dueParts ? (
+              <ThemedText
+                style={{
+                  marginTop: 2,
+                  fontSize: 12,
+                  lineHeight: 14,
+                  color: "#9ca3af",
+                }}
+              >
+                {dueParts.dateLabel}
+              </ThemedText>
+            ) : null}
           </Pressable>
+          {renderSubtaskDragHandle(drag)}
         </View>
-      ))}
-      {subtaskInputOpen ? (
-        <View className="min-h-[34px] flex-row items-center gap-2.5">
-          <View className="h-[22px] w-[22px] rounded-xl border-[1.5px] border-[#dad4d5] bg-[#F6F6F9]" />
-          <TextInput
-            ref={subtaskInputRef}
-            value={subtaskName}
-            onChangeText={setSubtaskName}
-            autoFocus
-            className="flex-1 py-1 text-base leading-[22px] text-gray-900"
-            returnKeyType="done"
-            blurOnSubmit={false}
-            onSubmitEditing={() => void handleAddSubtask()}
-            onBlur={() => {
-              const trimmed = subtaskName.trim();
-              if (!trimmed) {
-                setSubtaskInputOpen(false);
-                return;
+      </ScaleDecorator>
+    );
+  };
+
+  const renderSubtasksDrawer = (options?: { plusOffsetLeft?: number }) =>
+    subtasksSectionOpen ? (
+      <Animated.View
+        className="relative shrink-0 mb-1 px-1"
+        style={[
+          subtasksSectionOuterStyle,
+          subtasksDrawerAnimatedStyle,
+          subtasksPinnedAboveKeyboard
+            ? {
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: keyboardHeight + toolbarTotalHeight,
+                marginBottom: 0,
+                zIndex: 24,
+                maxHeight: subtasksPinnedMaxHeight,
+                backgroundColor: "#ffffff",
               }
-              void handleAddSubtask();
-            }}
-          />
+            : toolbarPinnedToKeyboard
+              ? { marginBottom: toolbarTotalHeight }
+              : undefined,
+        ]}
+        onLayout={handleSubtasksDrawerLayout}
+      >
+        {renderSubtasksMarkCompleteButton({
+          offsetLeft: options?.plusOffsetLeft ?? 0,
+        })}
+        <View
+          className="overflow-hidden ml-[14px] w-auto mr-[14px] rounded-t-[15px] rounded-b-[19px] border px-4 pb-3 pt-[3px]"
+          style={subtasksSectionCardStyle}
+        >
+          <View className="flex-row items-center gap-2">
+            <GestureDetector gesture={subtasksDrawerPanGesture}>
+              <Animated.View
+                className="min-w-0 flex-1"
+                accessibilityRole="adjustable"
+                accessibilityLabel="Drag to move subtasks. Swipe down to collapse."
+              >
+                <View className="mb-1 items-center py-2">
+                  <View className="h-[5px] w-11 rounded-[3px] bg-[#d1d5db]" />
+                </View>
+                <View className="flex-row items-center gap-2 rounded-full px-3 py-2">
+                  <Pressable
+                    onPress={toggleSubtasksExpanded}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: subtasksExpanded }}
+                    accessibilityLabel="Toggle subtasks"
+                  >
+                    <AppSymbol
+                      ios={subtasksExpanded ? "chevron.down" : "chevron.right"}
+                      android={
+                        subtasksExpanded
+                          ? "keyboard-arrow-down"
+                          : "chevron-right"
+                      }
+                      size={16}
+                      tintColor="#6b7280"
+                    />
+                  </Pressable>
+                  <Text className="text-[15px] font-semibold text-[#111827]">
+                    Subtasks
+                  </Text>
+                  {subtasks.length > 0 ? (
+                    <View className="rounded-full bg-[#dcfce7] px-2 py-0.5">
+                      <Text className="text-[11px] font-semibold text-[#16a34a]">
+                        {subtasksCompletedCount}/{subtasks.length}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              </Animated.View>
+            </GestureDetector>
+            <Pressable
+              className="h-8 w-8 items-center justify-center rounded-full active:opacity-80"
+              style={{ backgroundColor: SUBTASKS_ACCENT }}
+              accessibilityRole="button"
+              accessibilityLabel="Add subtask"
+              hitSlop={8}
+              onPress={openNewSubtaskInput}
+            >
+              <LuPlusIcon size={18} color="#ffffff" strokeWidth={2.2} />
+            </Pressable>
+          </View>
+
+          {subtasksExpanded ? (
+            <View className="mt-3">
+              {subtasks.length > 0 ? (
+                <View
+                  className="mb-3 h-1 overflow-hidden rounded-full"
+                  style={{ backgroundColor: SUBTASKS_PROGRESS_TRACK }}
+                >
+                  <View
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${Math.max(subtasksProgress * 100, subtasksCompletedCount > 0 ? 8 : 0)}%`,
+                      backgroundColor: SUBTASKS_PROGRESS_FILL,
+                    }}
+                  />
+                </View>
+              ) : null}
+
+              {subtasksLoading ? (
+                <ActivityIndicator
+                  size="small"
+                  color={SUBTASKS_ACCENT}
+                  className="mb-2 self-start"
+                />
+              ) : subtasks.length > 0 ? (
+                <DraggableFlatList
+                  data={subtasks}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderSubtaskRow}
+                  onDragEnd={({ data }) => void handleSubtaskDragEnd({ data })}
+                  scrollEnabled={
+                    subtasks.length > 4 ||
+                    (subtasksInputKeyboardActive && subtasks.length > 1)
+                  }
+                  activationDistance={12}
+                  containerStyle={{ maxHeight: subtasksListMaxHeight }}
+                />
+              ) : (
+                <ThemedText
+                  className="py-2 text-sm"
+                  style={{ color: "#9ca3af" }}
+                >
+                  No subtasks yet
+                </ThemedText>
+              )}
+
+              {subtaskInputOpen ? (
+                <View className="mt-3 flex-row items-center gap-2">
+                  <TextInput
+                    ref={subtaskInputRef}
+                    value={subtaskName}
+                    onChangeText={setSubtaskName}
+                    placeholder="New subtask"
+                    placeholderTextColor="#9ca3af"
+                    className="min-h-[42px] flex-1 rounded-full border px-4 text-[15px] text-gray-900"
+                    style={{
+                      borderColor: SUBTASKS_ACCENT,
+                      backgroundColor: "#ffffff",
+                    }}
+                    returnKeyType="done"
+                    blurOnSubmit={false}
+                    onFocus={() => {
+                      dismissLinkEditor();
+                      setNotesFocused(false);
+                    }}
+                    onSubmitEditing={() => void handleAddSubtask()}
+                  />
+                  <Pressable
+                    className="h-9 w-9 items-center justify-center rounded-full active:opacity-80"
+                    style={{ backgroundColor: SUBTASKS_ACCENT }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add subtask"
+                    onPress={() => void handleAddSubtask()}
+                  >
+                    <AppSymbol
+                      ios="checkmark"
+                      android="check"
+                      size={16}
+                      tintColor="#ffffff"
+                    />
+                  </Pressable>
+                  <Pressable
+                    className="h-9 w-9 items-center justify-center active:opacity-60"
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel new subtask"
+                    onPress={() => {
+                      setSubtaskInputOpen(false);
+                      setSubtaskName("");
+                    }}
+                  >
+                    <AppSymbol
+                      ios="xmark"
+                      android="close"
+                      size={16}
+                      tintColor="#9ca3af"
+                    />
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
-      ) : null}
-    </View>
-  );
+      </Animated.View>
+    ) : null;
 
   return (
     <>
@@ -2084,9 +2452,11 @@ export function TaskDetailScreen() {
           expandedFullscreen && { minHeight: expandedContainerHeight },
         ]}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        enabled={!toolbarPinnedToKeyboard}
+        enabled={!toolbarPinnedToKeyboard && !nativeSheetLiftsForKeyboard}
         keyboardVerticalOffset={
-          subtasksKeyboardLayoutActive && !toolbarPinnedToKeyboard
+          subtasksKeyboardLayoutActive &&
+          !toolbarPinnedToKeyboard &&
+          !nativeSheetLiftsForKeyboard
             ? subtasksKeyboardVerticalOffset
             : 0
         }
@@ -2094,7 +2464,7 @@ export function TaskDetailScreen() {
         <View
           ref={sheetContainerRef}
           onLayout={measureSheetTop}
-          className="flex-1"
+          className="min-h-0 flex-1"
           collapsable={false}
         >
           {calendarColorPickerOpen ? (
@@ -2127,11 +2497,7 @@ export function TaskDetailScreen() {
 
           <ScrollView
             ref={scrollViewRef}
-            style={
-              expandedFullscreen
-                ? { flex: 1 }
-                : { flex: 1, maxHeight: maxScrollHeight }
-            }
+            style={{ flex: 1, flexShrink: 1, maxHeight: maxScrollHeight }}
             contentContainerStyle={
               expandedFullscreen
                 ? {
@@ -2141,18 +2507,14 @@ export function TaskDetailScreen() {
                     paddingRight: Spacing.three - 2,
                     paddingBottom: toolbarPinnedToKeyboard
                       ? toolbarTotalHeight + Spacing.two
-                      : subtasksKeyboardLayoutActive
-                        ? Spacing.three
-                        : Spacing.two,
+                      : Spacing.two,
                   }
                 : {
                     paddingLeft: Spacing.three,
                     paddingRight: Spacing.three - 2,
                     paddingBottom: toolbarPinnedToKeyboard
                       ? toolbarTotalHeight + Spacing.two
-                      : subtasksKeyboardLayoutActive
-                        ? Spacing.three
-                        : Spacing.two,
+                      : Spacing.two,
                   }
             }
             keyboardShouldPersistTaps="handled"
@@ -2448,22 +2810,6 @@ export function TaskDetailScreen() {
                   ) : null}
                 </View>
 
-                {subtasksSectionOpen && subtasksExpanded ? (
-                  <View
-                    className="relative mt-[18px] mb-2 px-1"
-                    style={subtasksSectionOuterStyle}
-                  >
-                    {renderSubtasksMarkCompleteButton()}
-                    <View
-                      className="rounded-t-[19px] rounded-b-[19px] px-5 py-2 -mb-[16px] border border-[#e8e8ed]"
-                      style={subtasksSectionCardStyle}
-                    >
-                      {renderSubtasksHeader()}
-                      {renderSubtasksList()}
-                    </View>
-                  </View>
-                ) : null}
-
                 {mediaBlocks.map((block, index) => {
                   if (block.type === "image") {
                     return (
@@ -2506,24 +2852,7 @@ export function TaskDetailScreen() {
             )}
           </ScrollView>
 
-          {subtasksSectionOpen && !subtasksExpanded ? (
-            <View
-              className="relative shrink-0 mb-1 px-1"
-              style={subtasksSectionOuterStyle}
-            >
-              {renderSubtasksMarkCompleteButton({ offsetLeft: 12 })}
-              <View
-                className="rounded-t-[19px] rounded-b-[19px] px-5 py-2"
-                style={subtasksSectionCardStyle}
-              >
-                {renderSubtasksHeader({
-                  plusOffsetLeft: 10,
-                  labelOffsetRight: 14,
-                  collapsed: true,
-                })}
-              </View>
-            </View>
-          ) : null}
+          {renderSubtasksDrawer({ plusOffsetLeft: 12 })}
 
           {!loading && detail && !subtasksSectionOpen ? (
             <Pressable

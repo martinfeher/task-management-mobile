@@ -20,6 +20,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTaskButton } from "@/components/add-task-button";
 import {
+  filterTaskBlocks,
+  shouldShowTaskListTypeFilter,
+  TaskListTypeFilterBar,
+  TASK_LIST_TYPE_FILTER_EXTRA_SCROLL_PADDING,
+  type TaskListContentFilter,
+} from "@/components/task-list-type-filter";
+import {
   TASK_CONTEXT_MENU_ESTIMATED_HEIGHT,
   TASK_CONTEXT_MENU_WIDTH,
   TaskContextMenu,
@@ -105,7 +112,7 @@ export function TaskListPanel({
     deleteTask,
   } = useApp();
   const insets = useSafeAreaInsets();
-  const listBottomPadding = getAddTaskFabReservedHeight(insets.bottom);
+  const [contentFilter, setContentFilter] = useState<TaskListContentFilter>("all");
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView | null>(null);
   const showListName = selectedView?.type !== "list";
@@ -131,6 +138,25 @@ export function TaskListPanel({
     () => [...pinned, ...tasks],
     [pinned, tasks],
   );
+  const showTypeFilter = useMemo(
+    () => shouldShowTaskListTypeFilter(allListTasks),
+    [allListTasks],
+  );
+  const listBottomPadding =
+    getAddTaskFabReservedHeight(insets.bottom) +
+    (showTypeFilter ? TASK_LIST_TYPE_FILTER_EXTRA_SCROLL_PADDING : 0);
+  const visiblePinnedBlocks = useMemo(
+    () => filterTaskBlocks(pinnedBlocks, contentFilter),
+    [pinnedBlocks, contentFilter],
+  );
+  const visibleTaskBlocks = useMemo(
+    () => filterTaskBlocks(taskBlocks, contentFilter),
+    [taskBlocks, contentFilter],
+  );
+
+  useEffect(() => {
+    setContentFilter("all");
+  }, [selectedView]);
   const { subtaskCountByParentId, isSubtasksExpanded, toggleSubtasksExpanded } =
     useTaskListSubtasksExpanded(allListTasks);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -529,6 +555,7 @@ export function TaskListPanel({
       <View collapsable={false} style={{ flex: 1 }}>
         <TaskListShell
           title={getPanelTitle(selectedView, taskData)}
+          selectedView={selectedView}
           onOpenLists={openListsDrawer}
         >
         {blockingState ?? (
@@ -544,11 +571,11 @@ export function TaskListPanel({
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
           >
-            {pinnedBlocks.length > 0 ? (
+            {visiblePinnedBlocks.length > 0 ? (
               <>
                 <TaskSectionTitle title="Pinned" />
                 <NestableDraggableFlatList
-                  data={pinnedBlocks}
+                  data={visiblePinnedBlocks}
                   keyExtractor={(item) => `pinned-${item.id}`}
                   onDragBegin={handleDragBegin}
                   onPlaceholderIndexChange={handlePlaceholderIndexChange}
@@ -562,9 +589,9 @@ export function TaskListPanel({
               </>
             ) : null}
 
-            {taskBlocks.length > 0 ? (
+            {visibleTaskBlocks.length > 0 ? (
               <NestableDraggableFlatList
-                data={taskBlocks}
+                data={visibleTaskBlocks}
                 keyExtractor={(item) => item.id}
                 onDragBegin={handleDragBegin}
                 onPlaceholderIndexChange={handlePlaceholderIndexChange}
@@ -579,6 +606,12 @@ export function TaskListPanel({
           </NestableScrollContainer>
         )}
       </TaskListShell>
+      {!addTaskComposerOpen && showTypeFilter ? (
+        <TaskListTypeFilterBar
+          value={contentFilter}
+          onChange={setContentFilter}
+        />
+      ) : null}
       {!addTaskComposerOpen ? <AddTaskButton /> : null}
 
       {contextMenu &&

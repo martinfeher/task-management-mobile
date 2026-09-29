@@ -5,14 +5,15 @@ import { AppSymbol } from "@/components/app-symbol";
 
 const SIDEBAR_MENU_ICON_COLOR = "#c5c5c5";
 
+/** Selection is indicated by the row icon only, not by a row background. */
+export const SIDEBAR_SELECTED_ICON_COLOR = "#585858";
+
 type SidebarRowProps = {
   title: string;
   count?: number;
   alwaysShowCount?: boolean;
   colorDot?: string;
   selected?: boolean;
-  selectedColor?: string;
-  selectedTitleClassName?: string;
   icon?: ReactNode;
   showMenu?: boolean;
   countNudgeLeft?: number;
@@ -29,8 +30,6 @@ export function SidebarRow({
   alwaysShowCount = false,
   colorDot,
   selected = false,
-  selectedColor = "#111111",
-  selectedTitleClassName,
   icon,
   showMenu = false,
   countNudgeLeft,
@@ -42,11 +41,7 @@ export function SidebarRow({
 }: SidebarRowProps) {
   return (
     <View
-      className={`mb-px ${nested ? "ml-[13px]" : "ml-[2px]"} mr-1.5 min-h-[45px] flex-row items-stretch gap-2 border-l-2 px-3 ${
-        selected
-          ? "rounded-l-none rounded-r-[11px] border-l-lists-accent-border bg-lists-selected"
-          : "rounded-[3px] border-l-transparent"
-      }`}
+      className={`mb-px ${nested ? "ml-[13px]" : "ml-[2px]"} mr-1.5 min-h-[45px] flex-row items-stretch gap-2 rounded-[3px] border-l-2 border-l-transparent px-3`}
     >
       <Pressable
         onPress={onPress}
@@ -54,6 +49,7 @@ export function SidebarRow({
         delayLongPress={250}
         accessibilityRole="button"
         accessibilityLabel={title}
+        accessibilityState={{ selected }}
         className="min-w-0 flex-1 flex-row items-center gap-2 active:opacity-85"
       >
         {icon ? (
@@ -62,21 +58,10 @@ export function SidebarRow({
           </View>
         ) : null}
         <Text
-          className={`flex-1 shrink text-[17px] mb-[1px] leading-[22px] ${
-            selected && selectedTitleClassName
-              ? selectedTitleClassName
-              : selected
-                ? "font-medium"
-                : nested
-                  ? "font-normal text-[#676a6f]"
-                  : "font-normal text-zinc-700"
+          className={`flex-1 shrink text-[17px] mb-[1px] font-normal leading-[22px] ${
+            nested ? "text-[#676a6f]" : "text-zinc-700"
           }`}
-          style={{
-            marginLeft: -4 + titleNudgeRight,
-            ...(selected && !selectedTitleClassName
-              ? { color: selectedColor }
-              : null),
-          }}
+          style={{ marginLeft: -4 + titleNudgeRight }}
           numberOfLines={1}
           {...(Platform.OS === "android"
             ? {

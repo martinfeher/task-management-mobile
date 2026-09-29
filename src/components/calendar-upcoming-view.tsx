@@ -268,6 +268,7 @@ export function CalendarUpcomingView({
         key={task.id}
         task={task}
         showListName
+        listNameColor="#c2c2c2"
         priorityBeforeAssignedLabels
         onPress={onPressTask}
         onToggleComplete={onToggleComplete}
@@ -278,11 +279,12 @@ export function CalendarUpcomingView({
 
   return (
     <View className="flex-1">
-      <View className="shrink-0 grow-0 border-b border-[#e5e7eb]">
-        <View className="flex-row items-center justify-between px-4 pb-0.5">
-          <ThemedText className="text-[15px] font-semibold text-gray-600">
+      <View className="shrink-0 grow-0 border-b border-[#e5e7eb]  -mt-2">
+        <View className="flex-row items-center justify-between px-4 pb-0.5 mb-1">
+          <ThemedText className="text-[15px] font-semibold" style={{ color: "#494949" }}>
             {stripMonthLabel}
           </ThemedText>
+     
           <View className="items-end" style={{ marginTop: -4 }}>
             {!isSameDay(selectedStripDate, today) ? (
               <Pressable

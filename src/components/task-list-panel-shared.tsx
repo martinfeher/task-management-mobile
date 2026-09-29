@@ -11,6 +11,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppSymbol } from "@/components/app-symbol";
 import { FiChevronLeftIcon } from "@/components/fi-chevron-left-icon";
+import { IoMdPricetagIcon } from "@/components/io-md-pricetag-icon";
+import { MdChecklistIcon } from "@/components/md-checklist-icon";
 import { TaskRow } from "@/components/task-row";
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
@@ -82,13 +84,22 @@ export function useToggleComplete(
 
 export function TaskListShell({
   title,
+  selectedView,
   children,
   onOpenLists,
 }: {
   title: string;
+  selectedView?: SelectedView | null;
   children: ReactNode;
   onOpenLists?: () => void;
 }) {
+  const headerIcon =
+    selectedView?.type === "list" ? (
+      <MdChecklistIcon size={20} color={ "#C2C6CE"} />
+    ) : selectedView?.type === "label" ? (
+      <IoMdPricetagIcon size={20} color={"#DDE0E6"} />
+    ) : null;
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
@@ -100,13 +111,19 @@ export function TaskListShell({
               accessibilityRole="button"
               accessibilityLabel="Open lists"
               style={styles.listsNavButton}
+              className="mb-[2px]"
             >
               <FiChevronLeftIcon size={30} color="#a4a4b4" />
             </Pressable>
           ) : null}
-          <ThemedText style={styles.headerTitle} numberOfLines={1}>
-            {title}
-          </ThemedText>
+          <View style={styles.headerTitleRow}>
+            {headerIcon ? (
+              <View style={styles.headerIcon} className="mt-px">{headerIcon}</View>
+            ) : null}
+            <ThemedText style={styles.headerTitle} numberOfLines={1}>
+              {title}
+            </ThemedText>
+          </View>
         </View>
         <View style={styles.listBody}>{children}</View>
       </SafeAreaView>
@@ -306,10 +323,23 @@ const styles = StyleSheet.create({
     marginBottom: LIST_NAV_ICON_INSET,
     marginLeft: -13,
   },
+  headerTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+    marginLeft: -12,
+  },
+  headerIcon: {
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#BABBC3",
+  },
   headerTitle: {
+    flex: 1,
     fontSize: 20,
     fontWeight: "600",
-    color: "#18181b",
+    color: "#505057",
   },
   pinnedSection: {
     backgroundColor: "rgba(250, 250, 250, 0.4)",

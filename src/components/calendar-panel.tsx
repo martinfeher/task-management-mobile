@@ -579,14 +579,6 @@ export function CalendarPanel() {
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-        {!isUpcomingView ? (
-          <View style={styles.header}>
-            <ThemedText style={styles.headerTitle} className="text-gray-600">
-              Calendar
-            </ThemedText>
-          </View>
-        ) : null}
-
         {isUpcomingView ? (
           <CalendarUpcomingView
             key={upcomingSessionKey}
@@ -881,9 +873,7 @@ export function CalendarPanel() {
         style={[
           styles.calendarFabButtonShadow,
           {
-            bottom: isUpcomingView
-              ? calendarFabUpcomingBottom
-              : calendarFabViewPickerBottom,
+            bottom: calendarFabUpcomingBottom,
             right: calendarFabIconRight,
           },
         ]}
@@ -912,7 +902,7 @@ export function CalendarPanel() {
           style={[
             styles.calendarFabButtonShadow,
             {
-              bottom: calendarFabUpcomingBottom,
+              bottom: calendarFabViewPickerBottom,
               right: calendarFabIconRight,
             },
           ]}

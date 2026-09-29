@@ -146,6 +146,7 @@ type TaskRowProps = {
   showSubtaskCollapseToggle?: boolean;
   /** Put the priority flag immediately before assigned label chips. */
   priorityBeforeAssignedLabels?: boolean;
+  listNameColor?: string;
 };
 
 function TaskLabelChip({ label }: { label: TaskLabel }) {
@@ -179,6 +180,7 @@ export function TaskRow({
   onToggleSubtasksExpanded,
   showSubtaskCollapseToggle = false,
   priorityBeforeAssignedLabels = false,
+  listNameColor,
 }: TaskRowProps) {
   const dueDateParts = formatTaskDueDateParts(
     task.dueDate,
@@ -563,7 +565,13 @@ export function TaskRow({
 
   const listNameNode =
     showListName && task.listName ? (
-      <ThemedText style={styles.listName} numberOfLines={1}>
+      <ThemedText
+        style={[
+          styles.listName,
+          listNameColor ? { color: listNameColor } : null,
+        ]}
+        numberOfLines={1}
+      >
         {task.listName}
       </ThemedText>
     ) : null;
@@ -591,8 +599,9 @@ export function TaskRow({
           <View
             accessibilityLabel="Note"
             style={styles.noteIconWrap}
+            className="mt-[2px] -ml-[2px]"
           >
-            <PiNoteLightIcon size={21} color="#b4b4bf" />
+            <PiNoteLightIcon size={24} color="#CBCBD7" />
           </View>
         ) : (
           <TaskCheckbox
@@ -694,7 +703,6 @@ export function TaskRow({
                 style={[
                   styles.title,
                   task.depth > 0 && !isNote && styles.subtaskTitle,
-                  isNote && styles.noteTitle,
                   useCompactRowLayout && styles.titleNoDueDate,
                   checked && styles.titleCompleted,
                 ]}
@@ -976,9 +984,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 20.5,
     color: "#7c7d8f",
-  },
-  noteTitle: {
-    color: "#b4b4bf",
   },
   titleCompleted: {
     textDecorationLine: "line-through",

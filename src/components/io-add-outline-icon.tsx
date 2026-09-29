@@ -1,5 +1,3 @@
-import { Platform } from "react-native";
-import { IoAddOutline } from "react-icons/io5";
 import Svg, { Path } from "react-native-svg";
 
 const IO_ADD_OUTLINE_PATH = "M256 112v288m144-144H112";
@@ -19,12 +17,6 @@ export function IoAddOutlineIcon({
 }: IoAddOutlineIconProps) {
   const iconWidth = width ?? size;
   const iconHeight = height ?? size;
-
-  if (Platform.OS === "web") {
-    return (
-      <IoAddOutline size={Math.max(iconWidth, iconHeight)} color={color} />
-    );
-  }
 
   return (
     <Svg

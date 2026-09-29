@@ -1,7 +1,15 @@
+import { useEffect, useMemo, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTaskButton } from "@/components/add-task-button";
+import {
+  filterTaskListItems,
+  shouldShowTaskListTypeFilter,
+  TaskListTypeFilterBar,
+  TASK_LIST_TYPE_FILTER_EXTRA_SCROLL_PADDING,
+  type TaskListContentFilter,
+} from "@/components/task-list-type-filter";
 import {
   getListContentStyle,
   getPanelTitle,
@@ -28,7 +36,7 @@ export function TaskListPanel({
 }: TaskListPanelProps) {
   const { addTaskComposerOpen, openListsDrawer } = useApp();
   const insets = useSafeAreaInsets();
-  const listBottomPadding = getAddTaskFabReservedHeight(insets.bottom);
+  const [contentFilter, setContentFilter] = useState<TaskListContentFilter>("all");
   const showListName = selectedView?.type !== "list";
   const handleToggleComplete = useToggleComplete(onTaskCompleted, onTaskUncompleted);
   const blockingState = getTaskListBlockingState({
@@ -42,11 +50,35 @@ export function TaskListPanel({
 
   const pinned = taskData?.pinned ?? [];
   const tasks = taskData?.tasks ?? [];
+  const allListTasks = useMemo(
+    () => [...pinned, ...tasks],
+    [pinned, tasks],
+  );
+  const showTypeFilter = useMemo(
+    () => shouldShowTaskListTypeFilter(allListTasks),
+    [allListTasks],
+  );
+  const listBottomPadding =
+    getAddTaskFabReservedHeight(insets.bottom) +
+    (showTypeFilter ? TASK_LIST_TYPE_FILTER_EXTRA_SCROLL_PADDING : 0);
+  const visiblePinned = useMemo(
+    () => filterTaskListItems(pinned, contentFilter),
+    [pinned, contentFilter],
+  );
+  const visibleTasks = useMemo(
+    () => filterTaskListItems(tasks, contentFilter),
+    [tasks, contentFilter],
+  );
+
+  useEffect(() => {
+    setContentFilter("all");
+  }, [selectedView]);
 
   return (
     <View style={{ flex: 1 }}>
       <TaskListShell
         title={getPanelTitle(selectedView, taskData)}
+        selectedView={selectedView}
         onOpenLists={openListsDrawer}
       >
         {blockingState ?? (
@@ -58,13 +90,13 @@ export function TaskListPanel({
               <View>
                 <StaticTaskSection
                   title="Pinned"
-                  tasks={pinned}
+                  tasks={visiblePinned}
                   showListName={showListName}
                   onToggleComplete={handleToggleComplete}
                   onPressTask={onOpenTask}
                 />
                 <StaticTaskSection
-                  tasks={tasks}
+                  tasks={visibleTasks}
                   showListName={showListName}
                   onToggleComplete={handleToggleComplete}
                   onPressTask={onOpenTask}
@@ -78,6 +110,12 @@ export function TaskListPanel({
           />
         )}
       </TaskListShell>
+      {!addTaskComposerOpen && showTypeFilter ? (
+        <TaskListTypeFilterBar
+          value={contentFilter}
+          onChange={setContentFilter}
+        />
+      ) : null}
       {!addTaskComposerOpen ? <AddTaskButton /> : null}
     </View>
   );

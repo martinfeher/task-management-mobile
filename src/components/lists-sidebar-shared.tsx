@@ -22,11 +22,16 @@ import { LuInboxIcon } from "@/components/lu-inbox-icon";
 import { LuPlusIcon } from "@/components/lu-plus-icon";
 import { LuStarIcon } from "@/components/lu-star-icon";
 import { SettingsModal } from "@/components/settings-modal";
-import { SidebarRow } from "@/components/sidebar-row";
+import {
+  SIDEBAR_SELECTED_ICON_COLOR,
+  SidebarRow,
+} from "@/components/sidebar-row";
 import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/hooks/use-theme";
 import { fetchLabels } from "@/lib/api";
 import { findInboxList } from "@/lib/inbox-list";
+
+const LISTS_PINNED_ICON_COLOR = "#C1C1CE";
 import { getLabelDotColor } from "@/lib/label-colors";
 import type {
   SelectedView,
@@ -210,7 +215,11 @@ export function ListsPinnedRows({
           <BsCalendar4DateIcon
             size={17}
             day={new Date().getDate()}
-            color={todaySelected ? "#797979" : "#acafc3"}
+            color={
+              todaySelected
+                ? SIDEBAR_SELECTED_ICON_COLOR
+                : LISTS_PINNED_ICON_COLOR
+            }
             strokeWidth={2}
           />
         }
@@ -227,7 +236,11 @@ export function ListsPinnedRows({
             <LuInboxIcon
               size={19}
               strokeWidth={1}
-              color={inboxSelected ? "#111111" : navIconColor}
+              color={
+                inboxSelected
+                  ? SIDEBAR_SELECTED_ICON_COLOR
+                  : LISTS_PINNED_ICON_COLOR
+              }
             />
           }
           onPress={() => onSelectView({ type: "list", id: inboxList.id })}
@@ -243,13 +256,17 @@ export function ListsPinnedRows({
           <LuStarIcon
             size={19}
             strokeWidth={1}
-            color={importantSelected ? "#111111" : navIconColor}
+            color={
+              importantSelected
+                ? SIDEBAR_SELECTED_ICON_COLOR
+                : LISTS_PINNED_ICON_COLOR
+            }
           />
         }
         onPress={() => onSelectView({ type: "important" })}
       />
 
-      <View className="mx-4 my-2 h-px bg-lists-divider" />
+      <View className="mx-4 mt-1 mb-2 h-px bg-lists-divider" />
 
       <Text className="px-4 pb-1 -mb-1.5 text-xs font-medium text-[#CCD1D4]">
         Lists
@@ -398,10 +415,14 @@ export function ListsLabelsSection({
                 alwaysShowCount
                 colorDot={colorDot}
                 selected={selected}
-                selectedTitleClassName="font-normal text-zinc-700"
                 icon={
                   <View style={{ marginLeft: -3 }}>
-                    <IoMdPricetagIcon size={17} color="#E6E5F0" />
+                    <IoMdPricetagIcon
+                      size={17}
+                      color={
+                        selected ? SIDEBAR_SELECTED_ICON_COLOR : "#E6E5F0"
+                      }
+                    />
                   </View>
                 }
                 showMenu={Boolean(
