@@ -1,8 +1,10 @@
 import { API_BASE_URL } from "@/constants/api";
+import { parseAudioBlocksFromDetails } from "@/lib/task-voice-notes";
 
 export type ParsedDetailBlock =
   | { type: "text"; text: string }
   | { type: "image"; uri: string }
+  | { type: "audio"; uri: string; id: string; durationMs?: number }
   | { type: "link"; text: string; href: string };
 
 function resolveUri(src: string) {
@@ -46,8 +48,26 @@ export function parseTaskDetails(details: string): ParsedDetailBlock[] {
     /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
   const linkPattern =
     /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  const audioPattern =
+    /<div class="detail-audio-wrapper"[\s\S]*?<\/div>/gi;
 
   const tokens: Array<{ index: number; block: ParsedDetailBlock }> = [];
+
+  for (const match of remaining.matchAll(audioPattern)) {
+    const snippet = match[0];
+    if (match.index === undefined) continue;
+    const audioBlock = parseAudioBlocksFromDetails(snippet)[0];
+    if (!audioBlock) continue;
+    tokens.push({
+      index: match.index,
+      block: {
+        type: "audio",
+        uri: audioBlock.uri,
+        id: audioBlock.id,
+        durationMs: audioBlock.durationMs,
+      },
+    });
+  }
 
   for (const match of remaining.matchAll(imagePattern)) {
     const src = match[1];
@@ -90,7 +110,9 @@ export function parseTaskDetails(details: string): ParsedDetailBlock[] {
     const matchLength =
       token.block.type === "image"
         ? remaining.slice(token.index).match(/^<img[^>]*>/i)?.[0]?.length ?? 0
-        : remaining.slice(token.index).match(/^<a[\s\S]*?<\/a>/i)?.[0]?.length ?? 0;
+        : token.block.type === "audio"
+          ? remaining.slice(token.index).match(/^<div class="detail-audio-wrapper"[\s\S]*?<\/div>/i)?.[0]?.length ?? 0
+          : remaining.slice(token.index).match(/^<a[\s\S]*?<\/a>/i)?.[0]?.length ?? 0;
     cursor = token.index + matchLength;
   }
 

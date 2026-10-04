@@ -112,7 +112,7 @@ function TaskRowDragBlurSurface({
             intensity={DRAG_NATIVE_BLUR_INTENSITY}
             tint="light"
             style={StyleSheet.absoluteFill}
-            experimentalBlurMethod="dimezisBlurView"
+            blurMethod="dimezisBlurView"
           />
         </Animated.View>
       ) : null}

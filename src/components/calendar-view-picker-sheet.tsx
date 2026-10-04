@@ -1,13 +1,10 @@
-import {
-  Dimensions,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { BiCalendarWeekIcon } from "@/components/bi-calendar-week-icon";
+import { HiOutlineViewColumnsIcon } from "@/components/hi-outline-view-columns-icon";
+import { WiDayHazeIcon } from "@/components/wi-day-haze-icon";
 import { LiquidGlassSurface } from "@/components/liquid-glass-surface";
+import { MdCalendarMonthIcon } from "@/components/md-calendar-month-icon";
 
 export type CalendarViewMode = "day" | "threeDay" | "week" | "month";
 
@@ -16,6 +13,9 @@ export type CalendarViewPickerAnchor = {
   y: number;
   width: number;
   height: number;
+  /** Size of the overlay host (calendar panel), for positioning above the FAB. */
+  hostWidth: number;
+  hostHeight: number;
 };
 
 export const CALENDAR_VIEW_OPTIONS: {
@@ -30,6 +30,26 @@ export const CALENDAR_VIEW_OPTIONS: {
 
 const POPUP_GAP = 10;
 const SCREEN_INSET = 12;
+const CALENDAR_VIEW_OPTION_ICON_COLOR = "#b7b7b8";
+const CALENDAR_VIEW_OPTION_ICON_SIZE = 20;
+
+function CalendarViewOptionIcon({ id }: { id: CalendarViewMode }) {
+  const iconProps = {
+    size: CALENDAR_VIEW_OPTION_ICON_SIZE,
+    color: CALENDAR_VIEW_OPTION_ICON_COLOR,
+  };
+
+  switch (id) {
+    case "day":
+      return <WiDayHazeIcon {...iconProps} />;
+    case "threeDay":
+      return <HiOutlineViewColumnsIcon {...iconProps} />;
+    case "week":
+      return <BiCalendarWeekIcon {...iconProps} />;
+    case "month":
+      return <MdCalendarMonthIcon {...iconProps} />;
+  }
+}
 
 type CalendarViewPickerSheetProps = {
   visible: boolean;
@@ -41,10 +61,9 @@ type CalendarViewPickerSheetProps = {
 };
 
 function getPopupStyle(anchor: CalendarViewPickerAnchor) {
-  const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
   const anchorRight = anchor.x + anchor.width;
-  const right = Math.max(SCREEN_INSET, windowWidth - anchorRight);
-  const bottom = Math.max(SCREEN_INSET, windowHeight - anchor.y + POPUP_GAP);
+  const right = Math.max(SCREEN_INSET, anchor.hostWidth - anchorRight);
+  const bottom = Math.max(SCREEN_INSET, anchor.hostHeight - anchor.y + POPUP_GAP);
 
   return {
     right,
@@ -60,10 +79,14 @@ export function CalendarViewPickerSheet({
   onSelectView,
   onClose,
 }: CalendarViewPickerSheetProps) {
-  if (!anchor) return null;
+  if (!visible || !anchor) return null;
 
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
+    <View
+      style={styles.overlay}
+      pointerEvents="box-none"
+      accessibilityViewIsModal
+    >
       <Pressable style={styles.backdrop} onPress={onClose} />
       <View style={[styles.popupAnchor, getPopupStyle(anchor)]}>
         <LiquidGlassSurface style={styles.menu} borderRadius={13} isInteractive>
@@ -87,18 +110,26 @@ export function CalendarViewPickerSheet({
                     onClose();
                   }}
                 >
-                  <Text style={styles.menuLabel}>{option.label}</Text>
+                  <View style={styles.menuRowContent}>
+                    <CalendarViewOptionIcon id={option.id} />
+                    <Text style={styles.menuLabel}>{option.label}</Text>
+                  </View>
                 </Pressable>
               </View>
             );
           })}
         </LiquidGlassSurface>
       </View>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 25,
+    elevation: 25,
+  },
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: "transparent",
@@ -107,19 +138,24 @@ const styles = StyleSheet.create({
     position: "absolute",
   },
   menu: {
-    minWidth: 132,
+    minWidth: 152,
   },
   menuRow: {
     minHeight: 46,
     paddingHorizontal: 16,
     justifyContent: "center",
   },
+  menuRowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   menuRowPressed: {
     backgroundColor: "rgba(244, 244, 245, 0.45)",
   },
   menuLabel: {
     fontSize: 16,
-    color: "#111827",
+    color: "#70737E",
   },
   menuDivider: {
     height: StyleSheet.hairlineWidth,

@@ -14,7 +14,7 @@ import type { TaskItem } from "@/types/todo";
 export type TaskListContentFilter = "all" | "notes" | "tasks";
 
 export const TASK_LIST_TYPE_FILTER_ABOVE_FAB_GAP = 10;
-export const TASK_LIST_TYPE_FILTER_EXTRA_SCROLL_PADDING = 44;
+export const TASK_LIST_TYPE_FILTER_EXTRA_SCROLL_PADDING = 41;
 
 const FILTER_OPTIONS: Array<{ id: TaskListContentFilter; label: string }> = [
   { id: "all", label: "All" },
@@ -115,14 +115,14 @@ export function TaskListTypeFilterBar({
               accessibilityState={{ selected }}
               accessibilityLabel={`Show ${option.label.toLowerCase()}`}
               onPress={() => onChange(option.id)}
-              className={`min-w-[35px] h-[25px] items-center justify-center rounded-full px-[7px] py-1 ${
+              className={`min-w-[32px] h-[24px] items-center justify-center rounded-full px-[6px] py-0.5 ${
                 selected ? "bg-[#eef4ff]" : ""
               }`}
             >
               <Text
                 className={`text-[11px] ${
                   selected
-                    ? "font-semibold text-[#3b82f6]"
+                    ? "font-semibold text-[#126bff]"
                     : "font-medium text-[#9ca3af]"
                 }`}
               >

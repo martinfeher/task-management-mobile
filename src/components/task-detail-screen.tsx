@@ -45,8 +45,10 @@ import {
   type NotesInputHandle,
 } from "@/components/formatted-notes-input";
 import { IoMdTimeIcon } from "@/components/io-md-time-icon";
+import { LiquidGlassSurface } from "@/components/liquid-glass-surface";
 import { LuPlusIcon } from "@/components/lu-plus-icon";
 import { VoiceInputIcon } from "@/components/voice-input-icon";
+import { VoiceNoteAttachmentChip } from "@/components/voice-note-attachment-chip";
 import { TaskCheckbox } from "@/components/task-checkbox";
 import {
   TaskDatePickerSheet,
@@ -64,6 +66,7 @@ import { Spacing } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
 import { useHistoryActionsRegistration } from "@/contexts/history-actions-toolbar-context";
 import { useTextFormatToolbarRegistration } from "@/contexts/text-format-toolbar-context";
+import { useVoiceNoteRecorder } from "@/hooks/use-voice-note-recorder";
 import {
   createSubtask,
   fetchLabels,
@@ -98,6 +101,9 @@ import {
   detailsHtmlToPlainText,
   mergePlainTextEditIntoHtml,
 } from "@/lib/task-content";
+import { appendVoiceNotesToTaskDetails } from "@/lib/persist-task-voice-notes";
+import { removeVoiceNoteFromDetailsHtml } from "@/lib/task-voice-notes";
+import { showVoiceNoteAttachmentActions } from "@/lib/voice-note-actions";
 import {
   createEmptyTaskDetailHistory,
   snapshotsEqual,
@@ -209,7 +215,9 @@ const SUBTASKS_PROGRESS_FILL = "#22c55e";
 const SUBTASKS_DRAWER_COLLAPSE_THRESHOLD = 36;
 const SUBTASKS_DRAWER_COLLAPSE_VELOCITY = 650;
 const SUBTASKS_DRAWER_SPRING = { damping: 24, stiffness: 320 };
+const SUBTASK_DRAG_ACTIVE_SCALE = 0.97;
 const MARK_COMPLETE_BOTTOM_OFFSET = 57;
+const MARK_COMPLETE_BUTTON_SIZE = 36;
 const MARK_COMPLETE_BUTTON_HEIGHT = 26;
 const HISTORY_ACTIONS_ABOVE_MARK_COMPLETE = 7;
 
@@ -296,6 +304,8 @@ export function TaskDetailScreen() {
   const addingSubtaskRef = useRef(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const [allLabels, setAllLabels] = useState<TaskLabel[]>([]);
+  const [voiceNoteSaving, setVoiceNoteSaving] = useState(false);
+  const { isRecording, startRecording, stopRecording } = useVoiceNoteRecorder();
 
   const pickerSchedule = useMemo(
     () => ({
@@ -1256,24 +1266,33 @@ export function TaskDetailScreen() {
   }, [labelPickerOpen, loadLabels]);
 
   const mediaBlocks = useMemo(() => {
-    // `detailsDoc` (the canonical doc) is the source of truth when the API
-    // has computed one for this task — falls back to the legacy regex
-    // extraction over raw HTML otherwise (older tasks, or if the doc ever
-    // fails validation).
+    const isMediaBlock = (
+      block: ParsedDetailBlock,
+    ): block is Extract<
+      ParsedDetailBlock,
+      { type: "image" | "link" | "audio" }
+    > =>
+      block.type === "image" ||
+      block.type === "link" ||
+      block.type === "audio";
+
+    const htmlMediaBlocks = parseTaskDetails(detail?.details ?? "").filter(
+      isMediaBlock,
+    );
+
     if (detail?.detailsDoc) {
       try {
-        return extractMediaBlocksFromDoc(resolveTaskDoc(detail));
+        const docMediaBlocks = extractMediaBlocksFromDoc(resolveTaskDoc(detail));
+        const audioBlocks = htmlMediaBlocks.filter(
+          (block) => block.type === "audio",
+        );
+        return [...docMediaBlocks, ...audioBlocks];
       } catch {
         // fall through to legacy extraction below
       }
     }
 
-    return parseTaskDetails(detail?.details ?? "").filter(
-      (
-        block,
-      ): block is Extract<ParsedDetailBlock, { type: "image" | "link" }> =>
-        block.type === "image" || block.type === "link",
-    );
+    return htmlMediaBlocks;
   }, [detail]);
 
   const dueDateLabel = formatTaskDueDate(
@@ -1635,11 +1654,13 @@ export function TaskDetailScreen() {
     async ({ data }: { data: TaskItem[] }) => {
       if (!detail) return;
 
-      let previous: TaskItem[] = [];
-      setSubtasks((current) => {
-        previous = current;
-        return data;
-      });
+      const orderUnchanged =
+        subtasks.length === data.length &&
+        subtasks.every((task, index) => task.id === data[index]?.id);
+      if (orderUnchanged) return;
+
+      const previous = subtasks;
+      setSubtasks(data);
 
       try {
         const listData = await fetchTasks(
@@ -1666,7 +1687,7 @@ export function TaskDetailScreen() {
         Alert.alert("Couldn't reorder subtasks");
       }
     },
-    [detail, handleTaskCompleted],
+    [detail, handleTaskCompleted, subtasks],
   );
 
   const handleToggleLabel = async (labelId: string, assigned: boolean) => {
@@ -1713,17 +1734,103 @@ export function TaskDetailScreen() {
     ]);
   }
 
-  function handleVoiceNote() {
-    Alert.alert(
-      "Voice note",
-      "Voice note recording is not available in the mobile app yet.",
-    );
-  }
+  const removeVoiceNoteById = useCallback(
+    async (audioId: string) => {
+      if (!detail) return;
+
+      try {
+        const nextDetails = removeVoiceNoteFromDetailsHtml(
+          detail.details ?? "",
+          audioId,
+        );
+        await updateTaskDetails(detail.id, nextDetails);
+        setDetail({ ...detail, details: nextDetails });
+        detailsHtmlRef.current = nextDetails;
+        setNotesHtml(nextDetails);
+        handleTaskCompleted();
+      } catch {
+        Alert.alert("Couldn't remove voice note");
+      }
+    },
+    [detail, handleTaskCompleted],
+  );
+
+  const confirmRemoveVoiceNote = useCallback(
+    (audioId: string) => {
+      Alert.alert("Voice note", "Remove this recording from the task?", [
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            void removeVoiceNoteById(audioId);
+          },
+        },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    },
+    [removeVoiceNoteById],
+  );
+
+  const handleVoiceNoteAttachmentPress = useCallback(
+    (block: Extract<ParsedDetailBlock, { type: "audio" }>) => {
+      showVoiceNoteAttachmentActions({
+        durationMs: block.durationMs ?? 0,
+        playbackUri: block.uri,
+        onRemove: () => confirmRemoveVoiceNote(block.id),
+      });
+    },
+    [confirmRemoveVoiceNote],
+  );
+
+  const handleVoiceNote = useCallback(async () => {
+    if (!detail || voiceNoteSaving) return;
+
+    if (isRecording) {
+      const recording = await stopRecording();
+      if (!recording) return;
+
+      const note = {
+        id: `${Date.now()}-detail`,
+        localUri: recording.localUri,
+        durationMs: recording.durationMs,
+        mimeType: recording.mimeType,
+      };
+
+      setVoiceNoteSaving(true);
+      try {
+        const currentHtml =
+          detailsHtmlRef.current ?? resolveTaskDetailsHtml(detail) ?? "";
+        const nextDetails = await appendVoiceNotesToTaskDetails(
+          detail.id,
+          currentHtml,
+          [note],
+        );
+        setDetail({ ...detail, details: nextDetails });
+        detailsHtmlRef.current = nextDetails;
+        setNotesHtml(nextDetails);
+        handleTaskCompleted();
+      } catch {
+        Alert.alert("Couldn't save voice note");
+      } finally {
+        setVoiceNoteSaving(false);
+      }
+      return;
+    }
+
+    await startRecording();
+  }, [
+    detail,
+    handleTaskCompleted,
+    isRecording,
+    startRecording,
+    stopRecording,
+    voiceNoteSaving,
+  ]);
 
   function handleAttachment() {
     Alert.alert(
       "Attachment",
-      "File attachments are not available in the mobile app yet.",
+      "Use the voice button to add audio notes. Other file types are coming soon.",
     );
   }
 
@@ -1875,7 +1982,7 @@ export function TaskDetailScreen() {
   const activeSubtasksDrawerHeight = subtasksSectionOpen
     ? Math.max(
         subtasksDrawerHeight,
-        subtasksExpanded ? 160 : 52,
+        subtasksExpanded ? 160 : 37,
       )
     : 0;
   const sheetContentHeight = expandedFullscreen
@@ -2072,30 +2179,59 @@ export function TaskDetailScreen() {
     [subtasksDrawerHeight],
   );
 
-  const renderSubtasksMarkCompleteButton = (options?: {
+  const renderMarkCompleteButton = (position: {
+    top?: number;
+    right?: number;
+    bottom?: number;
     offsetLeft?: number;
-  }) =>
-    !loading && detail ? (
+  }) => {
+    if (loading || !detail) return null;
+
+    const right = (position.right ?? 10) + (position.offsetLeft ?? 0);
+
+    return (
       <Pressable
         onPress={handleDateCheckboxPress}
         accessibilityRole="button"
         accessibilityLabel={
           detail.completed ? "Mark task incomplete" : "Mark task complete"
         }
-        className="absolute z-20 h-9 w-9 items-center justify-center rounded-full border border-[#e3e3e3] bg-[#f7f7f7] active:opacity-85"
+        className="absolute z-20 active:opacity-85"
         style={{
-          top: -44,
-          right: 10 + (options?.offsetLeft ?? 0),
+          top: position.top,
+          right,
+          bottom: position.bottom,
         }}
       >
-        <AppSymbol
-          ios="checkmark"
-          android="check"
-          size={16}
-          tintColor="#77EE88"
-        />
+        <LiquidGlassSurface
+          borderRadius={MARK_COMPLETE_BUTTON_SIZE / 2}
+          isInteractive
+          style={{
+            width: MARK_COMPLETE_BUTTON_SIZE,
+            height: MARK_COMPLETE_BUTTON_SIZE,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <AppSymbol
+            ios="checkmark"
+            android="check"
+            size={16}
+            tintColor="#77EE88"
+          />
+        </LiquidGlassSurface>
       </Pressable>
-    ) : null;
+    );
+  };
+
+  const renderSubtasksMarkCompleteButton = (options?: {
+    offsetLeft?: number;
+  }) =>
+    renderMarkCompleteButton({
+      top: -44,
+      right: 10,
+      offsetLeft: options?.offsetLeft,
+    });
 
   const collapseSubtasksSection = useCallback(() => {
     setSubtasksExpanded(false);
@@ -2195,10 +2331,10 @@ export function TaskDetailScreen() {
     );
 
     return (
-      <ScaleDecorator>
+      <ScaleDecorator activeScale={SUBTASK_DRAG_ACTIVE_SCALE}>
         <View
           className="min-h-[49px] flex-row items-center gap-2.5 border-b border-[#e6eef1] px-0.5"
-          style={isActive ? { opacity: 0.92 } : undefined}
+          style={isActive ? { zIndex: 2 } : undefined}
         >
           <TaskCheckbox
             checked={subtask.completed}
@@ -2238,7 +2374,7 @@ export function TaskDetailScreen() {
             {dueParts ? (
               <ThemedText
                 style={{
-                  marginTop: 2,
+                  marginTop: 5,
                   fontSize: 12,
                   lineHeight: 14,
                   color: "#9ca3af",
@@ -2285,23 +2421,23 @@ export function TaskDetailScreen() {
           className="overflow-hidden ml-[14px] w-auto mr-[14px] rounded-t-[15px] rounded-b-[19px] border px-4 pb-3 pt-[3px]"
           style={subtasksSectionCardStyle}
         >
-          <View className="flex-row items-center gap-2">
-            <GestureDetector gesture={subtasksDrawerPanGesture}>
-              <Animated.View
-                className="min-w-0 flex-1"
-                accessibilityRole="adjustable"
-                accessibilityLabel="Drag to move subtasks. Swipe down to collapse."
-              >
-                <View className="mb-1 items-center py-2">
-                  <View className="h-[5px] w-11 rounded-[3px] bg-[#d1d5db]" />
-                </View>
-                <View className="flex-row items-center gap-2 rounded-full px-3 py-2">
+          <GestureDetector gesture={subtasksDrawerPanGesture}>
+            <Animated.View
+              accessibilityRole="adjustable"
+              accessibilityLabel="Drag to move subtasks. Swipe down to collapse."
+            >
+              <View className="mb-0.5 items-center pt-0.5 pb-1.5">
+                <View className="h-[5px] w-11 rounded-[3px] bg-[#d1d5db]" />
+              </View>
+              <View className="min-h-[23px] flex-row items-center gap-2">
+                <View className="min-w-0 flex-1 flex-row items-center gap-2 rounded-full px-3 py-0">
                   <Pressable
                     onPress={toggleSubtasksExpanded}
                     hitSlop={8}
                     accessibilityRole="button"
                     accessibilityState={{ expanded: subtasksExpanded }}
                     accessibilityLabel="Toggle subtasks"
+                    className="-ml-[5px] items-center justify-center"
                   >
                     <AppSymbol
                       ios={subtasksExpanded ? "chevron.down" : "chevron.right"}
@@ -2314,30 +2450,30 @@ export function TaskDetailScreen() {
                       tintColor="#6b7280"
                     />
                   </Pressable>
-                  <Text className="text-[15px] font-semibold text-[#111827]">
+                  <Text className="text-[15px] font-semibold leading-[18px] text-[#111827]">
                     Subtasks
                   </Text>
                   {subtasks.length > 0 ? (
                     <View className="rounded-full bg-[#dcfce7] px-2 py-0.5">
-                      <Text className="text-[11px] font-semibold text-[#16a34a]">
+                      <Text className="text-[11px] font-semibold leading-[14px] text-[#16a34a]">
                         {subtasksCompletedCount}/{subtasks.length}
                       </Text>
                     </View>
                   ) : null}
                 </View>
-              </Animated.View>
-            </GestureDetector>
-            <Pressable
-              className="h-8 w-8 items-center justify-center rounded-full active:opacity-80"
-              style={{ backgroundColor: SUBTASKS_ACCENT }}
-              accessibilityRole="button"
-              accessibilityLabel="Add subtask"
-              hitSlop={8}
-              onPress={openNewSubtaskInput}
-            >
-              <LuPlusIcon size={18} color="#ffffff" strokeWidth={2.2} />
-            </Pressable>
-          </View>
+                <Pressable
+                  className="h-[23px] w-[23px] shrink-0 items-center justify-center rounded-full active:opacity-80"
+                  style={{ backgroundColor: SUBTASKS_ACCENT }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add subtask"
+                  hitSlop={10}
+                  onPress={openNewSubtaskInput}
+                >
+                  <LuPlusIcon size={15} color="#ffffff" strokeWidth={2.2} />
+                </Pressable>
+              </View>
+            </Animated.View>
+          </GestureDetector>
 
           {subtasksExpanded ? (
             <View className="mt-3">
@@ -2828,6 +2964,17 @@ export function TaskDetailScreen() {
                     );
                   }
 
+                  if (block.type === "audio") {
+                    return (
+                      <View key={`audio-${block.id}`} className="mb-3">
+                        <VoiceNoteAttachmentChip
+                          durationMs={block.durationMs ?? 0}
+                          onPress={() => handleVoiceNoteAttachmentPress(block)}
+                        />
+                      </View>
+                    );
+                  }
+
                   return (
                     <Pressable
                       key={`link-${index}`}
@@ -2854,27 +3001,12 @@ export function TaskDetailScreen() {
 
           {renderSubtasksDrawer({ plusOffsetLeft: 12 })}
 
-          {!loading && detail && !subtasksSectionOpen ? (
-            <Pressable
-              onPress={handleDateCheckboxPress}
-              accessibilityRole="button"
-              accessibilityLabel={
-                detail.completed ? "Mark task incomplete" : "Mark task complete"
-              }
-              className="absolute z-20 p-[12px] flex items-center justify-center rounded-full border border-[#eaedee] bg-[#f7f7f7] active:opacity-85"
-              style={{
+          {!subtasksSectionOpen
+            ? renderMarkCompleteButton({
                 right: 10,
                 bottom: MARK_COMPLETE_BOTTOM_OFFSET,
-              }}
-            >
-              <AppSymbol
-                ios="checkmark"
-                android="check"
-                size={16}
-                tintColor="#77EE88"
-              />
-            </Pressable>
-          ) : null}
+              })
+            : null}
 
           {showDetailToolbar ? (
             <View
@@ -2976,13 +3108,27 @@ export function TaskDetailScreen() {
                 </View>
                 <View className="absolute top-0 right-[25px]">
                   <DetailToolbarLabeledItem
-                    accessibilityLabel="Voice note"
+                    accessibilityLabel={
+                      isRecording ? "Stop voice note recording" : "Voice note"
+                    }
                     label="Voice"
                     showLabel={false}
-                    onPress={handleVoiceNote}
+                    onPress={() => {
+                      void handleVoiceNote();
+                    }}
                   >
-                    <View className="h-[43px] w-[43px] mt-[17px] items-center justify-center rounded-[13px] bg-[#8fbff0]">
-                      <VoiceInputIcon size={25} color="#ffffff" />
+                    <View
+                      className="h-[43px] w-[43px] mt-[17px] items-center justify-center rounded-[13px]"
+                      style={{
+                        backgroundColor: isRecording ? "#ef4444" : "#8fbff0",
+                        opacity: voiceNoteSaving ? 0.65 : 1,
+                      }}
+                    >
+                      {voiceNoteSaving ? (
+                        <ActivityIndicator color="#ffffff" size="small" />
+                      ) : (
+                        <VoiceInputIcon size={25} color="#ffffff" />
+                      )}
                     </View>
                   </DetailToolbarLabeledItem>
                 </View>

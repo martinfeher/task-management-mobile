@@ -15,18 +15,18 @@ import type { TaskContextMenuAnchor } from "@/components/task-context-menu";
 import { TaskRow } from "@/components/task-row";
 import { ThemedText } from "@/components/themed-text";
 import { addDays, isSameDay, startOfDay, toDateKey } from "@/lib/task-dates";
-import { buildTasksByDate } from "@/lib/task-repeat";
+import { buildTasksByDate, compareTasksByDueTime } from "@/lib/task-repeat";
 import type { TaskItem } from "@/types/todo";
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 const STRIP_DAYS_PER_PAGE = 14;
 const STRIP_PAST_DAYS = 42;
 const STRIP_FUTURE_DAYS = 180;
+const OVERDUE_VISIBLE_LIMIT = 2;
 const UPCOMING_DAYS_INITIAL = 30;
 const UPCOMING_DAYS_BATCH = 14;
 const SCROLL_LOAD_THRESHOLD = 120;
 const SECTION_SYNC_THRESHOLD = 48;
-const OVERDUE_VISIBLE_LIMIT = 2;
 const STRIP_ROW_HEIGHT = 36;
 const STRIP_CALENDAR_HEIGHT = STRIP_ROW_HEIGHT * 2 + 4;
 
@@ -130,9 +130,19 @@ export function CalendarUpcomingView({
       .sort((left, right) => {
         const leftDate = left.dueDate?.slice(0, 10) ?? "";
         const rightDate = right.dueDate?.slice(0, 10) ?? "";
-        return leftDate.localeCompare(rightDate);
+        const dateCompare = leftDate.localeCompare(rightDate);
+        if (dateCompare !== 0) {
+          return dateCompare;
+        }
+        return compareTasksByDueTime(left, right);
       });
   }, [activeTasks, todayKey]);
+
+  useEffect(() => {
+    if (overdueTasks.length <= OVERDUE_VISIBLE_LIMIT) {
+      setOverdueExpanded(false);
+    }
+  }, [overdueTasks.length]);
 
   const sections = useMemo(() => {
     const result: UpcomingSection[] = [];
@@ -397,12 +407,16 @@ export function CalendarUpcomingView({
         ) : (
           sections.map((section) => {
             if (section.kind === "overdue") {
+              const hasMoreOverdueTasks =
+                section.tasks.length > OVERDUE_VISIBLE_LIMIT;
               const visibleOverdueTasks = overdueExpanded
                 ? section.tasks
                 : section.tasks.slice(0, OVERDUE_VISIBLE_LIMIT);
-              const hasHiddenOverdueTasks =
-                !overdueExpanded &&
-                section.tasks.length > OVERDUE_VISIBLE_LIMIT;
+              const canToggleOverdue = hasMoreOverdueTasks;
+
+              const toggleOverdueExpanded = () => {
+                setOverdueExpanded((expanded) => !expanded);
+              };
 
               return (
                 <View
@@ -414,26 +428,43 @@ export function CalendarUpcomingView({
                     );
                   }}
                 >
-                  <View className="px-4 py-1">
+                  <Pressable
+                    accessibilityRole={canToggleOverdue ? "button" : undefined}
+                    accessibilityLabel={
+                      canToggleOverdue
+                        ? overdueExpanded
+                          ? "Collapse overdue tasks"
+                          : "Show all overdue tasks"
+                        : undefined
+                    }
+                    accessibilityState={
+                      canToggleOverdue ? { expanded: overdueExpanded } : undefined
+                    }
+                    className="flex-row items-center justify-between px-4 py-1"
+                    disabled={!canToggleOverdue}
+                    hitSlop={canToggleOverdue ? { top: 4, bottom: 4 } : undefined}
+                    onPress={toggleOverdueExpanded}
+                  >
                     <ThemedText
                       className="text-[11px] font-bold"
                       style={{ color: "#b3b3b3" }}
                     >
                       Overdue
                     </ThemedText>
-                  </View>
+                    {canToggleOverdue ? (
+                      <View
+                        className="h-7 w-7 items-center justify-center"
+                        style={{
+                          transform: [
+                            { rotate: overdueExpanded ? "180deg" : "0deg" },
+                          ],
+                        }}
+                      >
+                        <BiChevronDownIcon size={20} color="#CCD1D4" />
+                      </View>
+                    ) : null}
+                  </Pressable>
                   {visibleOverdueTasks.map(renderTaskRow)}
-                  {hasHiddenOverdueTasks ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Show all overdue tasks"
-                      className="items-start px-4 pb-2 pt-0.5"
-                      hitSlop={8}
-                      onPress={() => setOverdueExpanded(true)}
-                    >
-                      <BiChevronDownIcon size={20} color="#CCD1D4" />
-                    </Pressable>
-                  ) : null}
                 </View>
               );
             }

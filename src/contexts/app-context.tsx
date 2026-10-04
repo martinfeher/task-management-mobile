@@ -87,7 +87,7 @@ type AppContextValue = {
   completeTask: (taskId: string) => Promise<void>;
   uncompleteTask: (taskId: string) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
-  createTask: (input: CreateTaskInput) => Promise<boolean>;
+  createTask: (input: CreateTaskInput) => Promise<string | null>;
   openAddTaskComposer: (draft?: ComposerDraft) => void;
   closeAddTaskComposer: () => void;
   startAddingTask: (options?: { stayOnPage?: boolean; draft?: ComposerDraft }) => void;
@@ -424,7 +424,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const createTask = useCallback(
     async (input: CreateTaskInput) => {
       const trimmed = input.name.trim();
-      if (!trimmed) return false;
+      if (!trimmed) return null;
 
       const currentView = selectedViewRef.current;
       const lists = sidebarDataRef.current?.lists ?? [];
@@ -443,7 +443,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         currentTasks?.pinned[0]?.listId ??
         null;
 
-      if (!listId) return false;
+      if (!listId) return null;
 
       const listName =
         targetList?.name ??
@@ -483,7 +483,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       setTaskAddedToast(listName);
 
-      return true;
+      return created.id;
     },
     [loadSidebar, loadTasksForView],
   );
@@ -507,7 +507,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const openSearchModal = useCallback(() => {
     if (suppressSearchOpenRef.current) return;
-    router.push("/search-modal");
+    router.navigate("/search");
   }, []);
 
   const suppressNextSearchOpen = useCallback(() => {

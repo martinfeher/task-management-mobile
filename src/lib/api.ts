@@ -349,6 +349,28 @@ export async function updateTaskName(taskId: string, name: string) {
   }
 }
 
+export async function uploadTaskVoiceNote(
+  taskId: string,
+  file: { uri: string; name: string; type: string },
+) {
+  const formData = new FormData();
+  formData.append("file", file as unknown as Blob);
+
+  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/audio`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to upload voice note (${response.status})`);
+  }
+
+  return response.json() as Promise<{ url: string }>;
+}
+
 export async function updateTaskDetails(taskId: string, details: string) {
   const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/details`, {
     method: "PUT",

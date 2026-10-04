@@ -51,7 +51,7 @@ export function LiquidGlassSurface({
       <BlurView
         intensity={Platform.OS === "ios" ? 88 : 72}
         tint={Platform.OS === "ios" ? "systemUltraThinMaterialLight" : "light"}
-        experimentalBlurMethod="dimezisBlurView"
+        blurMethod="dimezisBlurView"
         style={[StyleSheet.absoluteFill, radiusStyle]}
       />
       <View style={[styles.fallbackTint, radiusStyle]} pointerEvents="none" />

@@ -67,7 +67,7 @@ function AddTaskButtonGlass({ children }: { children: ReactNode }) {
       <BlurView
         intensity={60}
         tint="systemChromeMaterial"
-        experimentalBlurMethod="dimezisBlurView"
+        blurMethod="dimezisBlurView"
         style={StyleSheet.absoluteFill}
       />
       <View style={styles.fallbackTint} pointerEvents="none" />

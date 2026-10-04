@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,9 +14,16 @@ import {
   View,
 } from "react-native";
 import Svg, { Path, Rect } from "react-native-svg";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { AppSymbol } from "@/components/app-symbol";
 import { IoMdTimeIcon } from "@/components/io-md-time-icon";
+import { LiquidGlassSurface } from "@/components/liquid-glass-surface";
 import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
 import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
 import { TaskDatePickerSheet } from "@/components/task-date-picker-sheet";
@@ -24,8 +31,14 @@ import { TaskLabelPicker } from "@/components/task-label-picker";
 import { TaskListPicker } from "@/components/task-list-picker";
 import { getTaskPriorityColor } from "@/components/task-priority-flag-popup";
 import { ThemedText } from "@/components/themed-text";
+import { VoiceInputIcon } from "@/components/voice-input-icon";
+import { VoiceNoteAttachmentChip } from "@/components/voice-note-attachment-chip";
 import { useApp } from "@/contexts/app-context";
+import { useVoiceNoteRecorder } from "@/hooks/use-voice-note-recorder";
 import { fetchLabels } from "@/lib/api";
+import { persistVoiceNotesForTask } from "@/lib/persist-task-voice-notes";
+import { type PendingVoiceNote } from "@/lib/task-voice-notes";
+import { showVoiceNoteAttachmentActions } from "@/lib/voice-note-actions";
 import { formatTaskDueDate } from "@/lib/format-due-date";
 import { findInboxList } from "@/lib/inbox-list";
 import { getLabelDotColor } from "@/lib/label-colors";
@@ -37,11 +50,17 @@ type AddTaskComposerProps = {
   onClose: () => void;
 };
 
-const ICON_COLOR = "#8f8f8f";
+const ICON_COLOR = "#B0B1B1";
 const ACTIVE_ICON_COLOR = "#4873c7";
 const TOOLBAR_LABELED_ICON_SIZE = 25.5;
 const TOOLBAR_UTILITY_ICON_SIZE = 25.5;
 const PLACEHOLDER_COLOR = "#b8c4d0";
+const ADD_TASK_SHEET_SLIDE_FROM = 48;
+const ADD_TASK_ANIMATION_MS = 90;
+const ADD_TASK_ANIMATION_CONFIG = {
+  duration: ADD_TASK_ANIMATION_MS,
+  easing: Easing.out(Easing.quad),
+};
 
 export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
   const {
@@ -64,7 +83,11 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
   const [listPickerOpen, setListPickerOpen] = useState(false);
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [voiceNotes, setVoiceNotes] = useState<PendingVoiceNote[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const overlayOpacity = useSharedValue(0);
+  const sheetTranslateY = useSharedValue(ADD_TASK_SHEET_SLIDE_FROM);
+  const { isRecording, startRecording, stopRecording } = useVoiceNoteRecorder();
   const [taskNamePlaceholder, setTaskNamePlaceholder] = useState(
     nextTaskNamePlaceholder,
   );
@@ -124,6 +147,7 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
       setListPickerOpen(false);
       setPriorityMenuOpen(false);
       setMoreMenuOpen(false);
+      setVoiceNotes([]);
       setSubmitting(false);
       submittingRef.current = false;
       setAddTaskComposerHeight(0);
@@ -136,6 +160,27 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
     setListId(defaultListId);
     setTaskNamePlaceholder(nextTaskNamePlaceholder());
   }, [composerDraft, defaultListId, setAddTaskComposerHeight, visible]);
+
+  useEffect(() => {
+    if (visible) {
+      overlayOpacity.value = 0;
+      sheetTranslateY.value = ADD_TASK_SHEET_SLIDE_FROM;
+      overlayOpacity.value = withTiming(1, ADD_TASK_ANIMATION_CONFIG);
+      sheetTranslateY.value = withTiming(0, ADD_TASK_ANIMATION_CONFIG);
+      return;
+    }
+
+    overlayOpacity.value = 0;
+    sheetTranslateY.value = ADD_TASK_SHEET_SLIDE_FROM;
+  }, [overlayOpacity, sheetTranslateY, visible]);
+
+  const backdropAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.value,
+  }));
+
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetTranslateY.value }],
+  }));
 
   useEffect(() => {
     if (!refocusTitleRef.current || submitting) return;
@@ -151,16 +196,33 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
     submittingRef.current = true;
     setSubmitting(true);
     try {
-      await createTask({
+      const trimmedDescription = description.trim();
+      const taskId = await createTask({
         name: trimmed,
-        description: description.trim() || undefined,
+        description:
+          voiceNotes.length > 0
+            ? undefined
+            : trimmedDescription || undefined,
         dueDate,
         priority,
         labelIds: labelIds.length > 0 ? labelIds : undefined,
         listId: listId ?? selectedList?.id,
       });
+      if (!taskId) {
+        throw new Error("Task was not created");
+      }
+
+      if (voiceNotes.length > 0) {
+        await persistVoiceNotesForTask(
+          taskId,
+          trimmedDescription,
+          voiceNotes,
+        );
+      }
+
       setName("");
       setDescription("");
+      setVoiceNotes([]);
       submittingRef.current = false;
       setSubmitting(false);
       if (options.keepOpen) {
@@ -247,18 +309,44 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
     void openLabelPicker();
   }
 
-  function handleVoiceNote() {
-    Alert.alert(
-      "Voice note",
-      "Voice note recording is not available in the mobile app yet.",
-    );
+  const promptVoiceNoteOptions = useCallback((note: PendingVoiceNote) => {
+    showVoiceNoteAttachmentActions({
+      durationMs: note.durationMs,
+      playbackUri: note.localUri,
+      onRemove: () => {
+        setVoiceNotes((current) =>
+          current.filter((item) => item.id !== note.id),
+        );
+      },
+    });
+  }, []);
+
+  async function handleVoiceNote() {
+    setMoreMenuOpen(false);
+    if (isRecording) {
+      const recording = await stopRecording();
+      if (recording) {
+        setVoiceNotes((current) => [
+          ...current,
+          {
+            id: `${Date.now()}-${current.length}`,
+            localUri: recording.localUri,
+            durationMs: recording.durationMs,
+            mimeType: recording.mimeType,
+          },
+        ]);
+      }
+      return;
+    }
+
+    await startRecording();
   }
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="none"
       onShow={focusTitleInput}
       onRequestClose={() => {
         void submitAndClose();
@@ -271,7 +359,7 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={0}
         >
-          <View style={styles.backdrop}>
+          <Animated.View style={[styles.backdrop, backdropAnimatedStyle]}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Dismiss"
@@ -281,8 +369,8 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
               }}
             />
 
-            <View
-              style={styles.card}
+            <Animated.View
+              style={[styles.card, sheetAnimatedStyle]}
               onLayout={(event) => {
                 setAddTaskComposerHeight(event.nativeEvent.layout.height);
               }}
@@ -369,6 +457,18 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                     void submitAndContinue();
                   }}
                 />
+
+                {voiceNotes.length > 0 ? (
+                  <View style={styles.voiceNoteRow}>
+                    {voiceNotes.map((note) => (
+                      <VoiceNoteAttachmentChip
+                        key={note.id}
+                        durationMs={note.durationMs}
+                        onPress={() => promptVoiceNoteOptions(note)}
+                      />
+                    ))}
+                  </View>
+                ) : null}
 
                 {dueDateLabel || priority != null || labelIds.length > 0 ? (
                   <View style={styles.metaRow}>
@@ -557,70 +657,95 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                           />
                         </Pressable>
                         {moreMenuOpen ? (
-                          <View style={styles.moreMenu}>
-                            <Pressable
-                              style={styles.moreMenuRow}
-                              onPress={handleMoreMenuLabel}
+                          <View style={styles.moreMenuPosition}>
+                            <LiquidGlassSurface
+                              style={styles.moreMenu}
+                              borderRadius={13}
+                              isInteractive
                             >
-                              <AppSymbol
-                                ios="tag"
-                                android="local-offer"
-                                size={18}
-                                tintColor={
-                                  labelIds.length > 0
-                                    ? ACTIVE_ICON_COLOR
-                                    : ICON_COLOR
-                                }
-                              />
-                              <ThemedText style={styles.moreMenuRowText}>
-                                Label
-                              </ThemedText>
-                            </Pressable>
-                            <Pressable
-                              style={styles.moreMenuRow}
-                              onPress={handleToolbarSubtask}
-                            >
-                              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                                <Rect
-                                  x="16"
-                                  y="9"
-                                  width="4"
-                                  height="4"
-                                  rx="2"
-                                  transform="rotate(90 16 9)"
-                                  stroke={ICON_COLOR}
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.moreMenuRow,
+                                  pressed && styles.moreMenuRowPressed,
+                                ]}
+                                onPress={handleMoreMenuLabel}
+                              >
+                                <AppSymbol
+                                  ios="tag"
+                                  android="local-offer"
+                                  size={18}
+                                  tintColor={
+                                    labelIds.length > 0
+                                      ? ACTIVE_ICON_COLOR
+                                      : ICON_COLOR
+                                  }
                                 />
-                                <Rect
-                                  x="20"
-                                  y="17"
-                                  width="4"
-                                  height="4"
-                                  rx="2"
-                                  transform="rotate(90 20 17)"
-                                  stroke={ICON_COLOR}
+                                <ThemedText style={styles.moreMenuRowText}>
+                                  Label
+                                </ThemedText>
+                              </Pressable>
+                              <View style={styles.moreMenuDivider} />
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.moreMenuRow,
+                                  pressed && styles.moreMenuRowPressed,
+                                ]}
+                                onPress={handleToolbarSubtask}
+                              >
+                                <Svg
+                                  width={18}
+                                  height={18}
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                >
+                                  <Rect
+                                    x="16"
+                                    y="9"
+                                    width="4"
+                                    height="4"
+                                    rx="2"
+                                    transform="rotate(90 16 9)"
+                                    stroke={ICON_COLOR}
+                                  />
+                                  <Rect
+                                    x="20"
+                                    y="17"
+                                    width="4"
+                                    height="4"
+                                    rx="2"
+                                    transform="rotate(90 20 17)"
+                                    stroke={ICON_COLOR}
+                                  />
+                                  <Path
+                                    d="M5 4V15C5 16.8856 5 17.8284 5.58579 18.4142C6.17157 19 7.11438 19 9 19H16"
+                                    stroke={ICON_COLOR}
+                                  />
+                                  <Path
+                                    d="M5 7V7C5 8.88562 5 9.82843 5.58579 10.4142C6.17157 11 7.11438 11 9 11H12"
+                                    stroke={ICON_COLOR}
+                                  />
+                                </Svg>
+                                <ThemedText style={styles.moreMenuRowText}>
+                                  Subtasks
+                                </ThemedText>
+                              </Pressable>
+                              <View style={styles.moreMenuDivider} />
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.moreMenuRow,
+                                  pressed && styles.moreMenuRowPressed,
+                                ]}
+                                onPress={handleAttachment}
+                              >
+                                <RiAttachment2Icon
+                                  size={18}
+                                  color={ICON_COLOR}
                                 />
-                                <Path
-                                  d="M5 4V15C5 16.8856 5 17.8284 5.58579 18.4142C6.17157 19 7.11438 19 9 19H16"
-                                  stroke={ICON_COLOR}
-                                />
-                                <Path
-                                  d="M5 7V7C5 8.88562 5 9.82843 5.58579 10.4142C6.17157 11 7.11438 11 9 11H12"
-                                  stroke={ICON_COLOR}
-                                />
-                              </Svg>
-                              <ThemedText style={styles.moreMenuRowText}>
-                                subtasks
-                              </ThemedText>
-                            </Pressable>
-                            <Pressable
-                              style={styles.moreMenuRow}
-                              onPress={handleAttachment}
-                            >
-                              <RiAttachment2Icon size={18} color={ICON_COLOR} />
-                              <ThemedText style={styles.moreMenuRowText}>
-                                Attachment
-                              </ThemedText>
-                            </Pressable>
+                                <ThemedText style={styles.moreMenuRowText}>
+                                  Files
+                                </ThemedText>
+                              </Pressable>
+                            </LiquidGlassSurface>
                           </View>
                         ) : null}
                       </View>
@@ -630,19 +755,22 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                         accessibilityRole="button"
                         accessibilityLabel="Voice note"
                         hitSlop={8}
-                        onPress={handleVoiceNote}
+                        onPress={() => {
+                          void handleVoiceNote();
+                        }}
                         style={({ pressed }) => [
-                          styles.toolbarIconSlot,
                           styles.voiceButton,
                           pressed && styles.toolbarIconPressed,
                         ]}
                       >
-                        <AppSymbol
-                          ios="mic"
-                          android="mic"
-                          size={TOOLBAR_UTILITY_ICON_SIZE}
-                          tintColor={ICON_COLOR}
-                        />
+                        <View
+                          style={[
+                            styles.voiceButtonInner,
+                            isRecording && styles.voiceButtonRecording,
+                          ]}
+                        >
+                          <VoiceInputIcon size={25} color="#ffffff" />
+                        </View>
                       </Pressable>
                       <Pressable
                         accessibilityRole="button"
@@ -676,8 +804,8 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                   </View>
                 </View>
               </View>
-            </View>
-          </View>
+            </Animated.View>
+          </Animated.View>
 
           <TaskDatePickerSheet
             visible={datePickerOpen}
@@ -799,7 +927,7 @@ const styles = StyleSheet.create({
     color: "#4873c7",
     backgroundColor: "#eef4fc",
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 999,
     overflow: "hidden",
   },
@@ -894,37 +1022,56 @@ const styles = StyleSheet.create({
     position: "relative",
     zIndex: 20,
   },
-  moreMenu: {
+  moreMenuPosition: {
     position: "absolute",
     left: 0,
     bottom: 30,
+  },
+  moreMenu: {
     minWidth: 168,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#e5e7eb",
-    borderRadius: 10,
-    backgroundColor: "#ffffff",
     overflow: "hidden",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 8,
   },
   moreMenuRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#f3f4f6",
+    minHeight: 46,
+    paddingHorizontal: 16,
+    justifyContent: "flex-start",
+  },
+  moreMenuRowPressed: {
+    backgroundColor: "rgba(244, 244, 245, 0.45)",
+  },
+  moreMenuDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(229, 231, 235, 0.85)",
+    marginHorizontal: 12,
   },
   moreMenuRowText: {
-    fontSize: 14,
-    color: "#374151",
+    fontSize: 16,
+    color: "#70737E",
   },
   voiceButton: {
     marginRight: 15,
+    marginTop: -9,
+  },
+  voiceButtonInner: {
+    height: 43,
+    width: 43,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    backgroundColor: "#8fbff0",
+  },
+  voiceButtonRecording: {
+    backgroundColor: "#ef4444",
+  },
+  voiceNoteRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+    marginBottom: 2,
   },
   toolbarTrailing: {
     flexDirection: "row",

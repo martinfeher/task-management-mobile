@@ -41,16 +41,19 @@ export function plainTextToDetailsHtml(text: string, previousHtml = "") {
   const images = [...previousHtml.matchAll(/<img\b[^>]*>/gi)].map(
     (match) => match[0],
   );
+  const audioWrappers = [
+    ...previousHtml.matchAll(
+      /<div class="detail-audio-wrapper"[\s\S]*?<\/div>/gi,
+    ),
+  ].map((match) => match[0]);
 
-  if (images.length === 0) {
+  const attachmentHtml = [...images.map((img) => `<div class="detail-image-wrapper">${img}</div>`), ...audioWrappers].join("");
+
+  if (attachmentHtml.length === 0) {
     return textHtml;
   }
 
-  const imageHtml = images
-    .map((img) => `<div class="detail-image-wrapper">${img}</div>`)
-    .join("");
-
-  return textHtml ? `${textHtml}${imageHtml}` : imageHtml;
+  return textHtml ? `${textHtml}${attachmentHtml}` : attachmentHtml;
 }
 
 /** @deprecated Use plainTextToDetailsHtml — kept for callers mid-migration. */

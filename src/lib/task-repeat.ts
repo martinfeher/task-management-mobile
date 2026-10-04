@@ -63,6 +63,16 @@ function addTaskToDateMap(
   map.set(dateKey, existing);
 }
 
+/** Ascending by due time; tasks without a time sort after timed tasks. */
+export function compareTasksByDueTime(left: TaskItem, right: TaskItem) {
+  const leftTime = left.dueTimeMinutes ?? Number.MAX_SAFE_INTEGER;
+  const rightTime = right.dueTimeMinutes ?? Number.MAX_SAFE_INTEGER;
+  if (leftTime !== rightTime) {
+    return leftTime - rightTime;
+  }
+  return left.id.localeCompare(right.id);
+}
+
 export function buildTaskOccurrence(
   task: TaskItem,
   day: Date,
@@ -124,6 +134,10 @@ export function buildTasksByDate(
       }
       cursor = addDays(cursor, 1);
     }
+  }
+
+  for (const dayTasks of map.values()) {
+    dayTasks.sort(compareTasksByDueTime);
   }
 
   return map;

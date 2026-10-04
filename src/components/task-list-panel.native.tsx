@@ -42,7 +42,7 @@ import {
   TaskSectionTitle,
   TASK_LIST_CONTEXT_MENU_DELAY_MS,
   TASK_LIST_DRAG_DELAY_MS,
-  useToggleComplete,
+  useTaskCompleteUndo,
   type TaskListPanelProps,
 } from "@/components/task-list-panel-shared";
 import { ListsDrawerShell } from "@/components/lists-drawer-shell";
@@ -116,10 +116,12 @@ export function TaskListPanel({
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView | null>(null);
   const showListName = selectedView?.type !== "list";
-  const handleToggleComplete = useToggleComplete(
-    onTaskCompleted,
-    onTaskUncompleted,
-  );
+  const {
+    handleToggleComplete,
+    completeUndoVisible,
+    handleUndoComplete,
+    dismissCompleteUndo,
+  } = useTaskCompleteUndo(onTaskCompleted, onTaskUncompleted);
   const pinned = taskData?.pinned ?? [];
   const tasks = taskData?.tasks ?? [];
   const pinnedBlocksFromData = useMemo(
@@ -157,6 +159,10 @@ export function TaskListPanel({
   useEffect(() => {
     setContentFilter("all");
   }, [selectedView]);
+
+  useEffect(() => {
+    dismissCompleteUndo();
+  }, [dismissCompleteUndo, selectedView]);
   const { subtaskCountByParentId, isSubtasksExpanded, toggleSubtasksExpanded } =
     useTaskListSubtasksExpanded(allListTasks);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -557,6 +563,8 @@ export function TaskListPanel({
           title={getPanelTitle(selectedView, taskData)}
           selectedView={selectedView}
           onOpenLists={openListsDrawer}
+          completeUndoVisible={completeUndoVisible}
+          onCompleteUndo={handleUndoComplete}
         >
         {blockingState ?? (
           <NestableScrollContainer

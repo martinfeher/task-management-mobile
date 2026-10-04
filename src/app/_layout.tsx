@@ -1,12 +1,16 @@
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { HeroUINativeProvider } from "heroui-native";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import { Inspector, InspectorDevMenu } from "react-native-dev-inspector";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-import { AddTaskComposer } from "@/components/add-task-composer";
+const AddTaskComposer = lazy(() =>
+  import("@/components/add-task-composer").then((module) => ({
+    default: module.AddTaskComposer,
+  })),
+);
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import { ListsDrawerOverlay } from "@/components/lists-drawer-overlay";
 import { LastTabTracker } from "@/components/main-tabs-config";
@@ -25,11 +29,14 @@ export const unstable_settings = {
 
 function AddTaskComposerHost() {
   const { addTaskComposerOpen, closeAddTaskComposer } = useApp();
+  if (!addTaskComposerOpen) {
+    return null;
+  }
+
   return (
-    <AddTaskComposer
-      visible={addTaskComposerOpen}
-      onClose={closeAddTaskComposer}
-    />
+    <Suspense fallback={null}>
+      <AddTaskComposer visible onClose={closeAddTaskComposer} />
+    </Suspense>
   );
 }
 

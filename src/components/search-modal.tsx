@@ -20,7 +20,10 @@ import Animated, {
     useSharedValue,
     withTiming,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 import { AppSymbol } from "@/components/app-symbol";
 import { ThemedText } from "@/components/themed-text";
@@ -248,7 +251,13 @@ function SearchResultPreview({ task }: { task: IndexedSearchTask }) {
   );
 }
 
-export function SearchModal() {
+type SearchModalProps = {
+  /** Embedded in the Search tab (tab bar stays visible). Default is full-screen modal. */
+  variant?: "modal" | "embedded";
+};
+
+export function SearchModal({ variant = "modal" }: SearchModalProps) {
+  const isEmbedded = variant === "embedded";
   const { completeTask, uncompleteTask, lastTabHref, suppressNextSearchOpen } =
     useApp();
   const navigation = useNavigation();
@@ -296,6 +305,7 @@ export function SearchModal() {
   }
 
   useEffect(() => {
+    if (isEmbedded) return;
     const unsubscribe = navigation.addListener("beforeRemove", () => {
       void saveLastSearchQuery(queryRef.current).catch(() => {});
       // Opening a task replaces this screen — do not navigate to Lists/Tasks.
@@ -305,7 +315,7 @@ export function SearchModal() {
       }, 0);
     });
     return unsubscribe;
-  }, [navigation]);
+  }, [isEmbedded, navigation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -385,11 +395,18 @@ export function SearchModal() {
   const sheetHeight = useSharedValue(compactSheetHeight);
 
   useEffect(() => {
+    if (isEmbedded) return;
     sheetHeight.value = withTiming(
       hasResults ? expandedSheetHeight : compactSheetHeight,
       { duration: SHEET_HEIGHT_ANIMATION_MS },
     );
-  }, [compactSheetHeight, expandedSheetHeight, hasResults, sheetHeight]);
+  }, [
+    compactSheetHeight,
+    expandedSheetHeight,
+    hasResults,
+    isEmbedded,
+    sheetHeight,
+  ]);
 
   const sheetAnimatedStyle = useAnimatedStyle(() => ({
     height: sheetHeight.value,
@@ -438,56 +455,56 @@ export function SearchModal() {
     );
   }
 
-  return (
-    <View style={styles.overlay}>
-      <Pressable
-        style={styles.backdrop}
-        onPress={handleClose}
-        accessibilityRole="button"
-        accessibilityLabel="Close search"
-      />
-      <Animated.View style={[styles.sheet, sheetAnimatedStyle]}>
-        <KeyboardAvoidingView
-          style={styles.root}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <View style={styles.handleRow}>
-            <View style={styles.handle} />
-          </View>
+  const previewPanelPaddingBottom = isEmbedded
+    ? Spacing.three
+    : Math.max(insets.bottom, Spacing.three);
 
-          <View style={styles.header}>
-            <View style={styles.searchBar}>
-              <AppSymbol
-                ios="magnifyingglass"
-                android="search"
-                size={20}
-                tintColor="#a1a1aa"
-              />
-              <TextInput
-                ref={inputRef}
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Search tasks and notes"
-                placeholderTextColor="#a1a1aa"
-                autoCorrect={false}
-                autoCapitalize="none"
-                returnKeyType="search"
-                clearButtonMode="while-editing"
-                style={styles.input}
-              />
-              {loadingTasks ? (
-                <ActivityIndicator size="small" color="#a1a1aa" />
-              ) : null}
-            </View>
-            <Pressable
-              onPress={handleClose}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel="Close search"
-            >
-              <ThemedText style={styles.cancel}>Cancel</ThemedText>
-            </Pressable>
-          </View>
+  const searchContent = (
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      {!isEmbedded ? (
+        <View style={styles.handleRow}>
+          <View style={styles.handle} />
+        </View>
+      ) : null}
+
+      <View style={styles.header}>
+        <View style={styles.searchBar}>
+          <AppSymbol
+            ios="magnifyingglass"
+            android="search"
+            size={20}
+            tintColor="#a1a1aa"
+          />
+          <TextInput
+            ref={inputRef}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search tasks and notes"
+            placeholderTextColor="#a1a1aa"
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+            style={styles.input}
+          />
+          {loadingTasks ? (
+            <ActivityIndicator size="small" color="#a1a1aa" />
+          ) : null}
+        </View>
+        {!isEmbedded ? (
+          <Pressable
+            onPress={handleClose}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Close search"
+          >
+            <ThemedText style={styles.cancel}>Cancel</ThemedText>
+          </Pressable>
+        ) : null}
+      </View>
 
           <View style={styles.scopeRow}>
             {SEARCH_SCOPE_TABS.map((tab) => {
@@ -624,7 +641,7 @@ export function SearchModal() {
                 <View
                   style={[
                     styles.previewPanel,
-                    { paddingBottom: Math.max(insets.bottom, Spacing.three) },
+                    { paddingBottom: previewPanelPaddingBottom },
                   ]}
                 >
                   {activeTask ? (
@@ -710,13 +727,37 @@ export function SearchModal() {
               </>
             )}
           </View>
-        </KeyboardAvoidingView>
+    </KeyboardAvoidingView>
+  );
+
+  if (isEmbedded) {
+    return (
+      <SafeAreaView style={styles.embeddedRoot} edges={["top", "left", "right"]}>
+        {searchContent}
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <View style={styles.overlay}>
+      <Pressable
+        style={styles.backdrop}
+        onPress={handleClose}
+        accessibilityRole="button"
+        accessibilityLabel="Close search"
+      />
+      <Animated.View style={[styles.sheet, sheetAnimatedStyle]}>
+        {searchContent}
       </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  embeddedRoot: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
   overlay: {
     flex: 1,
     justifyContent: "flex-end",

@@ -74,7 +74,7 @@ export function TaskContextMenu({
       <BlurView
         intensity={Platform.OS === "ios" ? 28 : 48}
         tint="dark"
-        experimentalBlurMethod="dimezisBlurView"
+        blurMethod="dimezisBlurView"
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
