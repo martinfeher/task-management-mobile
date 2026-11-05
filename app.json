@@ -10,7 +10,10 @@
     "ios": {
       "supportsTablet": true,
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.martinfeher.todolist"
+      "bundleIdentifier": "com.martinfeher.todolist",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -20,7 +23,13 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.martinfeher.todolist"
+      "package": "com.martinfeher.todolist",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -48,7 +57,10 @@
       ],
       "expo-image",
       "expo-web-browser",
-      "expo-audio"
+      "expo-audio",
+      "expo-asset",
+      "expo-font",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -57,7 +69,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "aa22b68f-b189-4f27-a3f8-2d664363a0a6"
+        "projectId": "1d0538a7-dccb-4265-b83a-4fdb4e6464e4"
       }
     },
     "owner": "martinfehers-team"

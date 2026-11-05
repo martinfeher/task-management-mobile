@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   ActivityIndicator,
   Alert,
-  InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -36,6 +35,7 @@ import { VoiceNoteAttachmentChip } from "@/components/voice-note-attachment-chip
 import { useApp } from "@/contexts/app-context";
 import { useVoiceNoteRecorder } from "@/hooks/use-voice-note-recorder";
 import { fetchLabels } from "@/lib/api";
+import { runAfterInteractions } from "@/lib/run-after-interactions";
 import { persistVoiceNotesForTask } from "@/lib/persist-task-voice-notes";
 import { type PendingVoiceNote } from "@/lib/task-voice-notes";
 import { showVoiceNoteAttachmentActions } from "@/lib/voice-note-actions";
@@ -123,7 +123,7 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
   }, [allLabels, labelIds, sidebarData?.labels]);
 
   function focusTitleInput() {
-    InteractionManager.runAfterInteractions(() => {
+    runAfterInteractions(() => {
       inputRef.current?.focus();
     });
     setTimeout(

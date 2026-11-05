@@ -1,7 +1,7 @@
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { HeroUINativeProvider } from "heroui-native";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Inspector, InspectorDevMenu } from "react-native-dev-inspector";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -23,6 +23,8 @@ import { ensureNotificationPermissions } from "@/lib/notifications";
 
 SplashScreen.preventAutoHideAsync();
 
+const FONT_LOAD_TIMEOUT_MS = 4000;
+
 export const unstable_settings = {
   anchor: "(tabs)",
 };
@@ -42,12 +44,27 @@ function AddTaskComposerHost() {
 
 export default function RootLayout() {
   const fontsLoaded = useDetailFonts();
+  const [canRenderApp, setCanRenderApp] = useState(false);
 
   useEffect(() => {
     void ensureNotificationPermissions();
   }, []);
 
-  if (!fontsLoaded) {
+  useEffect(() => {
+    if (fontsLoaded) {
+      setCanRenderApp(true);
+    }
+  }, [fontsLoaded]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setCanRenderApp(true);
+      void SplashScreen.hideAsync();
+    }, FONT_LOAD_TIMEOUT_MS);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  if (!canRenderApp) {
     return null;
   }
 

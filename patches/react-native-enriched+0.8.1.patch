@@ -1,0 +1,128 @@
+diff --git a/node_modules/react-native-enriched/ios/EnrichedTextInputView.mm b/node_modules/react-native-enriched/ios/EnrichedTextInputView.mm
+index 19e819f..50a8518 100644
+--- a/node_modules/react-native-enriched/ios/EnrichedTextInputView.mm
++++ b/node_modules/react-native-enriched/ios/EnrichedTextInputView.mm
+@@ -15,7 +15,6 @@
+ #import "StyleUtils.h"
+ #import "TextBlockTapGestureRecognizer.h"
+ #import "TextInsertionUtils.h"
+-#import "UIView+React.h"
+ #import "WordsUtils.h"
+ #import "ZeroWidthSpaceUtils.h"
+ #import <React/RCTConversions.h>
+@@ -823,8 +822,8 @@ Class<RCTComponentViewProtocol> EnrichedTextInputViewCls(void) {
+     // don't want to emit these events
+     if ([textView isFirstResponder]) {
+       _emitFocusBlur = NO;
+-      [textView reactBlur];
+-      [textView reactFocus];
++      [textView resignFirstResponder];
++      [textView becomeFirstResponder];
+       _emitFocusBlur = YES;
+     }
+   }
+@@ -861,7 +860,7 @@ Class<RCTComponentViewProtocol> EnrichedTextInputViewCls(void) {
+ 
+   // autofocus - needs to be done at the very end
+   if (isFirstMount && newViewProps.autoFocus) {
+-    [textView reactFocus];
++    [textView becomeFirstResponder];
+   }
+ }
+ 
+@@ -1310,11 +1309,11 @@ Class<RCTComponentViewProtocol> EnrichedTextInputViewCls(void) {
+ }
+ 
+ - (void)blur {
+-  [textView reactBlur];
++  [textView resignFirstResponder];
+ }
+ 
+ - (void)focus {
+-  [textView reactFocus];
++  [textView becomeFirstResponder];
+ }
+ 
+ - (void)setValue:(NSString *)value {
+diff --git a/node_modules/react-native-enriched/ios/styles/LinkStyle.mm b/node_modules/react-native-enriched/ios/styles/LinkStyle.mm
+index ef600c6..4382fe3 100644
+--- a/node_modules/react-native-enriched/ios/styles/LinkStyle.mm
++++ b/node_modules/react-native-enriched/ios/styles/LinkStyle.mm
+@@ -4,7 +4,6 @@
+ #import "OccurenceUtils.h"
+ #import "StyleHeaders.h"
+ #import "TextInsertionUtils.h"
+-#import "UIView+React.h"
+ #import "WordsUtils.h"
+ 
+ static NSString *const ManualLinkAttributeName = @"EnrichedManualLink";
+@@ -185,7 +184,7 @@ static NSString *const AutomaticLinkAttributeName = @"EnrichedAutomaticLink";
+     // manually set it behind the link ONLY with manual links, automatic ones
+     // don't need the selection fix
+     if (linkData.isManual && withSelection) {
+-      [self.host.textView reactFocus];
++      [self.host.textView becomeFirstResponder];
+       self.host.textView.selectedRange =
+           NSMakeRange(range.location + linkData.text.length, 0);
+     }
+diff --git a/node_modules/react-native-enriched/ios/styles/MentionStyle.mm b/node_modules/react-native-enriched/ios/styles/MentionStyle.mm
+index feec78c..6e4e248 100644
+--- a/node_modules/react-native-enriched/ios/styles/MentionStyle.mm
++++ b/node_modules/react-native-enriched/ios/styles/MentionStyle.mm
+@@ -3,7 +3,6 @@
+ #import "EnrichedTextInputView.h"
+ #import "StyleHeaders.h"
+ #import "TextInsertionUtils.h"
+-#import "UIView+React.h"
+ #import "WordsUtils.h"
+ 
+ // custom NSAttributedStringKey to differentiate from links
+@@ -230,7 +229,7 @@ static NSString *const MentionAttributeName = @"EnrichedMention";
+                       withSelection:NO];
+   }
+ 
+-  [self.host.textView reactFocus];
++  [self.host.textView becomeFirstResponder];
+   self.host.textView.selectedRange = newSelect;
+ }
+ 
+diff --git a/node_modules/react-native-enriched/ios/utils/TextInsertionUtils.mm b/node_modules/react-native-enriched/ios/utils/TextInsertionUtils.mm
+index a6911cd..58e4dec 100644
+--- a/node_modules/react-native-enriched/ios/utils/TextInsertionUtils.mm
++++ b/node_modules/react-native-enriched/ios/utils/TextInsertionUtils.mm
+@@ -1,5 +1,4 @@
+ #import "TextInsertionUtils.h"
+-#import "UIView+React.h"
+ 
+ @implementation TextInsertionUtils
+ + (void)insertText:(NSString *)text
+@@ -26,7 +25,7 @@
+ 
+   if (withSelection) {
+     if (![textView isFirstResponder]) {
+-      [textView reactFocus];
++      [textView becomeFirstResponder];
+     }
+     textView.selectedRange = NSMakeRange(index + text.length, 0);
+   }
+@@ -52,7 +51,7 @@
+ 
+   if (withSelection) {
+     if (![textView isFirstResponder]) {
+-      [textView reactFocus];
++      [textView becomeFirstResponder];
+     }
+     textView.selectedRange = NSMakeRange(range.location + text.length, 0);
+   }
+diff --git a/node_modules/react-native-enriched/ios/utils/ZeroWidthSpaceUtils.mm b/node_modules/react-native-enriched/ios/utils/ZeroWidthSpaceUtils.mm
+index 4bc2e25..f91eb37 100644
+--- a/node_modules/react-native-enriched/ios/utils/ZeroWidthSpaceUtils.mm
++++ b/node_modules/react-native-enriched/ios/utils/ZeroWidthSpaceUtils.mm
+@@ -2,7 +2,6 @@
+ #import "EnrichedTextInputView.h"
+ #import "StyleHeaders.h"
+ #import "TextInsertionUtils.h"
+-#import "UIView+React.h"
+ 
+ @implementation ZeroWidthSpaceUtils
+ + (void)handleZeroWidthSpacesInHost:(id<EnrichedViewHost>)host {

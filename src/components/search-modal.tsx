@@ -4,7 +4,6 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
-    InteractionManager,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -35,6 +34,7 @@ import {
     saveLastSearchQuery,
 } from "@/lib/api";
 import { parseTaskDetails } from "@/lib/parse-task-details";
+import { runAfterInteractions } from "@/lib/run-after-interactions";
 import type { SearchTask } from "@/types/todo";
 
 type SearchScope = "all" | "names" | "content";
@@ -281,7 +281,7 @@ export function SearchModal({ variant = "modal" }: SearchModalProps) {
   lastTabHrefRef.current = lastTabHref;
 
   function focusSearchInput() {
-    InteractionManager.runAfterInteractions(() => {
+    runAfterInteractions(() => {
       inputRef.current?.focus();
     });
     setTimeout(() => inputRef.current?.focus(), Platform.OS === "ios" ? 80 : 0);
