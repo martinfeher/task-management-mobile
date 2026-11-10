@@ -3,4 +3,5 @@
  * (see dev-default-user.ts / EXPO_PUBLIC_DEV_DEFAULT_USER_EMAIL).
  * Used when APPLICATION_ENV=development and __DEV__ is true.
  */
+/** Copy from your gitignored `dev-auto-sign-in.local.ts` (not committed). */
 export const LOCAL_DEV_SIGN_IN_PASSWORD = "";

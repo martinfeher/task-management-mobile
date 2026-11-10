@@ -34,6 +34,7 @@ type AuthContextValue = {
   devAutoSignInIssue: DevAutoSignInIssue;
   user: AuthUser | null;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signUp: (input: {
     email: string;
     password: string;
@@ -164,8 +165,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const signInWithGoogle = useCallback(async () => {
+    const { signInWithGoogle: completeGoogleSignIn } = await import(
+      "@/lib/auth-google-sign-in"
+    );
+    const signedInUser = await completeGoogleSignIn();
+    clearAppDataCaches();
+    setDevAutoSignInIssue(null);
+    setUser(signedInUser);
+    setStatus("signed-in");
+  }, []);
+
   const signOut = useCallback(async () => {
     await signOutOnServer();
+    const { signOutGoogleSession } = await import("@/lib/auth-google-sign-in");
+    await signOutGoogleSession();
     handleSignedOut();
   }, [handleSignedOut]);
 
@@ -175,10 +189,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       devAutoSignInIssue,
       user,
       signIn,
+      signInWithGoogle,
       signUp,
       signOut,
     }),
-    [devAutoSignInIssue, signIn, signOut, signUp, status, user],
+    [devAutoSignInIssue, signIn, signInWithGoogle, signOut, signUp, status, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

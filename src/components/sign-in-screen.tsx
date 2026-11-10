@@ -12,16 +12,18 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { API_BASE_URL } from "@/constants/api";
 import { useAuth } from "@/contexts/auth-context";
 import { getDefaultDevelopmentUserEmail } from "@/lib/dev-default-user";
+import { isDevGoogleSignInEnabled } from "@/lib/dev-google-sign-in";
 import {
   getDevAutoSignInCredentials,
   isDevAutoSignInEnabled,
 } from "@/lib/dev-auto-sign-in";
 
 export function SignInScreen() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signInWithGoogle, signUp } = useAuth();
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const devCredentials = isDevAutoSignInEnabled()
     ? getDevAutoSignInCredentials()
@@ -32,7 +34,9 @@ export function SignInScreen() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const showGoogle = isDevGoogleSignInEnabled();
 
   async function handleSubmit() {
     setError(null);
@@ -125,10 +129,30 @@ export function SignInScreen() {
               </Text>
             ) : null}
 
+            {showGoogle ? (
+              <GoogleSignInButton
+                busy={googleBusy}
+                disabled={busy}
+                onPress={() => {
+                  setError(null);
+                  setGoogleBusy(true);
+                  void signInWithGoogle()
+                    .catch((submitError) => {
+                      const message =
+                        submitError instanceof Error
+                          ? submitError.message
+                          : "Could not sign in with Google";
+                      setError(message);
+                    })
+                    .finally(() => setGoogleBusy(false));
+                }}
+              />
+            ) : null}
+
             <Pressable
               accessibilityRole="button"
               className="items-center rounded-xl bg-[#4873c7] px-4 py-3.5 active:opacity-85"
-              disabled={busy || !email.trim() || !password}
+              disabled={busy || googleBusy || !email.trim() || !password}
               onPress={() => void handleSubmit()}
             >
               {busy ? (
