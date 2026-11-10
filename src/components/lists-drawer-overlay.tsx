@@ -7,12 +7,20 @@ import { ListsDrawerShell } from "@/components/lists-drawer-shell";
 import { useApp } from "@/contexts/app-context";
 import { TAB_BAR_HEIGHT } from "@/constants/tab-bar";
 
+function normalizeTabPathname(pathname: string) {
+  const withoutGroup = pathname.replace(/\/\(tabs\)/g, "");
+  const trimmed = withoutGroup.replace(/\/$/, "");
+  return trimmed.length === 0 ? "/" : trimmed;
+}
+
 function isTasksPathname(pathname: string) {
-  return pathname === "/tasks" || pathname.endsWith("/tasks");
+  const normalized = normalizeTabPathname(pathname);
+  return normalized === "/tasks" || normalized.endsWith("/tasks");
 }
 
 function isListsTabPathname(pathname: string) {
-  return pathname === "/" || pathname === "/index";
+  const normalized = normalizeTabPathname(pathname);
+  return normalized === "/" || normalized === "/index";
 }
 
 export function ListsDrawerOverlay() {

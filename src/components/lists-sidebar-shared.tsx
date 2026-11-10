@@ -155,7 +155,9 @@ export function ListsSidebarShell({
                 {error}
               </Text>
               <Text className="text-center text-[13px] text-zinc-500">
-                Make sure the web app is running at {API_BASE_URL}
+                {error.includes("(401)")
+                  ? "Your session expired. Sign in again from the app launch screen."
+                  : `Make sure the API is running at ${API_BASE_URL}`}
               </Text>
               <Pressable
                 className="mt-2 rounded-lg bg-lists-accent px-4 py-2 active:opacity-85"

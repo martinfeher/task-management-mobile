@@ -52,3 +52,6 @@ example
 .claude/*
 
 .env
+
+# Local dev auto sign-in password (see dev-auto-sign-in.local.example.ts)
+src/lib/dev-auto-sign-in.local.ts

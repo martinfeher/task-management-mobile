@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/constants/api";
+import { apiFetch } from "@/lib/api-fetch";
 import { clearAllTaskSessions } from "@/lib/app-data-session";
 import { clearDedupeCache, dedupeRequest } from "@/lib/request-dedupe";
 import { normalizeTaskRepeat } from "@/lib/task-repeat";
@@ -45,7 +46,7 @@ export async function fetchSidebarData(options?: {
   return dedupeRequest(
     "sidebar:lists",
     async () => {
-      const response = await fetch(`${API_BASE_URL}/api/lists`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/lists`, {
         headers: {
           Accept: "application/json",
         },
@@ -84,7 +85,7 @@ export async function fetchTasks(
   return dedupeRequest(
     getTasksCacheKey(view),
     async () => {
-      const response = await fetch(getTasksUrl(view), {
+      const response = await apiFetch(getTasksUrl(view), {
         headers: {
           Accept: "application/json",
         },
@@ -101,7 +102,7 @@ export async function fetchTasks(
 }
 
 export async function fetchSearchTasks(): Promise<SearchTask[]> {
-  const response = await fetch(`${API_BASE_URL}/api/search`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/search`, {
     headers: { Accept: "application/json" },
   });
 
@@ -114,7 +115,7 @@ export async function fetchSearchTasks(): Promise<SearchTask[]> {
 }
 
 export async function fetchLastSearchQuery(): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/api/search-settings`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/search-settings`, {
     headers: { Accept: "application/json" },
   });
 
@@ -127,7 +128,7 @@ export async function fetchLastSearchQuery(): Promise<string> {
 }
 
 export async function saveLastSearchQuery(query: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/search-settings`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/search-settings`, {
     method: "PUT",
     headers: {
       Accept: "application/json",
@@ -150,7 +151,7 @@ export async function createTask(input: {
   labelIds?: string[];
   parentId?: string | null;
 }): Promise<TaskItem> {
-  const response = await fetch(`${API_BASE_URL}/api/tasks`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -177,7 +178,7 @@ export async function createTask(input: {
 }
 
 export async function toggleTaskCompleted(taskId: string, completed: boolean) {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -194,7 +195,7 @@ export async function toggleTaskCompleted(taskId: string, completed: boolean) {
 }
 
 export async function fetchTaskDetail(taskId: string): Promise<TaskDetail> {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
     headers: { Accept: "application/json" },
   });
 
@@ -210,7 +211,7 @@ export async function fetchTaskDetail(taskId: string): Promise<TaskDetail> {
 }
 
 export async function fetchLabels(): Promise<TaskLabel[]> {
-  const response = await fetch(`${API_BASE_URL}/api/labels`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/labels`, {
     headers: { Accept: "application/json" },
   });
 
@@ -223,7 +224,7 @@ export async function fetchLabels(): Promise<TaskLabel[]> {
 }
 
 export async function toggleTaskImportant(taskId: string, important: boolean) {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -238,7 +239,7 @@ export async function toggleTaskImportant(taskId: string, important: boolean) {
 }
 
 export async function updateTaskPinned(taskId: string, pinned: boolean) {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -256,7 +257,7 @@ export async function updateTaskPriority(
   taskId: string,
   priority: number | null,
 ) {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -274,7 +275,7 @@ export async function updateTaskCalendarColor(
   taskId: string,
   calendarColor: string,
 ) {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -297,7 +298,7 @@ export async function toggleTaskLabel(
   labelId: string,
   assigned: boolean,
 ): Promise<TaskLabel[]> {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/labels`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}/labels`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -318,7 +319,7 @@ export async function moveTaskToList(
   taskId: string,
   listId: string,
 ): Promise<{ listId: string; listName: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -335,7 +336,7 @@ export async function moveTaskToList(
 }
 
 export async function updateTaskName(taskId: string, name: string) {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -356,7 +357,7 @@ export async function uploadTaskVoiceNote(
   const formData = new FormData();
   formData.append("file", file as unknown as Blob);
 
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/audio`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}/audio`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -372,7 +373,7 @@ export async function uploadTaskVoiceNote(
 }
 
 export async function updateTaskDetails(taskId: string, details: string) {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/details`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}/details`, {
     method: "PUT",
     headers: {
       Accept: "application/json",
@@ -391,7 +392,7 @@ export async function reorderTasks(input: {
   section: "pinned" | "tasks";
   taskIds: string[];
 }) {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/reorder`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/reorder`, {
     method: "PUT",
     headers: {
       Accept: "application/json",
@@ -408,7 +409,7 @@ export async function reorderTasks(input: {
 }
 
 export async function deleteTask(taskId: string) {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
     method: "DELETE",
     headers: { Accept: "application/json" },
   });
@@ -436,7 +437,7 @@ export async function updateTaskSchedule(
     dueRepeat?: string | null;
   },
 ) {
-  const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -460,7 +461,7 @@ export async function updateTaskSchedule(
 }
 
 export async function createSubtask(parentId: string, name: string) {
-  const response = await fetch(`${API_BASE_URL}/api/tasks`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/tasks`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -479,7 +480,7 @@ export async function createSubtask(parentId: string, name: string) {
 }
 
 export async function renameFolder(folderId: string, name: string) {
-  const response = await fetch(`${API_BASE_URL}/api/folders/${folderId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/folders/${folderId}`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -496,7 +497,7 @@ export async function renameFolder(folderId: string, name: string) {
 }
 
 export async function deleteFolder(folderId: string) {
-  const response = await fetch(`${API_BASE_URL}/api/folders/${folderId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/folders/${folderId}`, {
     method: "DELETE",
     headers: { Accept: "application/json" },
   });
@@ -507,7 +508,7 @@ export async function deleteFolder(folderId: string) {
 }
 
 export async function createFolder(name: string) {
-  const response = await fetch(`${API_BASE_URL}/api/folders`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/folders`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -524,7 +525,7 @@ export async function createFolder(name: string) {
 }
 
 export async function createList(name: string) {
-  const response = await fetch(`${API_BASE_URL}/api/lists`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/lists`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -541,7 +542,7 @@ export async function createList(name: string) {
 }
 
 export async function renameList(listId: string, name: string) {
-  const response = await fetch(`${API_BASE_URL}/api/lists/${listId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/lists/${listId}`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -558,7 +559,7 @@ export async function renameList(listId: string, name: string) {
 }
 
 export async function deleteList(listId: string) {
-  const response = await fetch(`${API_BASE_URL}/api/lists/${listId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/lists/${listId}`, {
     method: "DELETE",
     headers: { Accept: "application/json" },
   });
@@ -569,7 +570,7 @@ export async function deleteList(listId: string) {
 }
 
 export async function reorderLists(listIds: string[]) {
-  const response = await fetch(`${API_BASE_URL}/api/lists/reorder`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/lists/reorder`, {
     method: "PUT",
     headers: {
       Accept: "application/json",
@@ -587,7 +588,7 @@ export async function reorderSidebarTopLevel(input: {
   listPositions: Array<{ id: string; position: number }>;
   folderPositions: Array<{ id: string; position: number }>;
 }) {
-  const response = await fetch(`${API_BASE_URL}/api/lists/reorder`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/lists/reorder`, {
     method: "PUT",
     headers: {
       Accept: "application/json",
@@ -602,7 +603,7 @@ export async function reorderSidebarTopLevel(input: {
 }
 
 export async function createLabel(label: string) {
-  const response = await fetch(`${API_BASE_URL}/api/labels`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/labels`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -619,7 +620,7 @@ export async function createLabel(label: string) {
 }
 
 export async function renameLabelApi(labelId: string, label: string) {
-  const response = await fetch(`${API_BASE_URL}/api/labels/${labelId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/labels/${labelId}`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",
@@ -636,7 +637,7 @@ export async function renameLabelApi(labelId: string, label: string) {
 }
 
 export async function deleteLabelApi(labelId: string) {
-  const response = await fetch(`${API_BASE_URL}/api/labels/${labelId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/labels/${labelId}`, {
     method: "DELETE",
     headers: { Accept: "application/json" },
   });
@@ -647,7 +648,7 @@ export async function deleteLabelApi(labelId: string) {
 }
 
 export async function updateLabelColorApi(labelId: string, color: string) {
-  const response = await fetch(`${API_BASE_URL}/api/labels/${labelId}`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/labels/${labelId}`, {
     method: "PATCH",
     headers: {
       Accept: "application/json",

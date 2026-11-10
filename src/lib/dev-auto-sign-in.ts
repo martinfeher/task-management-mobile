@@ -1,0 +1,52 @@
+const DEV_AUTO_SIGN_IN_EMAIL = "test@test.io";
+
+/** Local-only override; add `dev-auto-sign-in.local.ts` (gitignored) with your password. */
+let localDevPassword: string | undefined;
+if (__DEV__) {
+  try {
+    localDevPassword = require("./dev-auto-sign-in.local").LOCAL_DEV_SIGN_IN_PASSWORD as
+      | string
+      | undefined;
+  } catch {
+    // Optional local credentials file.
+  }
+}
+
+export type DevAutoSignInCredentials = {
+  email: string;
+  password: string;
+};
+
+export function isDevAutoSignInEnabled(): boolean {
+  if (!__DEV__) {
+    return false;
+  }
+  return process.env.EXPO_PUBLIC_DEV_AUTO_SIGN_IN !== "false";
+}
+
+function resolveDevPassword(): string | null {
+  const fromEnv = process.env.EXPO_PUBLIC_DEV_SIGN_IN_PASSWORD?.trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+  const fromLocal =
+    typeof localDevPassword === "string" ? localDevPassword.trim() : "";
+  return fromLocal.length > 0 ? fromLocal : null;
+}
+
+/** Dev-only credentials (never in production builds). */
+export function getDevAutoSignInCredentials(): DevAutoSignInCredentials | null {
+  if (!isDevAutoSignInEnabled()) {
+    return null;
+  }
+
+  const password = resolveDevPassword();
+  if (!password) {
+    return null;
+  }
+
+  const email =
+    process.env.EXPO_PUBLIC_DEV_SIGN_IN_EMAIL?.trim() || DEV_AUTO_SIGN_IN_EMAIL;
+
+  return { email, password };
+}

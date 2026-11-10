@@ -1,12 +1,17 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback } from "react";
-import { View } from "react-native";
+import { useCallback, useEffect } from "react";
+import { StyleSheet, View } from "react-native";
 
 import { useApp } from "@/contexts/app-context";
 
 /** Lists tab opens the drawer and stays selected. */
 export default function ListsScreen() {
-  const { animateListsDrawerOpen, setListsDrawerOpen } = useApp();
+  const { animateListsDrawerOpen, openListsDrawerPanel, setListsDrawerOpen } =
+    useApp();
+
+  useEffect(() => {
+    openListsDrawerPanel();
+  }, [openListsDrawerPanel]);
 
   useFocusEffect(
     useCallback(() => {
@@ -17,5 +22,20 @@ export default function ListsScreen() {
     }, [animateListsDrawerOpen, setListsDrawerOpen]),
   );
 
-  return <View pointerEvents="none" style={{ flex: 1, backgroundColor: "transparent" }} />;
+  return (
+    <View pointerEvents="none" style={styles.screen}>
+      <View style={styles.backdrop} />
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#f4f4f5",
+  },
+  backdrop: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+});
