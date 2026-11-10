@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { API_BASE_URL } from "@/constants/api";
 import { useAuth } from "@/contexts/auth-context";
+import { getDefaultDevelopmentUserEmail } from "@/lib/dev-default-user";
 import {
   getDevAutoSignInCredentials,
   isDevAutoSignInEnabled,
@@ -25,7 +26,9 @@ export function SignInScreen() {
   const devCredentials = isDevAutoSignInEnabled()
     ? getDevAutoSignInCredentials()
     : null;
-  const [email, setEmail] = useState(devCredentials?.email ?? "");
+  const [email, setEmail] = useState(
+    devCredentials?.email ?? (__DEV__ ? getDefaultDevelopmentUserEmail() : ""),
+  );
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);

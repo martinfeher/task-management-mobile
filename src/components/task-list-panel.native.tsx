@@ -34,6 +34,7 @@ import {
 } from "@/components/task-context-menu";
 import { TaskDatePickerSheet, type TaskScheduleSelection } from "@/components/task-date-picker-sheet";
 import { TaskLabelPicker } from "@/components/task-label-picker";
+import { TaskListOrganizeMenu } from "@/components/task-list-organize-menu";
 import {
   getListContentStyle,
   getPanelTitle,
@@ -70,6 +71,14 @@ import {
   type TaskBlock,
 } from "@/lib/task-blocks";
 import { getVisibleSubtasks } from "@/lib/task-subtasks";
+import {
+  isTaskListManualOrderEnabled,
+  organizeTaskBlocks,
+  sortOptionsEqual,
+  type TaskListGroupBy,
+  type TaskListSortOption,
+} from "@/lib/task-list-grouping";
+import { isAggregateTaskListView } from "@/lib/task-list-view";
 import type { SidebarListItem, TaskItem, TaskLabel } from "@/types/todo";
 
 const DROP_ANIMATION_CONFIG = {
@@ -113,6 +122,8 @@ export function TaskListPanel({
   } = useApp();
   const insets = useSafeAreaInsets();
   const [contentFilter, setContentFilter] = useState<TaskListContentFilter>("all");
+  const [groupBy, setGroupBy] = useState<TaskListGroupBy>("none");
+  const [activeSort, setActiveSort] = useState<TaskListSortOption | null>(null);
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView | null>(null);
   const showListName = selectedView?.type !== "list";
@@ -155,9 +166,30 @@ export function TaskListPanel({
     () => filterTaskBlocks(taskBlocks, contentFilter),
     [taskBlocks, contentFilter],
   );
+  const lists = sidebarData?.lists ?? [];
+  const showOrganizeMenu = useMemo(
+    () => isAggregateTaskListView(selectedView, lists),
+    [lists, selectedView],
+  );
+  const organizeTaskCount =
+    visiblePinnedBlocks.length + visibleTaskBlocks.length;
+  const taskSections = useMemo(
+    () =>
+      organizeTaskBlocks(visibleTaskBlocks, {
+        sort: activeSort,
+        groupBy,
+      }),
+    [activeSort, groupBy, visibleTaskBlocks],
+  );
+  const manualTaskOrder = isTaskListManualOrderEnabled({
+    sort: activeSort,
+    groupBy,
+  });
 
   useEffect(() => {
     setContentFilter("all");
+    setGroupBy("none");
+    setActiveSort(null);
   }, [selectedView]);
 
   useEffect(() => {
@@ -365,6 +397,63 @@ export function TaskListPanel({
     [],
   );
 
+  const renderStaticBlock = useCallback(
+    (item: TaskBlock) => {
+      const subtaskCount = subtaskCountByParentId.get(item.root.id) ?? 0;
+      const subtasksExpanded = isSubtasksExpanded(item.root.id, subtaskCount);
+      const visibleChildren = subtasksExpanded
+        ? getVisibleSubtasks(item.children)
+        : [];
+
+      return (
+        <View key={item.id}>
+          <TaskRow
+            task={item.root}
+            showListName={showListName}
+            onToggleComplete={handleToggleComplete}
+            onPress={handleTaskPress}
+            onOpenContextMenu={openContextMenu}
+            onContextMenuGestureEnd={handleContextMenuGestureEnd}
+            onMovePastThreshold={dismissContextMenuForTask}
+            contextMenuDelayMs={TASK_LIST_CONTEXT_MENU_DELAY_MS}
+            subtaskCount={subtaskCount}
+            subtasksExpanded={subtasksExpanded}
+            onToggleSubtasksExpanded={
+              subtaskCount > 0
+                ? () => toggleSubtasksExpanded(item.root.id, subtaskCount)
+                : undefined
+            }
+            showSubtaskCollapseToggle
+          />
+          {visibleChildren.map((child) => (
+            <TaskRow
+              key={child.id}
+              task={child}
+              showListName={showListName}
+              onToggleComplete={handleToggleComplete}
+              onPress={handleTaskPress}
+              onOpenContextMenu={openContextMenu}
+              onContextMenuGestureEnd={handleContextMenuGestureEnd}
+              onMovePastThreshold={dismissContextMenuForTask}
+              contextMenuDelayMs={TASK_LIST_CONTEXT_MENU_DELAY_MS}
+            />
+          ))}
+        </View>
+      );
+    },
+    [
+      dismissContextMenuForTask,
+      handleContextMenuGestureEnd,
+      handleTaskPress,
+      handleToggleComplete,
+      isSubtasksExpanded,
+      openContextMenu,
+      showListName,
+      subtaskCountByParentId,
+      toggleSubtasksExpanded,
+    ],
+  );
+
   const renderBlockItem = useCallback(
     ({ item, drag, isActive }: RenderItemParams<TaskBlock>) => {
       const subtaskCount = subtaskCountByParentId.get(item.root.id) ?? 0;
@@ -545,7 +634,6 @@ export function TaskListPanel({
     }
   }
 
-  const lists = sidebarData?.lists ?? [];
   const assignedLabelIds = useMemo(
     () => new Set((contextTask?.labels ?? []).map((label) => label.id)),
     [contextTask?.labels],
@@ -565,6 +653,20 @@ export function TaskListPanel({
           onOpenLists={openListsDrawer}
           completeUndoVisible={completeUndoVisible}
           onCompleteUndo={handleUndoComplete}
+          headerAction={
+            showOrganizeMenu && organizeTaskCount >= 2 ? (
+              <TaskListOrganizeMenu
+                activeSort={activeSort}
+                activeGroupBy={groupBy}
+                onSelectSort={(option) => {
+                  setActiveSort((current) =>
+                    sortOptionsEqual(current, option) ? null : option,
+                  );
+                }}
+                onSelectGroupBy={setGroupBy}
+              />
+            ) : null
+          }
         >
         {blockingState ?? (
           <NestableScrollContainer
@@ -598,18 +700,31 @@ export function TaskListPanel({
             ) : null}
 
             {visibleTaskBlocks.length > 0 ? (
-              <NestableDraggableFlatList
-                data={visibleTaskBlocks}
-                keyExtractor={(item) => item.id}
-                onDragBegin={handleDragBegin}
-                onPlaceholderIndexChange={handlePlaceholderIndexChange}
-                onDragEnd={handleTasksDragEnd}
-                renderItem={renderBlockItem}
-                renderPlaceholder={renderDropPlaceholder}
-                animationConfig={DROP_ANIMATION_CONFIG}
-                activationDistance={12}
-                scrollEnabled={false}
-              />
+              manualTaskOrder ? (
+                <NestableDraggableFlatList
+                  data={visibleTaskBlocks}
+                  keyExtractor={(item) => item.id}
+                  onDragBegin={handleDragBegin}
+                  onPlaceholderIndexChange={handlePlaceholderIndexChange}
+                  onDragEnd={handleTasksDragEnd}
+                  renderItem={renderBlockItem}
+                  renderPlaceholder={renderDropPlaceholder}
+                  animationConfig={DROP_ANIMATION_CONFIG}
+                  activationDistance={12}
+                  scrollEnabled={false}
+                />
+              ) : (
+                <View>
+                  {taskSections.map((section) => (
+                    <View key={section.key}>
+                      {section.title ? (
+                        <TaskSectionTitle title={section.title} />
+                      ) : null}
+                      {section.blocks.map((block) => renderStaticBlock(block))}
+                    </View>
+                  ))}
+                </View>
+              )
             ) : null}
           </NestableScrollContainer>
         )}

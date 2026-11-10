@@ -160,6 +160,7 @@ export function TaskListShell({
   selectedView,
   children,
   onOpenLists,
+  headerAction,
   completeUndoVisible,
   onCompleteUndo,
 }: {
@@ -167,6 +168,7 @@ export function TaskListShell({
   selectedView?: SelectedView | null;
   children: ReactNode;
   onOpenLists?: () => void;
+  headerAction?: ReactNode;
   completeUndoVisible?: boolean;
   onCompleteUndo?: () => void;
 }) {
@@ -216,6 +218,9 @@ export function TaskListShell({
                 />
                 <ThemedText style={styles.completeUndoLabel}>Undo</ThemedText>
               </Pressable>
+            ) : null}
+            {headerAction ? (
+              <View style={styles.headerAction}>{headerAction}</View>
             ) : null}
           </View>
         </View>
@@ -448,6 +453,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#4873c7",
+  },
+  headerAction: {
+    marginLeft: "auto",
   },
   pinnedSection: {
     backgroundColor: "rgba(250, 250, 250, 0.4)",

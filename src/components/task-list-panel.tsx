@@ -10,17 +10,27 @@ import {
   TASK_LIST_TYPE_FILTER_EXTRA_SCROLL_PADDING,
   type TaskListContentFilter,
 } from "@/components/task-list-type-filter";
+import { TaskListOrganizeMenu } from "@/components/task-list-organize-menu";
 import {
   getListContentStyle,
   getPanelTitle,
   getTaskListBlockingState,
   StaticTaskSection,
   TaskListShell,
+  TaskSectionTitle,
   useTaskCompleteUndo,
   type TaskListPanelProps,
 } from "@/components/task-list-panel-shared";
 import { getAddTaskFabReservedHeight } from "@/constants/tab-bar";
 import { useApp } from "@/contexts/app-context";
+import { blocksToTasks, tasksToBlocks } from "@/lib/task-blocks";
+import {
+  organizeTaskBlocks,
+  sortOptionsEqual,
+  type TaskListGroupBy,
+  type TaskListSortOption,
+} from "@/lib/task-list-grouping";
+import { isAggregateTaskListView } from "@/lib/task-list-view";
 
 export function TaskListPanel({
   selectedView,
@@ -34,9 +44,11 @@ export function TaskListPanel({
   onTaskUncompleted,
   onOpenTask,
 }: TaskListPanelProps) {
-  const { addTaskComposerOpen, openListsDrawer } = useApp();
+  const { addTaskComposerOpen, openListsDrawer, sidebarData } = useApp();
   const insets = useSafeAreaInsets();
   const [contentFilter, setContentFilter] = useState<TaskListContentFilter>("all");
+  const [groupBy, setGroupBy] = useState<TaskListGroupBy>("none");
+  const [activeSort, setActiveSort] = useState<TaskListSortOption | null>(null);
   const showListName = selectedView?.type !== "list";
   const {
     handleToggleComplete,
@@ -74,9 +86,25 @@ export function TaskListPanel({
     () => filterTaskListItems(tasks, contentFilter),
     [tasks, contentFilter],
   );
+  const lists = sidebarData?.lists ?? [];
+  const showOrganizeMenu = useMemo(
+    () => isAggregateTaskListView(selectedView, lists),
+    [lists, selectedView],
+  );
+  const taskSections = useMemo(
+    () =>
+      organizeTaskBlocks(tasksToBlocks(visibleTasks), {
+        sort: activeSort,
+        groupBy,
+      }),
+    [activeSort, groupBy, visibleTasks],
+  );
+  const organizeTaskCount = visiblePinned.length + visibleTasks.length;
 
   useEffect(() => {
     setContentFilter("all");
+    setGroupBy("none");
+    setActiveSort(null);
   }, [selectedView]);
 
   useEffect(() => {
@@ -91,6 +119,20 @@ export function TaskListPanel({
         onOpenLists={openListsDrawer}
         completeUndoVisible={completeUndoVisible}
         onCompleteUndo={handleUndoComplete}
+        headerAction={
+          showOrganizeMenu && organizeTaskCount >= 2 ? (
+            <TaskListOrganizeMenu
+              activeSort={activeSort}
+              activeGroupBy={groupBy}
+              onSelectSort={(option) => {
+                setActiveSort((current) =>
+                  sortOptionsEqual(current, option) ? null : option,
+                );
+              }}
+              onSelectGroupBy={setGroupBy}
+            />
+          ) : null
+        }
       >
         {blockingState ?? (
           <FlatList
@@ -106,12 +148,19 @@ export function TaskListPanel({
                   onToggleComplete={handleToggleComplete}
                   onPressTask={onOpenTask}
                 />
-                <StaticTaskSection
-                  tasks={visibleTasks}
-                  showListName={showListName}
-                  onToggleComplete={handleToggleComplete}
-                  onPressTask={onOpenTask}
-                />
+                {taskSections.map((section) => (
+                  <View key={section.key}>
+                    {section.title ? (
+                      <TaskSectionTitle title={section.title} />
+                    ) : null}
+                    <StaticTaskSection
+                      tasks={blocksToTasks(section.blocks)}
+                      showListName={showListName}
+                      onToggleComplete={handleToggleComplete}
+                      onPressTask={onOpenTask}
+                    />
+                  </View>
+                ))}
               </View>
             }
             refreshControl={

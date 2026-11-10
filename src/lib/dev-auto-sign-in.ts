@@ -1,4 +1,5 @@
-const DEV_AUTO_SIGN_IN_EMAIL = "test@test.io";
+import { isDevelopmentApplicationEnv } from "@/lib/application-env";
+import { getDefaultDevelopmentUserEmail } from "@/lib/dev-default-user";
 
 /** Local-only override; add `dev-auto-sign-in.local.ts` (gitignored) with your password. */
 let localDevPassword: string | undefined;
@@ -24,6 +25,17 @@ export function isDevAutoSignInEnabled(): boolean {
   return process.env.EXPO_PUBLIC_DEV_AUTO_SIGN_IN !== "false";
 }
 
+/** When true, the manual sign-in screen is hidden; dev credentials or setup is used instead. */
+export function shouldShowManualSignInScreen(): boolean {
+  if (!__DEV__) {
+    return true;
+  }
+  if (isDevelopmentApplicationEnv() && isDevAutoSignInEnabled()) {
+    return false;
+  }
+  return true;
+}
+
 function resolveDevPassword(): string | null {
   const fromEnv = process.env.EXPO_PUBLIC_DEV_SIGN_IN_PASSWORD?.trim();
   if (fromEnv) {
@@ -45,8 +57,8 @@ export function getDevAutoSignInCredentials(): DevAutoSignInCredentials | null {
     return null;
   }
 
-  const email =
-    process.env.EXPO_PUBLIC_DEV_SIGN_IN_EMAIL?.trim() || DEV_AUTO_SIGN_IN_EMAIL;
-
-  return { email, password };
+  return {
+    email: getDefaultDevelopmentUserEmail(),
+    password,
+  };
 }

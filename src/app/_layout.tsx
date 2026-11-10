@@ -21,7 +21,7 @@ import { AppProvider, useApp } from "@/contexts/app-context";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import { DevAutoSignInSetupScreen } from "@/components/dev-auto-sign-in-setup";
 import { SignInScreen } from "@/components/sign-in-screen";
-import { isDevAutoSignInEnabled } from "@/lib/dev-auto-sign-in";
+import { shouldShowManualSignInScreen } from "@/lib/dev-auto-sign-in";
 import { HistoryActionsProvider } from "@/contexts/history-actions-toolbar-context";
 import { TextFormatToolbarProvider } from "@/contexts/text-format-toolbar-context";
 import { useDetailFonts } from "@/hooks/use-detail-fonts";
@@ -60,11 +60,8 @@ function AuthenticatedApp() {
   }
 
   if (status === "signed-out") {
-    if (
-      isDevAutoSignInEnabled() &&
-      devAutoSignInIssue === "missing-password"
-    ) {
-      return <DevAutoSignInSetupScreen />;
+    if (!shouldShowManualSignInScreen()) {
+      return <DevAutoSignInSetupScreen issue={devAutoSignInIssue} />;
     }
     return <SignInScreen />;
   }
