@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 
-import { AppSymbol } from "@/components/app-symbol";
 import { BiChevronDownIcon } from "@/components/bi-chevron-down-icon";
+import { DigFolderIcon } from "@/components/dig-folder-icon";
 import { MdChecklistIcon } from "@/components/md-checklist-icon";
 import {
   SIDEBAR_SELECTED_ICON_COLOR,
@@ -153,13 +153,7 @@ export function ListsFolderRow({
       accessibilityLabel={folder.name}
       className="mb-1 ml-[10px] mr-1.5 min-h-[34px] flex-row items-center rounded-md px-1.5 active:bg-zinc-200/60"
     >
-      <AppSymbol
-        ios={expanded ? "folder.fill" : "folder"}
-        android="folder"
-        size={22}
-        tintColor="#BEC1C3"
-        style={{ marginLeft: 1 }}
-      />
+      <DigFolderIcon style={{ marginLeft: 1, marginBottom: 1, marginRight: 4 }} />
       <View
         className="min-w-0 flex-1 flex-row items-center gap-1 pr-8"
         style={{ paddingLeft: 5 }}

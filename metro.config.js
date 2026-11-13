@@ -10,8 +10,19 @@ const siblingWebNextDir = path.resolve(__dirname, "..", "todolistWeb", ".next");
 const escapedSiblingWebNextDir = siblingWebNextDir.replace(/[/\\]/g, "[/\\\\]");
 
 config.watchFolders = [__dirname];
+const expoNetworkShim = path.resolve(__dirname, "src/shims/expo-network.js");
+const defaultResolveRequest = config.resolver?.resolveRequest;
 config.resolver = {
   ...config.resolver,
+  resolveRequest: (context, moduleName, platform) => {
+    if (moduleName === "expo-network") {
+      return { filePath: expoNetworkShim, type: "sourceFile" };
+    }
+    if (typeof defaultResolveRequest === "function") {
+      return defaultResolveRequest(context, moduleName, platform);
+    }
+    return context.resolveRequest(context, moduleName, platform);
+  },
   blockList: [
     ...(Array.isArray(config.resolver?.blockList)
       ? config.resolver.blockList

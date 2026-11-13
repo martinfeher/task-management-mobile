@@ -33,6 +33,7 @@ import { ThemedText } from "@/components/themed-text";
 import { VoiceInputIcon } from "@/components/voice-input-icon";
 import { VoiceNoteAttachmentChip } from "@/components/voice-note-attachment-chip";
 import { useApp } from "@/contexts/app-context";
+import { useAppSettings } from "@/contexts/app-settings-context";
 import { useVoiceNoteRecorder } from "@/hooks/use-voice-note-recorder";
 import { fetchLabels } from "@/lib/api";
 import { runAfterInteractions } from "@/lib/run-after-interactions";
@@ -71,6 +72,7 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
     sidebarData,
     loadSidebar,
   } = useApp();
+  const { subtasksEnabled } = useAppSettings();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState<string | null>(null);
@@ -684,51 +686,55 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                                   Label
                                 </ThemedText>
                               </Pressable>
-                              <View style={styles.moreMenuDivider} />
-                              <Pressable
-                                style={({ pressed }) => [
-                                  styles.moreMenuRow,
-                                  pressed && styles.moreMenuRowPressed,
-                                ]}
-                                onPress={handleToolbarSubtask}
-                              >
-                                <Svg
-                                  width={18}
-                                  height={18}
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                >
-                                  <Rect
-                                    x="16"
-                                    y="9"
-                                    width="4"
-                                    height="4"
-                                    rx="2"
-                                    transform="rotate(90 16 9)"
-                                    stroke={ICON_COLOR}
-                                  />
-                                  <Rect
-                                    x="20"
-                                    y="17"
-                                    width="4"
-                                    height="4"
-                                    rx="2"
-                                    transform="rotate(90 20 17)"
-                                    stroke={ICON_COLOR}
-                                  />
-                                  <Path
-                                    d="M5 4V15C5 16.8856 5 17.8284 5.58579 18.4142C6.17157 19 7.11438 19 9 19H16"
-                                    stroke={ICON_COLOR}
-                                  />
-                                  <Path
-                                    d="M5 7V7C5 8.88562 5 9.82843 5.58579 10.4142C6.17157 11 7.11438 11 9 11H12"
-                                    stroke={ICON_COLOR}
-                                  />
-                                </Svg>
-                                <ThemedText style={styles.moreMenuRowText}>
-                                  Subtasks
-                                </ThemedText>
-                              </Pressable>
+                              {subtasksEnabled ? (
+                                <>
+                                  <View style={styles.moreMenuDivider} />
+                                  <Pressable
+                                    style={({ pressed }) => [
+                                      styles.moreMenuRow,
+                                      pressed && styles.moreMenuRowPressed,
+                                    ]}
+                                    onPress={handleToolbarSubtask}
+                                  >
+                                    <Svg
+                                      width={18}
+                                      height={18}
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                    >
+                                      <Rect
+                                        x="16"
+                                        y="9"
+                                        width="4"
+                                        height="4"
+                                        rx="2"
+                                        transform="rotate(90 16 9)"
+                                        stroke={ICON_COLOR}
+                                      />
+                                      <Rect
+                                        x="20"
+                                        y="17"
+                                        width="4"
+                                        height="4"
+                                        rx="2"
+                                        transform="rotate(90 20 17)"
+                                        stroke={ICON_COLOR}
+                                      />
+                                      <Path
+                                        d="M5 4V15C5 16.8856 5 17.8284 5.58579 18.4142C6.17157 19 7.11438 19 9 19H16"
+                                        stroke={ICON_COLOR}
+                                      />
+                                      <Path
+                                        d="M5 7V7C5 8.88562 5 9.82843 5.58579 10.4142C6.17157 11 7.11438 11 9 11H12"
+                                        stroke={ICON_COLOR}
+                                      />
+                                    </Svg>
+                                    <ThemedText style={styles.moreMenuRowText}>
+                                      Subtasks
+                                    </ThemedText>
+                                  </Pressable>
+                                </>
+                              ) : null}
                               <View style={styles.moreMenuDivider} />
                               <Pressable
                                 style={({ pressed }) => [

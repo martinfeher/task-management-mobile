@@ -64,6 +64,7 @@ import {
 import { ThemedText } from "@/components/themed-text";
 import { Spacing } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
+import { useAppSettings } from "@/contexts/app-settings-context";
 import { useHistoryActionsRegistration } from "@/contexts/history-actions-toolbar-context";
 import { useTextFormatToolbarRegistration } from "@/contexts/text-format-toolbar-context";
 import { useVoiceNoteRecorder } from "@/hooks/use-voice-note-recorder";
@@ -268,6 +269,7 @@ export function TaskDetailScreen() {
     calendarTasks,
     calendarColorEpoch,
   } = useApp();
+  const { subtasksEnabled } = useAppSettings();
   const closingRef = useRef(false);
   const openedFromCalendar = fromCalendar === "1";
   const openedFromUpcoming = fromUpcoming === "1";
@@ -1568,9 +1570,19 @@ export function TaskDetailScreen() {
   );
 
   useEffect(() => {
-    if (!detail || loading) return;
+    if (!detail || loading || !subtasksEnabled) return;
     void loadSubtasks({ openIfActive: true });
-  }, [detail?.id, detail?.listId, loading, loadSubtasks]);
+  }, [detail?.id, detail?.listId, loading, loadSubtasks, subtasksEnabled]);
+
+  useEffect(() => {
+    if (subtasksEnabled) return;
+    setSubtasksSectionOpen(false);
+    setSubtasksExpanded(true);
+    setSubtaskInputOpen(false);
+    setSubtaskName("");
+    setSubtasksDrawerHeight(0);
+    setSubtasks([]);
+  }, [subtasksEnabled]);
 
   const openSubtasksSection = useCallback(() => {
     setSubtasksSectionOpen(true);
@@ -1704,10 +1716,14 @@ export function TaskDetailScreen() {
   function openDetailMenu() {
     setPriorityMenuOpen(false);
     Alert.alert("Task options", undefined, [
-      {
-        text: "Add subtask",
-        onPress: openSubtasksSection,
-      },
+      ...(subtasksEnabled
+        ? [
+            {
+              text: "Add subtask",
+              onPress: openSubtasksSection,
+            },
+          ]
+        : []),
       {
         text: expandedFullscreen ? "Exit full screen" : "Full screen",
         onPress: () => setExpandedFullscreen((current) => !current),
@@ -2391,7 +2407,7 @@ export function TaskDetailScreen() {
   };
 
   const renderSubtasksDrawer = (options?: { plusOffsetLeft?: number }) =>
-    subtasksSectionOpen ? (
+    subtasksEnabled && subtasksSectionOpen ? (
       <Animated.View
         className="relative shrink-0 mb-1 px-1"
         style={[
@@ -2773,7 +2789,8 @@ export function TaskDetailScreen() {
                       blurOnSubmit
                       returnKeyType="done"
                     />
-                    {!(subtasksSectionOpen && subtasksExpanded) ? (
+                    {subtasksEnabled &&
+                    !(subtasksSectionOpen && subtasksExpanded) ? (
                       <View className="ml-[6px] mt-[8px] shrink-0 items-end gap-1.5 self-start">
                         <Pressable
                           className="active:opacity-70"

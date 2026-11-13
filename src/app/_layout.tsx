@@ -18,6 +18,7 @@ import { ListsDrawerOverlay } from "@/components/lists-drawer-overlay";
 import { LastTabTracker } from "@/components/main-tabs-config";
 import { TaskAddedBadge } from "@/components/task-added-badge";
 import { AppProvider, useApp } from "@/contexts/app-context";
+import { AppSettingsProvider } from "@/contexts/app-settings-context";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import { DevAutoSignInSetupScreen } from "@/components/dev-auto-sign-in-setup";
 import { SignInScreen } from "@/components/sign-in-screen";
@@ -67,9 +68,10 @@ function AuthenticatedApp() {
   }
 
   return (
-    <AppProvider>
-      <TextFormatToolbarProvider>
-        <HistoryActionsProvider>
+    <AppSettingsProvider>
+      <AppProvider>
+        <TextFormatToolbarProvider>
+          <HistoryActionsProvider>
           <View style={styles.root}>
             <LastTabTracker />
             <AnimatedSplashOverlay />
@@ -103,9 +105,10 @@ function AuthenticatedApp() {
             <TaskAddedBadge />
             <ListsDrawerOverlay />
           </View>
-        </HistoryActionsProvider>
-      </TextFormatToolbarProvider>
-    </AppProvider>
+          </HistoryActionsProvider>
+        </TextFormatToolbarProvider>
+      </AppProvider>
+    </AppSettingsProvider>
   );
 }
 

@@ -69,7 +69,8 @@ export function DevAutoSignInSetupScreen({
         <Text style={styles.hint}>
           Restart the Next.js API after auth changes. If Google sign-in fails
           after OAuth, run <Text style={styles.mono}>npx expo run:ios</Text> once
-          so expo-secure-store is in the dev client. Restart Metro after env
+          so native modules (secure-store, network) are in the dev client.
+          Restart Metro after env
           changes.
         </Text>
       </View>
