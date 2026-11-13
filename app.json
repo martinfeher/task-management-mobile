@@ -57,7 +57,12 @@
       ],
       "expo-image",
       "expo-web-browser",
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to use the microphone to record voice notes on your tasks."
+        }
+      ],
       "expo-asset",
       "expo-font",
       "expo-status-bar",

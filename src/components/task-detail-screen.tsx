@@ -47,6 +47,8 @@ import {
 import { IoMdTimeIcon } from "@/components/io-md-time-icon";
 import { LiquidGlassSurface } from "@/components/liquid-glass-surface";
 import { LuPlusIcon } from "@/components/lu-plus-icon";
+import { PiResizeThinIcon } from "@/components/pi-resize-thin-icon";
+import { RiCollapseDiagonal2LineIcon } from "@/components/ri-collapse-diagonal-2-line-icon";
 import { VoiceInputIcon } from "@/components/voice-input-icon";
 import { VoiceNoteAttachmentChip } from "@/components/voice-note-attachment-chip";
 import { TaskCheckbox } from "@/components/task-checkbox";
@@ -103,7 +105,10 @@ import {
   mergePlainTextEditIntoHtml,
 } from "@/lib/task-content";
 import { appendVoiceNotesToTaskDetails } from "@/lib/persist-task-voice-notes";
-import { removeVoiceNoteFromDetailsHtml } from "@/lib/task-voice-notes";
+import {
+  formatVoiceNoteDuration,
+  removeVoiceNoteFromDetailsHtml,
+} from "@/lib/task-voice-notes";
 import { showVoiceNoteAttachmentActions } from "@/lib/voice-note-actions";
 import {
   createEmptyTaskDetailHistory,
@@ -217,7 +222,6 @@ const SUBTASKS_DRAWER_COLLAPSE_THRESHOLD = 36;
 const SUBTASKS_DRAWER_COLLAPSE_VELOCITY = 650;
 const SUBTASKS_DRAWER_SPRING = { damping: 24, stiffness: 320 };
 const SUBTASK_DRAG_ACTIVE_SCALE = 0.97;
-const MARK_COMPLETE_BOTTOM_OFFSET = 57;
 const MARK_COMPLETE_BUTTON_SIZE = 36;
 const MARK_COMPLETE_BUTTON_HEIGHT = 26;
 const HISTORY_ACTIONS_ABOVE_MARK_COMPLETE = 7;
@@ -307,7 +311,12 @@ export function TaskDetailScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const [allLabels, setAllLabels] = useState<TaskLabel[]>([]);
   const [voiceNoteSaving, setVoiceNoteSaving] = useState(false);
-  const { isRecording, startRecording, stopRecording } = useVoiceNoteRecorder();
+  const {
+    isRecording,
+    durationMs: recordingDurationMs,
+    startRecording,
+    stopRecording,
+  } = useVoiceNoteRecorder();
 
   const pickerSchedule = useMemo(
     () => ({
@@ -1921,23 +1930,6 @@ export function TaskDetailScreen() {
   const canRedo = historyRef.current.future.length > 0;
   void historyVersion;
 
-  // Anchor undo/redo 7px above the Mark complete pill (same horizontal stack).
-  const historyActionsBottomOffset =
-    (keyboardHeight > 0 ? keyboardHeight : 0) +
-    MARK_COMPLETE_BOTTOM_OFFSET +
-    MARK_COMPLETE_BUTTON_HEIGHT +
-    HISTORY_ACTIONS_ABOVE_MARK_COMPLETE;
-
-  useHistoryActionsRegistration(
-    !loading && !datePickerOpen,
-    historyActionsBottomOffset,
-    canUndo,
-    canRedo,
-    undoEdit,
-    redoEdit,
-    keepNotesKeyboardFocus,
-  );
-
   useEffect(() => {
     if (datePickerOpen) {
       setCalendarColorPickerOpen(false);
@@ -2001,6 +1993,28 @@ export function TaskDetailScreen() {
         subtasksExpanded ? 160 : 37,
       )
     : 0;
+  const taskBodyActionButtonsBottom =
+    (toolbarPinnedToKeyboard ? keyboardHeight : 0) +
+    layoutToolbarHeight +
+    activeSubtasksDrawerHeight +
+    Spacing.two;
+
+  // Anchor undo/redo 7px above the Mark complete pill (same horizontal stack).
+  const historyActionsBottomOffset =
+    taskBodyActionButtonsBottom +
+    MARK_COMPLETE_BUTTON_HEIGHT +
+    HISTORY_ACTIONS_ABOVE_MARK_COMPLETE;
+
+  useHistoryActionsRegistration(
+    !loading && !datePickerOpen,
+    historyActionsBottomOffset,
+    canUndo,
+    canRedo,
+    undoEdit,
+    redoEdit,
+    keepNotesKeyboardFocus,
+  );
+
   const sheetContentHeight = expandedFullscreen
     ? Math.max(sheetMinHeight, windowHeight - insets.top)
     : sheetMaxScrollHeight;
@@ -2631,6 +2645,21 @@ export function TaskDetailScreen() {
             <View className="h-[5px] w-11 rounded-[3px] bg-gray-300" />
           </View>
 
+          {!expandedFullscreen ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Expand to full screen"
+              hitSlop={8}
+              onPress={() => {
+                setPriorityMenuOpen(false);
+                setExpandedFullscreen(true);
+              }}
+              className="absolute right-[52px] top-2.5 z-20 h-[36px] w-[36px] items-center justify-center rounded-full bg-gray-100"
+            >
+              <PiResizeThinIcon size={17} color="#7a8494" />
+            </Pressable>
+          ) : null}
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="More options"
@@ -3021,9 +3050,28 @@ export function TaskDetailScreen() {
           {!subtasksSectionOpen
             ? renderMarkCompleteButton({
                 right: 10,
-                bottom: MARK_COMPLETE_BOTTOM_OFFSET,
+                bottom: taskBodyActionButtonsBottom,
               })
             : null}
+
+          {expandedFullscreen ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Collapse task window"
+              hitSlop={8}
+              onPress={() => {
+                setPriorityMenuOpen(false);
+                setExpandedFullscreen(false);
+              }}
+              className="absolute z-20 h-[36px] w-[36px] items-center justify-center rounded-full bg-gray-100 active:opacity-85"
+              style={{
+                right: MARK_COMPLETE_BUTTON_SIZE + 18,
+                bottom: taskBodyActionButtonsBottom,
+              }}
+            >
+              <RiCollapseDiagonal2LineIcon size={17} color="#7a8494" />
+            </Pressable>
+          ) : null}
 
           {showDetailToolbar ? (
             <View
@@ -3123,6 +3171,26 @@ export function TaskDetailScreen() {
                     />
                   </DetailToolbarLabeledItem>
                 </View>
+                {isRecording ? (
+                  <View
+                    className="absolute top-[30px] right-[78px] flex-row items-center"
+                    pointerEvents="none"
+                  >
+                    <View
+                      className="mr-1.5 h-2 w-2 rounded-full"
+                      style={{ backgroundColor: "#ef4444" }}
+                    />
+                    <ThemedText
+                      style={{
+                        color: "#ef4444",
+                        fontSize: 15,
+                        fontWeight: "600",
+                      }}
+                    >
+                      {formatVoiceNoteDuration(recordingDurationMs)}
+                    </ThemedText>
+                  </View>
+                ) : null}
                 <View className="absolute top-0 right-[25px]">
                   <DetailToolbarLabeledItem
                     accessibilityLabel={

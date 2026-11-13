@@ -43,6 +43,7 @@ export function useVoiceNoteRecorderStub(reason: StubReason = "native-module") {
 
   return {
     isRecording,
+    durationMs: 0,
     startRecording,
     stopRecording,
     toggleRecording,

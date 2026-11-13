@@ -44,7 +44,8 @@ type CalendarUpcomingViewProps = {
 
 type UpcomingSection =
   | { kind: "overdue"; id: string; tasks: TaskItem[] }
-  | { kind: "day"; id: string; date: Date; tasks: TaskItem[] };
+  | { kind: "day"; id: string; date: Date; tasks: TaskItem[] }
+  | { kind: "emptyRange"; id: string; startDate: Date; endDate: Date };
 
 function chunkDays(days: Date[], size: number) {
   const chunks: Date[][] = [];
@@ -69,6 +70,57 @@ function formatDaySectionTitle(date: Date, today: Date) {
     return `Tomorrow`;
   }
   return `${dateLabel} · ${weekday}`;
+}
+
+function formatEmptyRangeTitle(start: Date, end: Date, today: Date) {
+  const tomorrow = addDays(today, 1);
+  const formatEndpoint = (date: Date) => {
+    if (isSameDay(date, today)) {
+      return "Today";
+    }
+    if (isSameDay(date, tomorrow)) {
+      return "Tomorrow";
+    }
+    return date.toLocaleDateString(undefined, {
+      day: "numeric",
+      month: "short",
+    });
+  };
+
+  if (isSameDay(start, end)) {
+    return formatDaySectionTitle(start, today);
+  }
+
+  return `${formatEndpoint(start)} – ${formatEndpoint(end)}`;
+}
+
+function findSectionForDate(sections: UpcomingSection[], date: Date) {
+  const targetKey = toDateKey(date);
+
+  for (const section of sections) {
+    if (section.kind === "day" && section.id === targetKey) {
+      return section;
+    }
+    if (section.kind === "emptyRange") {
+      const startKey = toDateKey(section.startDate);
+      const endKey = toDateKey(section.endDate);
+      if (targetKey >= startKey && targetKey <= endKey) {
+        return section;
+      }
+    }
+  }
+
+  return null;
+}
+
+function sectionVisibleDate(section: UpcomingSection): Date | null {
+  if (section.kind === "day") {
+    return section.date;
+  }
+  if (section.kind === "emptyRange") {
+    return section.startDate;
+  }
+  return null;
 }
 
 function findPageIndexForDate(pages: Date[][], date: Date) {
@@ -155,15 +207,53 @@ export function CalendarUpcomingView({
       });
     }
 
-    for (let offset = 0; offset <= upcomingDaysCount; offset += 1) {
+    let offset = 0;
+    while (offset <= upcomingDaysCount) {
       const date = addDays(today, offset);
       const key = toDateKey(date);
-      result.push({
-        kind: "day",
-        id: key,
-        date,
-        tasks: tasksByDate.get(key) ?? [],
-      });
+      const tasksForDay = tasksByDate.get(key) ?? [];
+
+      if (tasksForDay.length > 0) {
+        result.push({
+          kind: "day",
+          id: key,
+          date,
+          tasks: tasksForDay,
+        });
+        offset += 1;
+        continue;
+      }
+
+      let runEnd = offset;
+      while (runEnd + 1 <= upcomingDaysCount) {
+        const nextDate = addDays(today, runEnd + 1);
+        const nextKey = toDateKey(nextDate);
+        if ((tasksByDate.get(nextKey) ?? []).length > 0) {
+          break;
+        }
+        runEnd += 1;
+      }
+
+      const startDate = addDays(today, offset);
+      const endDate = addDays(today, runEnd);
+
+      if (runEnd === offset) {
+        result.push({
+          kind: "day",
+          id: key,
+          date: startDate,
+          tasks: [],
+        });
+      } else {
+        result.push({
+          kind: "emptyRange",
+          id: `empty:${toDateKey(startDate)}-${toDateKey(endDate)}`,
+          startDate,
+          endDate,
+        });
+      }
+
+      offset = runEnd + 1;
     }
 
     return result;
@@ -221,7 +311,7 @@ export function CalendarUpcomingView({
         const offset = sectionOffsetsRef.current.get(section.id);
         if (offset == null) continue;
         if (offset <= scrollY + SECTION_SYNC_THRESHOLD) {
-          nextDate = section.date;
+          nextDate = sectionVisibleDate(section);
         }
       }
 
@@ -262,8 +352,10 @@ export function CalendarUpcomingView({
     setVisibleSectionDate(date);
     onSelectDate?.(date);
 
-    const sectionId = toDateKey(date);
-    const offset = sectionOffsetsRef.current.get(sectionId);
+    const section = findSectionForDate(sections, date);
+    const offset = section
+      ? sectionOffsetsRef.current.get(section.id)
+      : undefined;
     if (offset != null) {
       listScrollRef.current?.scrollTo({ y: offset, animated: true });
       return;
@@ -465,6 +557,39 @@ export function CalendarUpcomingView({
                     ) : null}
                   </Pressable>
                   {visibleOverdueTasks.map(renderTaskRow)}
+                </View>
+              );
+            }
+
+            if (section.kind === "emptyRange") {
+              const title = formatEmptyRangeTitle(
+                section.startDate,
+                section.endDate,
+                today,
+              );
+
+              return (
+                <View
+                  key={section.id}
+                  onLayout={(event) => {
+                    sectionOffsetsRef.current.set(
+                      section.id,
+                      event.nativeEvent.layout.y,
+                    );
+                  }}
+                >
+                  <ThemedText
+                    className="px-4 py-0 text-[10px] font-bold"
+                    style={{ color: "#A5A8AC" }}
+                  >
+                    {title}
+                  </ThemedText>
+                  <ThemedText
+                    className="px-4 py-0 -mt-[2px]"
+                    style={{ color: "#C6C9CB", fontSize: 10 }}
+                  >
+                    No tasks
+                  </ThemedText>
                 </View>
               );
             }

@@ -49,13 +49,11 @@ function PriorityFlagOption({
   selected,
   onPress,
   tintColor,
-  filled = true,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
   tintColor: string;
-  filled?: boolean;
 }) {
   return (
     <Pressable
@@ -65,8 +63,8 @@ function PriorityFlagOption({
       style={styles.flagSlot}
     >
       <AppSymbol
-        ios={filled ? "flag.fill" : "flag"}
-        android={filled ? "flag" : "outlined-flag"}
+        ios="flag.fill"
+        android="flag"
         size={22}
         tintColor={tintColor}
       />
@@ -106,13 +104,6 @@ export function TaskPriorityFlagPopup({
             tintColor={option.color}
           />
         ))}
-        <PriorityFlagOption
-          label="No priority flag"
-          selected={selected == null}
-          onPress={() => onSelect(null)}
-          tintColor={NONE_FLAG_COLOR}
-          filled={false}
-        />
       </View>
 
       <View style={styles.divider} />
@@ -218,7 +209,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   noneText: {
-    fontSize: 16,
-    color: "#374151",
+    fontSize: 14,
+    color: "#a5a5a9",
   },
 });

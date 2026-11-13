@@ -38,7 +38,10 @@ import { useVoiceNoteRecorder } from "@/hooks/use-voice-note-recorder";
 import { fetchLabels } from "@/lib/api";
 import { runAfterInteractions } from "@/lib/run-after-interactions";
 import { persistVoiceNotesForTask } from "@/lib/persist-task-voice-notes";
-import { type PendingVoiceNote } from "@/lib/task-voice-notes";
+import {
+  formatVoiceNoteDuration,
+  type PendingVoiceNote,
+} from "@/lib/task-voice-notes";
 import { showVoiceNoteAttachmentActions } from "@/lib/voice-note-actions";
 import { formatTaskDueDate } from "@/lib/format-due-date";
 import { findInboxList } from "@/lib/inbox-list";
@@ -89,7 +92,12 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
   const [submitting, setSubmitting] = useState(false);
   const overlayOpacity = useSharedValue(0);
   const sheetTranslateY = useSharedValue(ADD_TASK_SHEET_SLIDE_FROM);
-  const { isRecording, startRecording, stopRecording } = useVoiceNoteRecorder();
+  const {
+    isRecording,
+    durationMs: recordingDurationMs,
+    startRecording,
+    stopRecording,
+  } = useVoiceNoteRecorder();
   const [taskNamePlaceholder, setTaskNamePlaceholder] = useState(
     nextTaskNamePlaceholder,
   );
@@ -198,11 +206,28 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
     submittingRef.current = true;
     setSubmitting(true);
     try {
+      let notesToSave = voiceNotes;
+      if (isRecording) {
+        // Don't lose a recording that is still running when the user adds the task.
+        const recording = await stopRecording();
+        if (recording) {
+          notesToSave = [
+            ...voiceNotes,
+            {
+              id: `${Date.now()}-${voiceNotes.length}`,
+              localUri: recording.localUri,
+              durationMs: recording.durationMs,
+              mimeType: recording.mimeType,
+            },
+          ];
+        }
+      }
+
       const trimmedDescription = description.trim();
       const taskId = await createTask({
         name: trimmed,
         description:
-          voiceNotes.length > 0
+          notesToSave.length > 0
             ? undefined
             : trimmedDescription || undefined,
         dueDate,
@@ -214,11 +239,11 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
         throw new Error("Task was not created");
       }
 
-      if (voiceNotes.length > 0) {
+      if (notesToSave.length > 0) {
         await persistVoiceNotesForTask(
           taskId,
           trimmedDescription,
-          voiceNotes,
+          notesToSave,
         );
       }
 
@@ -757,9 +782,16 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                       </View>
                     </View>
                     <View style={styles.toolbarTrailing}>
+                      {isRecording ? (
+                        <ThemedText style={styles.recordingTimer}>
+                          {formatVoiceNoteDuration(recordingDurationMs)}
+                        </ThemedText>
+                      ) : null}
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel="Voice note"
+                        accessibilityLabel={
+                          isRecording ? "Stop voice note recording" : "Voice note"
+                        }
                         hitSlop={8}
                         onPress={() => {
                           void handleVoiceNote();
@@ -1071,6 +1103,14 @@ const styles = StyleSheet.create({
   },
   voiceButtonRecording: {
     backgroundColor: "#ef4444",
+  },
+  recordingTimer: {
+    alignSelf: "center",
+    marginRight: 8,
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#ef4444",
+    fontVariant: ["tabular-nums"],
   },
   voiceNoteRow: {
     flexDirection: "row",
