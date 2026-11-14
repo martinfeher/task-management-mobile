@@ -1,5 +1,6 @@
 import { isDevelopmentApplicationEnv } from "@/lib/application-env";
 import { getDefaultDevelopmentUserEmail } from "@/lib/dev-default-user";
+import { isDevMobileSessionEnabled } from "@/lib/dev-mobile-session";
 
 /** Local-only override; add `dev-auto-sign-in.local.ts` (gitignored) with your password. */
 let localDevPassword: string | undefined;
@@ -30,7 +31,10 @@ export function shouldShowManualSignInScreen(): boolean {
   if (!__DEV__) {
     return true;
   }
-  if (isDevelopmentApplicationEnv() && isDevAutoSignInEnabled()) {
+  if (
+    isDevelopmentApplicationEnv() &&
+    (isDevAutoSignInEnabled() || isDevMobileSessionEnabled())
+  ) {
     return false;
   }
   return true;

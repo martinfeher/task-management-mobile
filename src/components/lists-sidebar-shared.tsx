@@ -28,7 +28,7 @@ import {
 } from "@/components/sidebar-row";
 import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/hooks/use-theme";
-import { fetchLabels } from "@/lib/api";
+import { fetchLabels } from "@/lib/offline/task-repository";
 import { findInboxList } from "@/lib/inbox-list";
 
 const LISTS_PINNED_ICON_COLOR = "#C1C1CE";

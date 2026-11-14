@@ -59,7 +59,7 @@ export async function signInWithGoogle(): Promise<AuthUser> {
   const authClient = getBetterAuthClient();
   const { error } = await authClient.signIn.social({
     provider: "google",
-    callbackURL: "/",
+    callbackURL: Linking.createURL("/"),
   });
 
   if (error) {

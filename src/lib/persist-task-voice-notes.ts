@@ -4,7 +4,7 @@ import {
   buildVoiceNoteDetailsSnippet,
   type PendingVoiceNote,
 } from "@/lib/task-voice-notes";
-import { updateTaskDetails, uploadTaskVoiceNote } from "@/lib/api";
+import { updateTaskDetails, uploadTaskVoiceNote } from "@/lib/offline/task-repository";
 
 async function buildUploadedSnippets(
   taskId: string,

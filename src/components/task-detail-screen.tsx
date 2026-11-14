@@ -76,7 +76,9 @@ import {
   fetchTaskDetail,
   fetchTasks,
   moveTaskToList,
+  OfflineUnavailableError,
   reorderTasks as reorderTasksRequest,
+  resolveTaskId,
   toggleTaskCompleted,
   toggleTaskLabel,
   updateTaskCalendarColor,
@@ -84,8 +86,10 @@ import {
   updateTaskName,
   updateTaskPriority,
   updateTaskSchedule,
-} from "@/lib/api";
+} from "@/lib/offline/task-repository";
 import { formatTaskDueDateParts } from "@/lib/format-due-date";
+import { isOnline } from "@/lib/offline/network-status";
+import { isLocalId } from "@/lib/offline/types";
 import { reorderBlockChildren } from "@/lib/task-blocks";
 import { normalizeCalendarColor } from "@/lib/calendar-colors";
 import { isEnrichedNotesInputAvailable } from "@/lib/enriched-notes-support";
@@ -433,7 +437,7 @@ export function TaskDetailScreen() {
   draftNameRef.current = draftName;
   draftNotesRef.current = draftNotes;
   caretTypingBoldRef.current = caretTypingBold;
-  taskIdRef.current = resolvedTaskId;
+  taskIdRef.current = resolvedTaskId ? resolveTaskId(resolvedTaskId) : resolvedTaskId;
 
   const openedFromSearch = fromSearch === "1";
 
@@ -1834,11 +1838,20 @@ export function TaskDetailScreen() {
         detailsHtmlRef.current = nextDetails;
         setNotesHtml(nextDetails);
         handleTaskCompleted();
-      } catch {
-        Alert.alert("Couldn't save voice note");
+      } catch (error) {
+        Alert.alert(
+          error instanceof OfflineUnavailableError
+            ? "Voice notes are available when online"
+            : "Couldn't save voice note",
+        );
       } finally {
         setVoiceNoteSaving(false);
       }
+      return;
+    }
+
+    if (!isOnline() || isLocalId(resolveTaskId(detail.id))) {
+      Alert.alert("Available when online", "Voice notes need a connection to upload.");
       return;
     }
 

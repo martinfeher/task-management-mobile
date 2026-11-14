@@ -10,7 +10,19 @@ import {
   writeTasksSession,
   getSelectedViewKey,
 } from "@/lib/app-data-session";
-import { createTask as createTaskRequest, deleteTask as deleteTaskRequest, fetchSidebarData, fetchTasks, reorderSidebarTopLevel as reorderSidebarTopLevelRequest, reorderTasks as reorderTasksRequest, toggleTaskCompleted as toggleTaskCompletedRequest } from "@/lib/api";
+import { reorderSidebarTopLevel as reorderSidebarTopLevelRequest } from "@/lib/api";
+import { subscribeLocalStore } from "@/lib/offline/local-store";
+import { startSyncEngine, subscribeSyncEvents } from "@/lib/offline/sync-engine";
+import {
+  createTask as createTaskRequest,
+  deleteTask as deleteTaskRequest,
+  fetchSidebarData,
+  fetchTasks,
+  readCachedSidebarData,
+  readCachedTasks,
+  reorderTasks as reorderTasksRequest,
+  toggleTaskCompleted as toggleTaskCompletedRequest,
+} from "@/lib/offline/task-repository";
 import { findInboxList } from "@/lib/inbox-list";
 import {
   computeSidebarTopLevelAfterReorder,
@@ -178,9 +190,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const storedSidebar = !isRefresh && !sidebarDataRef.current ? readCachedSidebarData() : null;
+    if (storedSidebar) {
+      setSidebarData(storedSidebar);
+    }
+
     if (isRefresh) {
       setSidebarRefreshing(true);
-    } else {
+    } else if (!storedSidebar) {
       setSidebarLoading(true);
     }
 
@@ -191,9 +208,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       writeSidebarSession(sidebar);
       setSidebarData(sidebar);
     } catch (loadError) {
-      const message =
-        loadError instanceof Error ? loadError.message : "Failed to load lists";
-      setSidebarError(message);
+      if (!storedSidebar && !sidebarDataRef.current) {
+        const message =
+          loadError instanceof Error ? loadError.message : "Failed to load lists";
+        setSidebarError(message);
+      }
     } finally {
       setSidebarLoading(false);
       setSidebarRefreshing(false);
@@ -210,9 +229,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const storedTasks = !isRefresh ? await readCachedTasks(view) : null;
+    if (storedTasks) {
+      setTaskData(storedTasks);
+    }
+
     if (isRefresh) {
       setTaskRefreshing(true);
-    } else {
+    } else if (!storedTasks) {
       setTaskLoading(true);
     }
 
@@ -223,10 +247,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       writeTasksSession(view, tasks);
       setTaskData(tasks);
     } catch (loadError) {
-      const message =
-        loadError instanceof Error ? loadError.message : "Failed to load tasks";
-      setTaskError(message);
-      setTaskData(null);
+      if (!storedTasks) {
+        const message =
+          loadError instanceof Error ? loadError.message : "Failed to load tasks";
+        setTaskError(message);
+        setTaskData(null);
+      }
     } finally {
       setTaskLoading(false);
       setTaskRefreshing(false);
@@ -236,6 +262,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void loadSidebar();
   }, [loadSidebar]);
+
+  useEffect(() => startSyncEngine(), []);
+
+  useEffect(() => {
+    let localTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const unsubscribeSync = subscribeSyncEvents(({ changed }) => {
+      if (!changed) return;
+      const view = selectedViewRef.current;
+      if (view) {
+        void fetchTasks(view, { force: true })
+          .then((tasks) => {
+            if (isSameSelectedView(selectedViewRef.current, view)) {
+              writeTasksSession(view, tasks);
+              setTaskData(tasks);
+            }
+          })
+          .catch(() => undefined);
+      }
+      void fetchSidebarData({ force: true })
+        .then((sidebar) => {
+          writeSidebarSession(sidebar);
+          setSidebarData(sidebar);
+        })
+        .catch(() => undefined);
+    });
+
+    // Local edits made elsewhere (task detail, calendar) show up without a network round trip.
+    const unsubscribeLocal = subscribeLocalStore((event) => {
+      if (event.type !== "tasks") return;
+      if (localTimer) clearTimeout(localTimer);
+      localTimer = setTimeout(() => {
+        localTimer = null;
+        const view = selectedViewRef.current;
+        if (!view) return;
+        void readCachedTasks(view).then((tasks) => {
+          if (tasks && isSameSelectedView(selectedViewRef.current, view)) {
+            setTaskData(tasks);
+          }
+        });
+      }, 150);
+    });
+
+    return () => {
+      if (localTimer) clearTimeout(localTimer);
+      unsubscribeSync();
+      unsubscribeLocal();
+    };
+  }, []);
 
   useEffect(() => {
     const view = selectedViewRef.current;

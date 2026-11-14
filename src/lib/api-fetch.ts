@@ -2,6 +2,11 @@ import {
   clearStoredAuthToken,
   getStoredAuthToken,
 } from "@/lib/auth-session";
+import {
+  isNetworkError,
+  reportNetworkFailure,
+  reportNetworkSuccess,
+} from "@/lib/offline/network-status";
 
 type UnauthorizedListener = () => void;
 
@@ -26,10 +31,20 @@ export async function apiFetch(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(url, {
-    ...init,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers,
+    });
+  } catch (error) {
+    if (isNetworkError(error)) {
+      reportNetworkFailure();
+    }
+    throw error;
+  }
+
+  reportNetworkSuccess();
 
   if (response.status === 401) {
     await clearStoredAuthToken();

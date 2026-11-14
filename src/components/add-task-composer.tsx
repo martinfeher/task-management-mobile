@@ -35,7 +35,8 @@ import { VoiceNoteAttachmentChip } from "@/components/voice-note-attachment-chip
 import { useApp } from "@/contexts/app-context";
 import { useAppSettings } from "@/contexts/app-settings-context";
 import { useVoiceNoteRecorder } from "@/hooks/use-voice-note-recorder";
-import { fetchLabels } from "@/lib/api";
+import { isOnline } from "@/lib/offline/network-status";
+import { fetchLabels } from "@/lib/offline/task-repository";
 import { runAfterInteractions } from "@/lib/run-after-interactions";
 import { persistVoiceNotesForTask } from "@/lib/persist-task-voice-notes";
 import {
@@ -363,6 +364,11 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
           },
         ]);
       }
+      return;
+    }
+
+    if (!isOnline()) {
+      Alert.alert("Available when online", "Voice notes need a connection to upload.");
       return;
     }
 

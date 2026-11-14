@@ -8,8 +8,10 @@ import Constants from "expo-constants";
  * - There is no stored email/password for this user; plaintext cannot be read from the DB.
  * - Mobile email sign-in needs a `credential` account or use mobiletest1794071382@example.com
  *   with password in `dev-auto-sign-in.local.ts`.
+ * - Silent dev sign-in (preferred on phone): `DEV_MOBILE_SESSION_EMAIL` / password on
+ *   todolistWeb only + `EXPO_PUBLIC_DEV_MOBILE_SESSION_SECRET` in Expo `.env.local`.
  */
-export const DEFAULT_DEVELOPMENT_USER_EMAIL = "test@test.io";
+export const DEFAULT_DEVELOPMENT_USER_EMAIL = "mn.feher@gmail.com";
 
 export function getDefaultDevelopmentUserEmail(): string {
   const fromExtra = Constants.expoConfig?.extra?.devDefaultUserEmail;

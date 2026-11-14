@@ -10,11 +10,17 @@ import type { ReactNode } from "react";
 
 import { clearAllTaskSessions } from "@/lib/app-data-session";
 import { setApiUnauthorizedListener } from "@/lib/api-fetch";
+import {
+  bindOfflineStoreToUser,
+  clearOfflineStore,
+  readOfflineAuthUser,
+} from "@/lib/offline/offline-session";
 import { clearDedupeCache } from "@/lib/request-dedupe";
 import {
   clearStoredAuthToken,
-  fetchAuthSession,
+  fetchAuthSessionResult,
   getStoredAuthToken,
+  signInWithDevMobileSession,
   signInWithEmail,
   signOutOnServer,
   signUpWithEmail,
@@ -24,10 +30,15 @@ import {
   getDevAutoSignInCredentials,
   isDevAutoSignInEnabled,
 } from "@/lib/dev-auto-sign-in";
+import { isDevMobileSessionEnabled } from "@/lib/dev-mobile-session";
 
 type AuthStatus = "loading" | "signed-out" | "signed-in";
 
-export type DevAutoSignInIssue = "missing-password" | "failed" | null;
+export type DevAutoSignInIssue =
+  | "missing-password"
+  | "dev-session-failed"
+  | "failed"
+  | null;
 
 type AuthContextValue = {
   status: AuthStatus;
@@ -56,39 +67,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useState<DevAutoSignInIssue>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
 
-  const tryDevAutoSignIn = useCallback(async (): Promise<AuthUser | null> => {
-    if (!isDevAutoSignInEnabled()) {
-      setDevAutoSignInIssue(null);
-      return null;
+  const tryDevEmailAutoSignIn = useCallback(
+    async (devSessionFailed: boolean): Promise<AuthUser | null> => {
+      if (!isDevAutoSignInEnabled()) {
+        if (devSessionFailed) {
+          setDevAutoSignInIssue("dev-session-failed");
+        } else {
+          setDevAutoSignInIssue(null);
+        }
+        return null;
+      }
+
+      const credentials = getDevAutoSignInCredentials();
+      if (!credentials) {
+        if (devSessionFailed) {
+          setDevAutoSignInIssue("dev-session-failed");
+        } else {
+          setDevAutoSignInIssue("missing-password");
+        }
+        return null;
+      }
+
+      try {
+        const signedInUser = await signInWithEmail(
+          credentials.email,
+          credentials.password,
+        );
+        setDevAutoSignInIssue(null);
+        return signedInUser;
+      } catch {
+        setDevAutoSignInIssue(devSessionFailed ? "dev-session-failed" : "failed");
+        return null;
+      }
+    },
+    [],
+  );
+
+  const tryDevSilentSignIn = useCallback(async (): Promise<AuthUser | null> => {
+    let devSessionFailed = false;
+
+    if (isDevMobileSessionEnabled()) {
+      try {
+        const signedInUser = await signInWithDevMobileSession();
+        setDevAutoSignInIssue(null);
+        return signedInUser;
+      } catch {
+        devSessionFailed = true;
+      }
     }
 
-    const credentials = getDevAutoSignInCredentials();
-    if (!credentials) {
-      setDevAutoSignInIssue("missing-password");
-      return null;
-    }
+    return tryDevEmailAutoSignIn(devSessionFailed);
+  }, [tryDevEmailAutoSignIn]);
 
-    try {
-      const signedInUser = await signInWithEmail(
-        credentials.email,
-        credentials.password,
-      );
-      setDevAutoSignInIssue(null);
-      return signedInUser;
-    } catch {
-      setDevAutoSignInIssue("failed");
-      return null;
-    }
-  }, []);
+  const devSilentSignInAvailable =
+    isDevAutoSignInEnabled() || isDevMobileSessionEnabled();
 
   const handleSignedOut = useCallback(async () => {
     clearAppDataCaches();
     setUser(null);
 
-    if (isDevAutoSignInEnabled()) {
+    if (devSilentSignInAvailable) {
       setStatus("loading");
-      const devUser = await tryDevAutoSignIn();
+      const devUser = await tryDevSilentSignIn();
       if (devUser) {
+        await bindOfflineStoreToUser(devUser);
         setUser(devUser);
         setStatus("signed-in");
         return;
@@ -96,16 +138,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setStatus("signed-out");
-  }, [tryDevAutoSignIn]);
+  }, [devSilentSignInAvailable, tryDevSilentSignIn]);
 
   const bootstrap = useCallback(async () => {
     setStatus("loading");
     try {
       const token = await getStoredAuthToken();
       if (!token) {
-        const devUser = await tryDevAutoSignIn();
+        const devUser = await tryDevSilentSignIn();
         if (devUser) {
           clearAppDataCaches();
+          await bindOfflineStoreToUser(devUser);
           setUser(devUser);
           setStatus("signed-in");
           return;
@@ -115,12 +158,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const sessionUser = await fetchAuthSession(token);
+      const session = await fetchAuthSessionResult(token);
+      if (session.status === "unreachable") {
+        const offlineUser = await readOfflineAuthUser();
+        if (offlineUser) {
+          setUser(offlineUser);
+          setStatus("signed-in");
+          return;
+        }
+      }
+
+      const sessionUser = session.status === "ok" ? session.user : null;
       if (!sessionUser) {
         await clearStoredAuthToken();
-        const devUser = await tryDevAutoSignIn();
+        const devUser = await tryDevSilentSignIn();
         if (devUser) {
           clearAppDataCaches();
+          await bindOfflineStoreToUser(devUser);
           setUser(devUser);
           setStatus("signed-in");
           return;
@@ -130,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      await bindOfflineStoreToUser(sessionUser);
       setUser(sessionUser);
       setStatus("signed-in");
     } catch {
@@ -137,7 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setStatus("signed-out");
     }
-  }, [tryDevAutoSignIn]);
+  }, [tryDevSilentSignIn]);
 
   useEffect(() => {
     void bootstrap();
@@ -151,6 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string, password: string) => {
     const signedInUser = await signInWithEmail(email, password);
     clearAppDataCaches();
+    await bindOfflineStoreToUser(signedInUser);
     setUser(signedInUser);
     setStatus("signed-in");
   }, []);
@@ -159,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (input: { email: string; password: string; name: string }) => {
       const signedInUser = await signUpWithEmail(input);
       clearAppDataCaches();
+      await bindOfflineStoreToUser(signedInUser);
       setUser(signedInUser);
       setStatus("signed-in");
     },
@@ -172,11 +229,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const signedInUser = await completeGoogleSignIn();
     clearAppDataCaches();
     setDevAutoSignInIssue(null);
+    await bindOfflineStoreToUser(signedInUser);
     setUser(signedInUser);
     setStatus("signed-in");
   }, []);
 
   const signOut = useCallback(async () => {
+    await clearOfflineStore();
     await signOutOnServer();
     const { signOutGoogleSession } = await import("@/lib/auth-google-sign-in");
     await signOutGoogleSession();

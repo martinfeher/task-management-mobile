@@ -4,6 +4,10 @@ import {
   removeAuthToken,
   writeAuthToken,
 } from "@/lib/auth-token-storage";
+import {
+  getDevMobileSessionRequestHeaders,
+  isDevMobileSessionEnabled,
+} from "@/lib/dev-mobile-session";
 
 export type AuthUser = {
   id: string;
@@ -35,7 +39,12 @@ export async function clearStoredAuthToken() {
 
 const SESSION_FETCH_TIMEOUT_MS = 12_000;
 
-export async function fetchAuthSession(token: string) {
+export type AuthSessionResult =
+  | { status: "ok"; user: AuthUser }
+  | { status: "invalid" }
+  | { status: "unreachable" };
+
+export async function fetchAuthSessionResult(token: string): Promise<AuthSessionResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), SESSION_FETCH_TIMEOUT_MS);
 
@@ -48,17 +57,26 @@ export async function fetchAuthSession(token: string) {
       signal: controller.signal,
     });
   } catch {
-    return null;
+    return { status: "unreachable" };
   } finally {
     clearTimeout(timeout);
   }
 
-  if (!response.ok) {
-    return null;
+  if (response.status >= 500) {
+    return { status: "unreachable" };
   }
 
-  const data = (await response.json()) as { user?: AuthUser } | null;
-  return data?.user ?? null;
+  if (!response.ok) {
+    return { status: "invalid" };
+  }
+
+  const data = (await response.json().catch(() => null)) as { user?: AuthUser } | null;
+  return data?.user ? { status: "ok", user: data.user } : { status: "invalid" };
+}
+
+export async function fetchAuthSession(token: string) {
+  const result = await fetchAuthSessionResult(token);
+  return result.status === "ok" ? result.user : null;
 }
 
 async function persistTokenFromAuthResponse(response: Response) {
@@ -74,6 +92,41 @@ function authErrorMessage(body: AuthErrorBody, fallback: string) {
     return body.message;
   }
   return fallback;
+}
+
+/** Dev-only: server mints a session; password never leaves todolistWeb. */
+export async function signInWithDevMobileSession(): Promise<AuthUser> {
+  if (!isDevMobileSessionEnabled()) {
+    throw new Error("Dev mobile session is not enabled");
+  }
+
+  const sessionHeaders = getDevMobileSessionRequestHeaders();
+  if (!sessionHeaders) {
+    throw new Error("Dev mobile session secret is not configured");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/dev/mobile-session`, {
+    method: "POST",
+    headers: sessionHeaders,
+  });
+
+  const body = (await response.json().catch(() => ({}))) as AuthErrorBody;
+
+  if (!response.ok) {
+    throw new Error(authErrorMessage(body, "Dev session sign-in failed"));
+  }
+
+  const token = await persistTokenFromAuthResponse(response);
+  if (!token) {
+    throw new Error("Dev session succeeded but no session token was returned");
+  }
+
+  const user = await fetchAuthSession(token);
+  if (!user) {
+    throw new Error("Dev session signed in but could not load your profile");
+  }
+
+  return user;
 }
 
 export async function signInWithEmail(email: string, password: string) {

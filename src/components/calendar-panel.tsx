@@ -40,7 +40,7 @@ import {
   updateTaskPinned,
   updateTaskPriority,
   updateTaskSchedule,
-} from "@/lib/api";
+} from "@/lib/offline/task-repository";
 import { applyTaskReminder } from "@/lib/notifications";
 import { addDays, startOfDay, startOfWeek, toDateKey } from "@/lib/task-dates";
 import { buildTasksByDate } from "@/lib/task-repeat";

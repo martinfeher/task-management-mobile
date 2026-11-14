@@ -59,7 +59,7 @@ import {
   toggleTaskLabel,
   updateTaskPriority,
   updateTaskSchedule,
-} from "@/lib/api";
+} from "@/lib/offline/task-repository";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
 import { getTaskShareUrl } from "@/lib/task-link";
 import { useTaskListSubtasksExpanded } from "@/hooks/use-task-list-subtasks-expanded";

@@ -16,6 +16,8 @@ const AddTaskComposer = lazy(() =>
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import { ListsDrawerOverlay } from "@/components/lists-drawer-overlay";
 import { LastTabTracker } from "@/components/main-tabs-config";
+import { DevSessionBanner } from "@/components/dev-session-banner";
+import { SyncStatusPill } from "@/components/sync-status-pill";
 import { TaskAddedBadge } from "@/components/task-added-badge";
 import { AppProvider, useApp } from "@/contexts/app-context";
 import { AppSettingsProvider } from "@/contexts/app-settings-context";
@@ -104,6 +106,8 @@ function AuthenticatedApp() {
             <AddTaskComposerHost />
             <TaskAddedBadge />
             <ListsDrawerOverlay />
+            <SyncStatusPill />
+            <DevSessionBanner />
           </View>
           </HistoryActionsProvider>
         </TextFormatToolbarProvider>
