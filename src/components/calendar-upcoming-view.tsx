@@ -40,6 +40,8 @@ type CalendarUpcomingViewProps = {
   onToggleComplete: (taskId: string, completed: boolean) => void;
   onOpenContextMenu: (task: TaskItem, anchor: TaskContextMenuAnchor) => void;
   onSelectDate?: (date: Date) => void;
+  /** List name the tasks come from, or "All lists" when not scoped to one list. */
+  scopeLabel?: string;
 };
 
 type UpcomingSection =
@@ -140,6 +142,7 @@ export function CalendarUpcomingView({
   onToggleComplete,
   onOpenContextMenu,
   onSelectDate,
+  scopeLabel = "All lists",
 }: CalendarUpcomingViewProps) {
   const screenWidth = Dimensions.get("window").width;
   const dayCellWidth = screenWidth / 7;
@@ -383,10 +386,20 @@ export function CalendarUpcomingView({
     <View className="flex-1">
       <View className="shrink-0 grow-0 border-b border-[#e5e7eb]  -mt-2">
         <View className="flex-row items-center justify-between px-4 pb-0.5 mb-1">
-          <ThemedText className="text-[15px] font-semibold" style={{ color: "#494949" }}>
-            {stripMonthLabel}
-          </ThemedText>
-     
+          <View className="min-w-0 flex-1 flex-row items-baseline gap-2 pr-3">
+            <ThemedText className="text-[15px] font-semibold" style={{ color: "#494949" }}>
+              {stripMonthLabel}
+            </ThemedText>
+            <ThemedText
+              accessibilityLabel={`Showing tasks from ${scopeLabel}`}
+              className="shrink text-[12px] font-medium"
+              numberOfLines={1}
+              style={{ color: "#A5A8AC" }}
+            >
+              {scopeLabel}
+            </ThemedText>
+          </View>
+
           <View className="items-end" style={{ marginTop: -4 }}>
             {!isSameDay(selectedStripDate, today) ? (
               <Pressable
@@ -532,7 +545,7 @@ export function CalendarUpcomingView({
                     accessibilityState={
                       canToggleOverdue ? { expanded: overdueExpanded } : undefined
                     }
-                    className="flex-row items-center justify-between px-4 py-1"
+                    className="flex-row items-center justify-between px-4 pt-1 pb-0.5"
                     disabled={!canToggleOverdue}
                     hitSlop={canToggleOverdue ? { top: 4, bottom: 4 } : undefined}
                     onPress={toggleOverdueExpanded}
@@ -608,7 +621,10 @@ export function CalendarUpcomingView({
               >
                 <ThemedText
                   className="px-4 py-0 text-[10px] font-bold"
-                  style={{ color: "#A5A8AC" }}
+                  style={{
+                    color: "#A5A8AC",
+                    marginBottom: section.tasks.length > 0 ? -2 : 0,
+                  }}
                 >
                   {title}
                 </ThemedText>

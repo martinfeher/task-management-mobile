@@ -228,6 +228,7 @@ const SUBTASKS_DRAWER_SPRING = { damping: 24, stiffness: 320 };
 const SUBTASK_DRAG_ACTIVE_SCALE = 0.97;
 const MARK_COMPLETE_BUTTON_SIZE = 36;
 const MARK_COMPLETE_BUTTON_HEIGHT = 26;
+const MARK_COMPLETE_BOTTOM_NUDGE = 15;
 const HISTORY_ACTIONS_ABOVE_MARK_COMPLETE = 7;
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -2011,10 +2012,12 @@ export function TaskDetailScreen() {
     layoutToolbarHeight +
     activeSubtasksDrawerHeight +
     Spacing.two;
+  const markCompleteButtonBottom =
+    taskBodyActionButtonsBottom - MARK_COMPLETE_BOTTOM_NUDGE;
 
   // Anchor undo/redo 7px above the Mark complete pill (same horizontal stack).
   const historyActionsBottomOffset =
-    taskBodyActionButtonsBottom +
+    markCompleteButtonBottom +
     MARK_COMPLETE_BUTTON_HEIGHT +
     HISTORY_ACTIONS_ABOVE_MARK_COMPLETE;
 
@@ -3063,7 +3066,7 @@ export function TaskDetailScreen() {
           {!subtasksSectionOpen
             ? renderMarkCompleteButton({
                 right: 10,
-                bottom: taskBodyActionButtonsBottom,
+                bottom: markCompleteButtonBottom,
               })
             : null}
 
@@ -3079,7 +3082,7 @@ export function TaskDetailScreen() {
               className="absolute z-20 h-[36px] w-[36px] items-center justify-center rounded-full bg-gray-100 active:opacity-85"
               style={{
                 right: MARK_COMPLETE_BUTTON_SIZE + 18,
-                bottom: taskBodyActionButtonsBottom,
+                bottom: markCompleteButtonBottom,
               }}
             >
               <RiCollapseDiagonal2LineIcon size={17} color="#7a8494" />

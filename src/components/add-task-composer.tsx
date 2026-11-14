@@ -1073,7 +1073,6 @@ const styles = StyleSheet.create({
   },
   moreMenu: {
     minWidth: 168,
-    overflow: "hidden",
   },
   moreMenuRow: {
     flexDirection: "row",

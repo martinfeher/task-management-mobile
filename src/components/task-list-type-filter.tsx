@@ -13,7 +13,7 @@ import type { TaskItem } from "@/types/todo";
 
 export type TaskListContentFilter = "all" | "notes" | "tasks";
 
-export const TASK_LIST_TYPE_FILTER_ABOVE_FAB_GAP = 10;
+export const TASK_LIST_TYPE_FILTER_ABOVE_FAB_GAP = 11;
 export const TASK_LIST_TYPE_FILTER_EXTRA_SCROLL_PADDING = 41;
 
 const FILTER_OPTIONS: Array<{ id: TaskListContentFilter; label: string }> = [

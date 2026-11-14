@@ -617,7 +617,7 @@ export function CalendarPanel() {
         {isUpcomingView ? (
           <CalendarUpcomingView
             key={upcomingSessionKey}
-         
+            scopeLabel="All lists"
             tasks={calendarTasks}
             loading={calendarLoading}
             refreshing={calendarRefreshing}
