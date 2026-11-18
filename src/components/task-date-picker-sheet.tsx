@@ -117,6 +117,25 @@ const REMINDER_PICKER_ROW_HEIGHT = 44;
 const REMINDER_PICKER_MENU_WIDTH = 220;
 const REMINDER_PICKER_ESTIMATED_HEIGHT =
   REMINDER_PICKER_OPTIONS.length * REMINDER_PICKER_ROW_HEIGHT + 12;
+const REMINDER_VALUE_COLOR = "#afafba";
+
+function formatReminderOffsetLabel(offsetMinutes: number) {
+  const preset = REMINDER_PICKER_OPTIONS.find(
+    (option) =>
+      option.offsetMinutes != null && option.offsetMinutes === offsetMinutes,
+  );
+  if (preset) return preset.label;
+  if (offsetMinutes <= 0) return "On time";
+  if (offsetMinutes < 60) {
+    return `${offsetMinutes} minute${offsetMinutes === 1 ? "" : "s"} early`;
+  }
+  if (offsetMinutes < 24 * 60) {
+    const hours = Math.round(offsetMinutes / 60);
+    return `${hours} hour${hours === 1 ? "" : "s"} early`;
+  }
+  const days = Math.round(offsetMinutes / (24 * 60));
+  return `${days} day${days === 1 ? "" : "s"} early`;
+}
 
 function fromMinutes(minutes: number | null) {
   if (minutes == null) {
@@ -1310,7 +1329,11 @@ export function TaskDatePickerSheet({
                     style={styles.reminderButton}
                     onPress={openReminderPicker}
                     accessibilityRole="button"
-                    accessibilityLabel="Reminder"
+                    accessibilityLabel={
+                      reminderEnabled
+                        ? `Reminder, ${formatReminderOffsetLabel(reminderOffsetMinutes)}`
+                        : "Reminder"
+                    }
                     accessibilityState={{ selected: reminderEnabled }}
                   >
                     <View
@@ -1324,15 +1347,25 @@ export function TaskDatePickerSheet({
                         color={reminderEnabled ? "#ffffff" : "#393939"}
                       />
                     </View>
-                    <ThemedText
-                      style={[
-                        styles.reminderButtonText,
-                        (reminderEnabled || reminderPickerAnchor) &&
-                          styles.reminderButtonTextActive,
-                      ]}
-                    >
-                      Reminder
-                    </ThemedText>
+                    <View style={styles.reminderLabelRow}>
+                      <ThemedText
+                        style={[
+                          styles.reminderButtonText,
+                          (reminderEnabled || reminderPickerAnchor) &&
+                            styles.reminderButtonTextActive,
+                        ]}
+                      >
+                        Reminder
+                      </ThemedText>
+                      {reminderEnabled ? (
+                        <ThemedText
+                          style={styles.reminderValueText}
+                          numberOfLines={1}
+                        >
+                          {formatReminderOffsetLabel(reminderOffsetMinutes)}
+                        </ThemedText>
+                      ) : null}
+                    </View>
                   </Pressable>
                 </View>
               </>
@@ -1924,6 +1957,13 @@ const styles = StyleSheet.create({
     borderColor: TIME_PICKER_BLUE,
     borderStyle: "solid",
   },
+  reminderLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
+    minWidth: 0,
+  },
   reminderButtonText: {
     fontSize: 13.5,
     lineHeight: 15,
@@ -1933,6 +1973,14 @@ const styles = StyleSheet.create({
   },
   reminderButtonTextActive: {
     color: TIME_PICKER_BLUE,
+  },
+  reminderValueText: {
+    fontSize: 10.5,
+    lineHeight: 15,
+    fontWeight: "400",
+    marginTop: 1,
+    color: REMINDER_VALUE_COLOR,
+    flexShrink: 1,
   },
   reminderPickerOverlay: {
     ...StyleSheet.absoluteFill,

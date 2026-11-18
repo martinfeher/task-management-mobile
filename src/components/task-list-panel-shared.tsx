@@ -352,6 +352,7 @@ export function StaticTaskSection({
           <View key={block.id}>
             <TaskRow
               task={block.root}
+              showPreviewImage
               showListName={showListName}
               onToggleComplete={onToggleComplete}
               onPress={onPressTask}
@@ -368,6 +369,7 @@ export function StaticTaskSection({
               <TaskRow
                 key={child.id}
                 task={child}
+                showPreviewImage
                 showListName={showListName}
                 onToggleComplete={onToggleComplete}
                 onPress={onPressTask}

@@ -156,7 +156,7 @@ const TASK_ROW_MIN_HEIGHT = 54;
 const TASK_ROW_SUBTASK_MIN_HEIGHT = 46;
 const PREVIEW_IMAGE_GAP = 10;
 /** Thumbnail side as a fraction of the row height. */
-const PREVIEW_IMAGE_HEIGHT_RATIO = 0.85;
+const PREVIEW_IMAGE_HEIGHT_RATIO = 0.7;
 
 function TaskLabelChip({ label }: { label: TaskLabel }) {
   const backgroundColor = getLabelDotColor(label);

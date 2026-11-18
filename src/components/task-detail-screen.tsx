@@ -65,6 +65,11 @@ import {
   TaskPriorityFlagPopup,
 } from "@/components/task-priority-flag-popup";
 import { ThemedText } from "@/components/themed-text";
+import {
+  TASK_EDIT_EXPAND_ICON_BACKGROUND,
+  TASK_EDIT_SHEET_BACKGROUND,
+  TASK_SHEET_MIN_HEIGHT_FRACTION,
+} from "@/constants/task-edit-sheet";
 import { Spacing } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
 import { useAppSettings } from "@/contexts/app-settings-context";
@@ -206,8 +211,6 @@ const DETAILS_SAVE_DEBOUNCE_MS = 700;
 /** Wait for native editor init callbacks before allowing notes persistence. */
 const NOTES_HYDRATION_DELAY_MS = 1000;
 const HISTORY_COMMIT_DEBOUNCE_MS = 500;
-/** Minimum collapsed sheet height as a fraction of the screen. */
-const TASK_SHEET_MIN_HEIGHT_FRACTION = 0.47;
 /** Max scroll area when notes are long; keeps the sheet from exceeding ~80% screen. */
 const TASK_SHEET_MAX_HEIGHT_FRACTION = 0.8;
 const TASK_DETAIL_HANDLE_HEIGHT = 28;
@@ -1896,7 +1899,7 @@ export function TaskDetailScreen() {
           : "fitToContents",
       sheetExpandsWhenScrolledToEdge: !expandedFullscreen,
       contentStyle: {
-        backgroundColor: "#ffffff",
+        backgroundColor: TASK_EDIT_SHEET_BACKGROUND,
       },
     });
   }, [expandedFullscreen, navigation, openedFromCalendar]);
@@ -2641,8 +2644,9 @@ export function TaskDetailScreen() {
   return (
     <>
       <KeyboardAvoidingView
-        className="relative bg-white"
+        className="relative"
         style={[
+          { backgroundColor: TASK_EDIT_SHEET_BACKGROUND },
           { minHeight: sheetMinHeight },
           expandedFullscreen && { minHeight: expandedContainerHeight },
         ]}
@@ -2683,7 +2687,8 @@ export function TaskDetailScreen() {
                 setPriorityMenuOpen(false);
                 setExpandedFullscreen(true);
               }}
-              className="absolute right-[52px] top-2.5 z-20 h-[36px] w-[36px] items-center justify-center rounded-full bg-gray-100"
+              className="absolute right-[52px] top-2.5 z-20 h-[36px] w-[36px] items-center justify-center rounded-full"
+              style={{ backgroundColor: TASK_EDIT_EXPAND_ICON_BACKGROUND }}
             >
               <PiResizeThinIcon size={17} color="#7a8494" />
             </Pressable>
@@ -3115,7 +3120,8 @@ export function TaskDetailScreen() {
 
           {showDetailToolbar ? (
             <View
-              className="shrink-0 border-t border-gray-200 bg-white pt-2"
+              className="shrink-0 border-t border-gray-200 pt-2"
+              style={{ backgroundColor: TASK_EDIT_SHEET_BACKGROUND }}
               style={[
                 toolbarSafeAreaStyle,
                 toolbarPinnedToKeyboard
@@ -3303,7 +3309,7 @@ export function TaskDetailScreen() {
           }
           onClose={() => setLabelPickerOpen(false)}
           fullScreen
-          sheetHeightRatio={0.475}
+          sheetHeightRatio={TASK_SHEET_MIN_HEIGHT_FRACTION}
         />
       ) : null}
     </>

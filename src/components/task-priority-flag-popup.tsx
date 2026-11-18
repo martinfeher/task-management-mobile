@@ -155,8 +155,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#e5e7eb",
     paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 6,
+    paddingTop: 10,
+    paddingBottom: 4,
     shadowColor: "#000000",
     shadowOpacity: 0.12,
     shadowRadius: 12,
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     color: "#9ca3af",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   row: {
     flexDirection: "row",
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   noneRow: {
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 2,
   },
   noneRowPressed: {

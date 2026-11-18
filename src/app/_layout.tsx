@@ -19,6 +19,10 @@ import { LastTabTracker } from "@/components/main-tabs-config";
 import { DevSessionBanner } from "@/components/dev-session-banner";
 import { SyncStatusPill } from "@/components/sync-status-pill";
 import { TaskAddedBadge } from "@/components/task-added-badge";
+import {
+  TASK_EDIT_SHEET_BACKGROUND,
+  TASK_SHEET_MIN_HEIGHT_FRACTION,
+} from "@/constants/task-edit-sheet";
 import { AppProvider, useApp } from "@/contexts/app-context";
 import { AppSettingsProvider } from "@/contexts/app-settings-context";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
@@ -87,10 +91,15 @@ function AuthenticatedApp() {
                 options={{
                   presentation: "formSheet",
                   headerShown: false,
-                  sheetAllowedDetents: [0.47, 1],
+                  sheetAllowedDetents: [
+                    TASK_SHEET_MIN_HEIGHT_FRACTION,
+                    1,
+                  ],
                   sheetInitialDetentIndex: 0,
                   sheetGrabberVisible: false,
-                  contentStyle: { backgroundColor: "#ffffff" },
+                  contentStyle: {
+                    backgroundColor: TASK_EDIT_SHEET_BACKGROUND,
+                  },
                 }}
               />
               <Stack.Screen

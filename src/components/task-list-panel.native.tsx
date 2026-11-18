@@ -409,6 +409,7 @@ export function TaskListPanel({
         <View key={item.id}>
           <TaskRow
             task={item.root}
+            showPreviewImage
             showListName={showListName}
             onToggleComplete={handleToggleComplete}
             onPress={handleTaskPress}
@@ -429,6 +430,7 @@ export function TaskListPanel({
             <TaskRow
               key={child.id}
               task={child}
+              showPreviewImage
               showListName={showListName}
               onToggleComplete={handleToggleComplete}
               onPress={handleTaskPress}
@@ -466,6 +468,7 @@ export function TaskListPanel({
         <ScaleDecorator activeScale={1}>
           <TaskRow
             task={item.root}
+            showPreviewImage
             showListName={showListName}
             onToggleComplete={handleToggleComplete}
             onPress={handleTaskPress}
@@ -490,6 +493,7 @@ export function TaskListPanel({
             <TaskRow
               key={child.id}
               task={child}
+              showPreviewImage
               showListName={showListName}
               onToggleComplete={handleToggleComplete}
               onPress={handleTaskPress}

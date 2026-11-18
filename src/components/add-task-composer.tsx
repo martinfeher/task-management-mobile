@@ -24,11 +24,13 @@ import { AppSymbol } from "@/components/app-symbol";
 import { IoMdTimeIcon } from "@/components/io-md-time-icon";
 import { LiquidGlassSurface } from "@/components/liquid-glass-surface";
 import { RiAttachment2Icon } from "@/components/ri-attachment2-icon";
-import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
 import { TaskDatePickerSheet } from "@/components/task-date-picker-sheet";
 import { TaskLabelPicker } from "@/components/task-label-picker";
 import { TaskListPicker } from "@/components/task-list-picker";
-import { getTaskPriorityColor } from "@/components/task-priority-flag-popup";
+import {
+  getTaskPriorityColor,
+  TaskPriorityFlagPopup,
+} from "@/components/task-priority-flag-popup";
 import { ThemedText } from "@/components/themed-text";
 import { VoiceInputIcon } from "@/components/voice-input-icon";
 import { VoiceNoteAttachmentChip } from "@/components/voice-note-attachment-chip";
@@ -544,40 +546,6 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                   </View>
                 ) : null}
 
-                {priorityMenuOpen ? (
-                  <View style={styles.priorityMenu}>
-                    {TASK_PRIORITY_OPTIONS.map((option) => (
-                      <Pressable
-                        key={option.level}
-                        style={styles.priorityOption}
-                        onPress={() => {
-                          setPriority(option.level);
-                          setPriorityMenuOpen(false);
-                        }}
-                      >
-                        <View
-                          style={[
-                            styles.priorityDot,
-                            { backgroundColor: option.color },
-                          ]}
-                        />
-                        <ThemedText>{option.label}</ThemedText>
-                      </Pressable>
-                    ))}
-                    <Pressable
-                      style={styles.priorityOption}
-                      onPress={() => {
-                        setPriority(null);
-                        setPriorityMenuOpen(false);
-                      }}
-                    >
-                      <ThemedText style={styles.clearPriority}>
-                        Clear priority
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                ) : null}
-
                 <View style={styles.divider} />
 
                 <View style={styles.toolbar}>
@@ -666,6 +634,24 @@ export function AddTaskComposer({ visible, onClose }: AddTaskComposerProps) {
                             </ThemedText>
                           </Pressable>
                         </View>
+                        {priorityMenuOpen ? (
+                          <TaskPriorityFlagPopup
+                            embedded
+                            selected={priority}
+                            onSelect={(value) => {
+                              setPriority(value);
+                              setPriorityMenuOpen(false);
+                            }}
+                            onClose={() => setPriorityMenuOpen(false)}
+                            style={{
+                              position: "absolute",
+                              bottom: 40,
+                              left: -24,
+                              zIndex: 32,
+                              elevation: 32,
+                            }}
+                          />
+                        ) : null}
                       </View>
 
                       <View style={styles.moreMenuAnchor}>
@@ -994,30 +980,6 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     fontWeight: "600",
     color: "#ffffff",
-  },
-  priorityMenu: {
-    marginTop: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#e5e7eb",
-    borderRadius: 10,
-    overflow: "hidden",
-  },
-  priorityOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#f3f4f6",
-  },
-  priorityDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  clearPriority: {
-    color: "#6b7280",
   },
   divider: {
     height: StyleSheet.hairlineWidth,
