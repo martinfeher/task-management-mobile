@@ -18,6 +18,7 @@ import {
   setMetaJson,
 } from "@/lib/offline/local-store";
 import { isNetworkError, isOnline } from "@/lib/offline/network-status";
+import { extractPreviewImage } from "@/lib/task-preview-image";
 import { CLOCK_OFFSET_META_KEY, requestSync, syncNow } from "@/lib/offline/sync-engine";
 import {
   createLocalTaskId,
@@ -342,7 +343,11 @@ export async function updateTaskName(taskId: string, name: string) {
 }
 
 export async function updateTaskDetails(taskId: string, details: string) {
-  await applyFieldUpdate(taskId, { details, detailsDoc: null, hasDetail: true }, { details });
+  await applyFieldUpdate(
+    taskId,
+    { details, detailsDoc: null, hasDetail: true, previewImage: extractPreviewImage(details) },
+    { details },
+  );
 }
 
 export async function updateTaskSchedule(

@@ -375,6 +375,7 @@ export function CalendarUpcomingView({
         showListName
         listNameColor="#c2c2c2"
         priorityBeforeAssignedLabels
+        showPreviewImage
         onPress={onPressTask}
         onToggleComplete={onToggleComplete}
         onOpenContextMenu={onOpenContextMenu}
@@ -385,6 +386,13 @@ export function CalendarUpcomingView({
   return (
     <View className="flex-1">
       <View className="shrink-0 grow-0 border-b border-[#e5e7eb]  -mt-2">
+        <ThemedText
+          accessibilityRole="header"
+          className="px-4 pt-1.5 pb-0.5 text-[14px] font-semibold"
+          style={{ color: "#c4c8ca" }}
+        >
+          Upcoming
+        </ThemedText>
         <View className="flex-row items-center justify-between px-4 pb-0.5 mb-1">
           <View className="min-w-0 flex-1 flex-row items-baseline gap-2 pr-3">
             <ThemedText className="text-[15px] font-semibold" style={{ color: "#494949" }}>
@@ -394,7 +402,7 @@ export function CalendarUpcomingView({
               accessibilityLabel={`Showing tasks from ${scopeLabel}`}
               className="shrink text-[12px] font-medium"
               numberOfLines={1}
-              style={{ color: "#A5A8AC" }}
+              style={{ color: "#CCCFD4" }}
             >
               {scopeLabel}
             </ThemedText>

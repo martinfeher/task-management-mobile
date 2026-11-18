@@ -3,6 +3,7 @@ import { MdKeyboardArrowDownIcon } from "@/components/md-keyboard-arrow-down-ico
 import { PiNoteLightIcon } from "@/components/pi-note-light-icon";
 import { RiArrowDropRightLineIcon } from "@/components/ri-arrow-drop-right-line-icon";
 import { TaskCheckbox } from "@/components/task-checkbox";
+import { TaskRowPreviewImage } from "@/components/task-row-preview-image";
 import type { TaskContextMenuAnchor } from "@/components/task-context-menu";
 import { TASK_PRIORITY_OPTIONS } from "@/components/task-context-menu";
 import { ThemedText } from "@/components/themed-text";
@@ -147,7 +148,15 @@ type TaskRowProps = {
   /** Put the priority flag immediately before assigned label chips. */
   priorityBeforeAssignedLabels?: boolean;
   listNameColor?: string;
+  /** Show a square thumbnail of the first image in the task content. */
+  showPreviewImage?: boolean;
 };
+
+const TASK_ROW_MIN_HEIGHT = 54;
+const TASK_ROW_SUBTASK_MIN_HEIGHT = 46;
+const PREVIEW_IMAGE_GAP = 10;
+/** Thumbnail side as a fraction of the row height. */
+const PREVIEW_IMAGE_HEIGHT_RATIO = 0.85;
 
 function TaskLabelChip({ label }: { label: TaskLabel }) {
   const backgroundColor = getLabelDotColor(label);
@@ -181,7 +190,17 @@ export function TaskRow({
   showSubtaskCollapseToggle = false,
   priorityBeforeAssignedLabels = false,
   listNameColor,
+  showPreviewImage = false,
 }: TaskRowProps) {
+  const previewImagePath = showPreviewImage ? (task.previewImage ?? null) : null;
+  const [measuredRowHeight, setMeasuredRowHeight] = useState<number | null>(
+    null,
+  );
+  const previewImageSize = Math.round(
+    (measuredRowHeight ??
+      (task.depth > 0 ? TASK_ROW_SUBTASK_MIN_HEIGHT : TASK_ROW_MIN_HEIGHT)) *
+      PREVIEW_IMAGE_HEIGHT_RATIO,
+  );
   const dueDateParts = formatTaskDueDateParts(
     task.dueDate,
     task.dueTimeMinutes,
@@ -829,6 +848,11 @@ export function TaskRow({
           </View>
         ) : null}
       </View>
+      {previewImagePath ? (
+        <View style={styles.previewImageWrap}>
+          <TaskRowPreviewImage path={previewImagePath} size={previewImageSize} />
+        </View>
+      ) : null}
       {!isDragging ? (
         <View pointerEvents="none" style={styles.separator} />
       ) : null}
@@ -846,6 +870,16 @@ export function TaskRow({
       }
     >
       <AnimatedView
+        onLayout={
+          showPreviewImage
+            ? (event) => {
+                const height = Math.round(event.nativeEvent.layout.height);
+                setMeasuredRowHeight((current) =>
+                  current === height ? current : height,
+                );
+              }
+            : undefined
+        }
         style={[
           styles.row,
           useCompactRowLayout && styles.rowNoDueDate,
@@ -867,7 +901,7 @@ const styles = StyleSheet.create({
     overflow: "visible",
   },
   row: {
-    minHeight: 54,
+    minHeight: TASK_ROW_MIN_HEIGHT,
     flexDirection: "row",
     alignItems: "stretch",
     paddingLeft: TASK_ROW_HORIZONTAL_INSET,
@@ -888,7 +922,11 @@ const styles = StyleSheet.create({
   },
   subtaskRow: {
     paddingLeft: 44,
-    minHeight: 46,
+    minHeight: TASK_ROW_SUBTASK_MIN_HEIGHT,
+  },
+  previewImageWrap: {
+    alignSelf: "center",
+    marginLeft: PREVIEW_IMAGE_GAP,
   },
   subtaskContentPressable: {
     paddingVertical: 4,

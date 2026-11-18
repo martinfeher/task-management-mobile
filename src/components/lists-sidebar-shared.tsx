@@ -32,6 +32,7 @@ import { fetchLabels } from "@/lib/offline/task-repository";
 import { findInboxList } from "@/lib/inbox-list";
 
 const LISTS_PINNED_ICON_COLOR = "#C1C1CE";
+const LABELS_SIDEBAR_TAG_ICON_COLOR = "#E9E8F2";
 import { getLabelDotColor } from "@/lib/label-colors";
 import type {
   SelectedView,
@@ -422,7 +423,9 @@ export function ListsLabelsSection({
                     <IoMdPricetagIcon
                       size={17}
                       color={
-                        selected ? SIDEBAR_SELECTED_ICON_COLOR : "#E6E5F0"
+                        selected
+                          ? SIDEBAR_SELECTED_ICON_COLOR
+                          : LABELS_SIDEBAR_TAG_ICON_COLOR
                       }
                     />
                   </View>

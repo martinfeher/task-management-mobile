@@ -52,6 +52,7 @@ import { RiCollapseDiagonal2LineIcon } from "@/components/ri-collapse-diagonal-2
 import { VoiceInputIcon } from "@/components/voice-input-icon";
 import { VoiceNoteAttachmentChip } from "@/components/voice-note-attachment-chip";
 import { TaskCheckbox } from "@/components/task-checkbox";
+import { TaskImageLightbox } from "@/components/task-image-lightbox";
 import {
   TaskDatePickerSheet,
   type TaskScheduleSelection,
@@ -299,6 +300,9 @@ export function TaskDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [imageLightboxIndex, setImageLightboxIndex] = useState<number | null>(
+    null,
+  );
   const [listPickerOpen, setListPickerOpen] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [subtasksSectionOpen, setSubtasksSectionOpen] = useState(false);
@@ -1311,6 +1315,12 @@ export function TaskDetailScreen() {
     return htmlMediaBlocks;
   }, [detail]);
 
+  const imageUris = useMemo(
+    () =>
+      mediaBlocks.flatMap((block) => (block.type === "image" ? [block.uri] : [])),
+    [mediaBlocks],
+  );
+
   const dueDateLabel = formatTaskDueDate(
     detail != null ? detail.dueDate : (dueDate ?? null),
     detail?.dueTimeMinutes,
@@ -2012,8 +2022,11 @@ export function TaskDetailScreen() {
     layoutToolbarHeight +
     activeSubtasksDrawerHeight +
     Spacing.two;
+  // In full height, lift the complete + collapse buttons 10px higher.
   const markCompleteButtonBottom =
-    taskBodyActionButtonsBottom - MARK_COMPLETE_BOTTOM_NUDGE;
+    taskBodyActionButtonsBottom -
+    MARK_COMPLETE_BOTTOM_NUDGE +
+    (expandedFullscreen ? 10 : 0);
 
   // Anchor undo/redo 7px above the Mark complete pill (same horizontal stack).
   const historyActionsBottomOffset =
@@ -3011,18 +3024,29 @@ export function TaskDetailScreen() {
                 {mediaBlocks.map((block, index) => {
                   if (block.type === "image") {
                     return (
-                      <Image
+                      <Pressable
                         key={`image-${index}`}
-                        source={{ uri: block.uri }}
-                        style={{
-                          width: "100%",
-                          height: 240,
-                          borderRadius: 18,
-                          marginBottom: Spacing.three,
-                          backgroundColor: "#f3f4f6",
+                        accessibilityRole="imagebutton"
+                        accessibilityLabel="Open image preview"
+                        onPress={() => {
+                          Keyboard.dismiss();
+                          const imageIndex = imageUris.indexOf(block.uri);
+                          setImageLightboxIndex(Math.max(imageIndex, 0));
                         }}
-                        contentFit="cover"
-                      />
+                      >
+                        <Image
+                          source={{ uri: block.uri }}
+                          style={{
+                            width: "100%",
+                            height: 240,
+                            borderRadius: 18,
+                            marginBottom: Spacing.three,
+                            backgroundColor: "#f3f4f6",
+                            boxShadow: "0 4px 8px rgba(0,0,0,0.05)",
+                          }}
+                          contentFit="cover"
+                        />
+                      </Pressable>
                     );
                   }
 
@@ -3264,6 +3288,12 @@ export function TaskDetailScreen() {
         </View>
       </KeyboardAvoidingView>
       {scheduleUndoOverlay}
+      <TaskImageLightbox
+        images={imageUris}
+        initialIndex={imageLightboxIndex}
+        title={detail?.name}
+        onClose={() => setImageLightboxIndex(null)}
+      />
       {labelPickerOpen ? (
         <TaskLabelPicker
           labels={allLabels}

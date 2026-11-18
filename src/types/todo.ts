@@ -56,6 +56,8 @@ export type TaskItem = {
   labels: TaskLabel[];
   listId: string;
   listName?: string;
+  /** Path/URL of the first image in the task content, if any. */
+  previewImage?: string | null;
 };
 
 export type SearchTask = {

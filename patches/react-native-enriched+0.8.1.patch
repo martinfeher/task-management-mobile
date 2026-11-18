@@ -86,6 +86,24 @@ index feec78c..6e4e248 100644
    self.host.textView.selectedRange = newSelect;
  }
  
+diff --git a/node_modules/react-native-enriched/ios/utils/AttachmentLayoutUtils.mm b/node_modules/react-native-enriched/ios/utils/AttachmentLayoutUtils.mm
+index ace6ee3..5e8a8d2 100644
+--- a/node_modules/react-native-enriched/ios/utils/AttachmentLayoutUtils.mm
++++ b/node_modules/react-native-enriched/ios/utils/AttachmentLayoutUtils.mm
+@@ -68,6 +68,13 @@
+                                UIViewContentModeScaleAspectFit;
+                            imgView.tintColor = [UIColor labelColor];
+ 
++                           // Subtle shadow: 0 3px 5px rgba(0,0,0,0.04)
++                           imgView.layer.shadowColor =
++                               [UIColor blackColor].CGColor;
++                           imgView.layer.shadowOpacity = 0.04f;
++                           imgView.layer.shadowOffset = CGSizeMake(0, 3);
++                           imgView.layer.shadowRadius = 2.5f;
++
+                            // Add it directly to the TextView
+                            [textView addSubview:imgView];
+                          }
 diff --git a/node_modules/react-native-enriched/ios/utils/TextInsertionUtils.mm b/node_modules/react-native-enriched/ios/utils/TextInsertionUtils.mm
 index a6911cd..58e4dec 100644
 --- a/node_modules/react-native-enriched/ios/utils/TextInsertionUtils.mm
