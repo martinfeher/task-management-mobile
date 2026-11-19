@@ -41,7 +41,6 @@ import {
   updateTaskPriority,
   updateTaskSchedule,
 } from "@/lib/offline/task-repository";
-import { applyTaskReminder } from "@/lib/notifications";
 import { addDays, startOfDay, startOfWeek, toDateKey } from "@/lib/task-dates";
 import { buildTasksByDate } from "@/lib/task-repeat";
 import type { TaskItem, TaskLabel } from "@/types/todo";
@@ -457,12 +456,6 @@ export function CalendarPanel() {
 
     try {
       const result = await updateTaskSchedule(task.id, update);
-      await applyTaskReminder({
-        taskId: task.id,
-        taskName: task.name,
-        dueDate: result.dueDate,
-        dueTimeMinutes: result.dueTimeMinutes,
-      });
       patchCalendarTask(task.id, {
         dueDate: result.dueDate,
         dueTimeMinutes: result.dueTimeMinutes,
@@ -479,19 +472,12 @@ export function CalendarPanel() {
     if (!rescheduleTask) return;
     try {
       const result = await updateTaskSchedule(rescheduleTask.id, selection);
-      await applyTaskReminder({
-        taskId: rescheduleTask.id,
-        taskName: rescheduleTask.name,
-        dueDate: result.dueDate,
-        dueTimeMinutes: result.dueTimeMinutes,
-        reminderEnabled: selection.reminderEnabled,
-        reminderOffsetMinutes: selection.reminderOffsetMinutes,
-      });
       patchCalendarTask(rescheduleTask.id, {
         dueDate: result.dueDate,
         dueTimeMinutes: result.dueTimeMinutes,
         dueDurationMinutes: result.dueDurationMinutes,
         dueRepeat: selection.dueRepeat ?? null,
+        reminderOffsetMinutes: result.reminderOffsetMinutes,
       });
       await loadCalendarTasks(true);
     } catch {
@@ -896,6 +882,7 @@ export function CalendarPanel() {
         dueTimeMinutes={rescheduleTask?.dueTimeMinutes ?? null}
         dueDurationMinutes={rescheduleTask?.dueDurationMinutes ?? null}
         dueRepeat={rescheduleTask?.dueRepeat ?? null}
+        reminderOffsetMinutes={rescheduleTask?.reminderOffsetMinutes ?? null}
         onSelect={(selection) => void handleReschedule(selection)}
         onClose={() => setRescheduleTask(null)}
       />

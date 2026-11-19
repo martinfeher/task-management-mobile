@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -66,8 +66,6 @@ export function getEmptyMessage(view: SelectedView | null) {
   return "No tasks";
 }
 
-export const TASK_COMPLETE_UNDO_DURATION_MS = 5000;
-
 export function useToggleComplete(
   onCompleteTask: (taskId: string) => void,
   onUncompleteTask?: (taskId: string) => void,
@@ -84,93 +82,18 @@ export function useToggleComplete(
   );
 }
 
-export function useTaskCompleteUndo(
-  onCompleteTask: (taskId: string) => void,
-  onUncompleteTask?: (taskId: string) => void,
-) {
-  const [undoTaskId, setUndoTaskId] = useState<string | null>(null);
-  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const dismissCompleteUndo = useCallback(() => {
-    if (undoTimerRef.current) {
-      clearTimeout(undoTimerRef.current);
-      undoTimerRef.current = null;
-    }
-    setUndoTaskId(null);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (undoTimerRef.current) {
-        clearTimeout(undoTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  const scheduleCompleteUndo = useCallback((taskId: string) => {
-    if (undoTimerRef.current) {
-      clearTimeout(undoTimerRef.current);
-    }
-    setUndoTaskId(taskId);
-    undoTimerRef.current = setTimeout(() => {
-      setUndoTaskId(null);
-      undoTimerRef.current = null;
-    }, TASK_COMPLETE_UNDO_DURATION_MS);
-  }, []);
-
-  const handleToggleComplete = useCallback(
-    (taskId: string, completed = true) => {
-      if (completed) {
-        void onCompleteTask(taskId);
-        scheduleCompleteUndo(taskId);
-        return;
-      }
-      if (undoTaskId === taskId) {
-        dismissCompleteUndo();
-      }
-      void onUncompleteTask?.(taskId);
-    },
-    [
-      dismissCompleteUndo,
-      onCompleteTask,
-      onUncompleteTask,
-      scheduleCompleteUndo,
-      undoTaskId,
-    ],
-  );
-
-  const handleUndoComplete = useCallback(() => {
-    if (!undoTaskId) return;
-    const taskId = undoTaskId;
-    dismissCompleteUndo();
-    void onUncompleteTask?.(taskId);
-  }, [dismissCompleteUndo, onUncompleteTask, undoTaskId]);
-
-  return {
-    handleToggleComplete,
-    completeUndoVisible: undoTaskId != null,
-    handleUndoComplete,
-    dismissCompleteUndo,
-  };
-}
-
 export function TaskListShell({
   title,
   selectedView,
   children,
   onOpenLists,
   headerAction,
-  completeUndoVisible,
-  onCompleteUndo,
 }: {
   title: string;
   selectedView?: SelectedView | null;
   children: ReactNode;
   onOpenLists?: () => void;
   headerAction?: ReactNode;
-  completeUndoVisible?: boolean;
-  onCompleteUndo?: () => void;
 }) {
   const headerIcon =
     selectedView?.type === "list" ? (
@@ -202,23 +125,6 @@ export function TaskListShell({
             <ThemedText style={styles.headerTitle} numberOfLines={1}>
               {title}
             </ThemedText>
-            {completeUndoVisible && onCompleteUndo ? (
-              <Pressable
-                onPress={onCompleteUndo}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Undo complete task"
-                style={styles.completeUndoButton}
-              >
-                <AppSymbol
-                  ios="arrow.uturn.backward"
-                  android="undo"
-                  size={13}
-                  tintColor="#4873c7"
-                />
-                <ThemedText style={styles.completeUndoLabel}>Undo</ThemedText>
-              </Pressable>
-            ) : null}
             {headerAction ? (
               <View style={styles.headerAction}>{headerAction}</View>
             ) : null}
@@ -441,20 +347,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
     color: "#505057",
-  },
-  completeUndoButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: "#f3f4f6",
-  },
-  completeUndoLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#4873c7",
   },
   headerAction: {
     marginLeft: "auto",

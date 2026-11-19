@@ -47,6 +47,8 @@ export type TaskItem = {
   dueTimeMinutes?: number | null;
   dueDurationMinutes?: number | null;
   dueRepeat?: TaskRepeatOption | null;
+  /** Minutes before the due time to notify (0 = on time). Null/absent = no reminder. */
+  reminderOffsetMinutes?: number | null;
   calendarColor?: string | null;
   pinned: boolean;
   important: boolean;
@@ -101,6 +103,7 @@ export type TaskDetail = {
   dueTimeMinutes: number | null;
   dueDurationMinutes: number | null;
   dueRepeat?: TaskRepeatOption | null;
+  reminderOffsetMinutes?: number | null;
   dueTimeZone: string;
   important: boolean;
   pinned: boolean;

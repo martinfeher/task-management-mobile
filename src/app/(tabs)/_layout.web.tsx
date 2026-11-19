@@ -2,7 +2,7 @@ import { Tabs, TabList, TabTrigger, TabSlot } from "expo-router/ui";
 import { StyleSheet, Text, useColorScheme } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { LastTabTracker, TAB_ITEMS } from "@/components/main-tabs-config";
+import { TAB_ITEMS } from "@/components/main-tabs-config";
 import { Colors } from "@/constants/theme";
 import { useApp } from "@/contexts/app-context";
 
@@ -14,7 +14,6 @@ export default function WebTabsLayout() {
 
   return (
     <>
-      <LastTabTracker />
       <Tabs style={styles.tabs}>
         <TabSlot style={styles.slot} />
         <TabList style={[styles.tabList, { paddingBottom: Math.max(insets.bottom, 8) }]}>

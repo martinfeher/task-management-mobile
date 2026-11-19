@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
+  Linking,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -21,6 +22,10 @@ import { IoTimerOutlineIcon } from "@/components/io-timer-outline-icon";
 import { ThemedText } from "@/components/themed-text";
 import { TimeReminderIcon } from "@/components/time-reminder-icon";
 import { Spacing } from "@/constants/theme";
+import {
+  ensureNotificationPermissions,
+  notificationsSupported,
+} from "@/lib/notifications";
 import {
   getMonthGrid,
   isSameDay,
@@ -45,6 +50,8 @@ type TaskDatePickerSheetProps = {
   dueTimeMinutes?: number | null;
   dueDurationMinutes?: number | null;
   dueRepeat?: TaskRepeatOption | null;
+  /** Saved reminder: minutes before the due time (0 = on time), or null for none. */
+  reminderOffsetMinutes?: number | null;
   onSelect: (selection: TaskScheduleSelection) => void;
   onClose: () => void;
 };
@@ -176,9 +183,11 @@ function scheduleFromProps(
   dueTimeMinutes: number | null,
   dueDurationMinutes: number | null,
   dueRepeat: TaskRepeatOption | null = null,
+  reminderOffsetMinutes: number | null = null,
 ): TaskScheduleSelection {
   const parsed = parseDateKey(value);
   const timeEnabled = dueTimeMinutes != null;
+  const reminderActive = timeEnabled && reminderOffsetMinutes != null;
   const time = fromMinutes(dueTimeMinutes);
   const duration = dueDurationMinutes ?? DEFAULT_DURATION_MINUTES;
 
@@ -189,8 +198,8 @@ function scheduleFromProps(
       : null,
     dueDurationMinutes: timeEnabled ? duration : null,
     dueRepeat: dueRepeat && dueRepeat !== "none" ? dueRepeat : null,
-    reminderEnabled: false,
-    reminderOffsetMinutes: null,
+    reminderEnabled: reminderActive,
+    reminderOffsetMinutes: reminderActive ? reminderOffsetMinutes : null,
   };
 }
 
@@ -607,6 +616,7 @@ export function TaskDatePickerSheet({
   dueTimeMinutes = null,
   dueDurationMinutes = null,
   dueRepeat = null,
+  reminderOffsetMinutes: savedReminderOffsetMinutes = null,
   onSelect,
   onClose,
 }: TaskDatePickerSheetProps) {
@@ -664,6 +674,7 @@ export function TaskDatePickerSheet({
       dueTimeMinutes,
       dueDurationMinutes,
       dueRepeat,
+      savedReminderOffsetMinutes,
     );
     setSelectedDate(parsed);
     setMonthDate(parsed ?? startOfDay(new Date()));
@@ -673,13 +684,22 @@ export function TaskDatePickerSheet({
     const nextRepeat =
       dueRepeat && dueRepeat !== "none" ? dueRepeat : ("none" as RepeatOption);
     setDraftRepeat(nextRepeat);
-    setRepeatEnabled(nextRepeat !== "none" || dueTimeMinutes != null);
-    setReminderEnabled(false);
-    setReminderOffsetMinutes(0);
+    setRepeatEnabled(nextRepeat !== "none");
+    setReminderEnabled(
+      dueTimeMinutes != null && savedReminderOffsetMinutes != null,
+    );
+    setReminderOffsetMinutes(savedReminderOffsetMinutes ?? 0);
     setReminderPickerAnchor(null);
     setTimeEnabled(dueTimeMinutes != null);
     setDurationMinutes(nextDuration);
-  }, [dueDurationMinutes, dueRepeat, dueTimeMinutes, value, visible]);
+  }, [
+    dueDurationMinutes,
+    dueRepeat,
+    dueTimeMinutes,
+    savedReminderOffsetMinutes,
+    value,
+    visible,
+  ]);
 
   const monthSequence = useMemo(
     () =>
@@ -701,11 +721,11 @@ export function TaskDatePickerSheet({
     hour12,
     minute,
     isPm,
-    timeEnabled && draftRepeat !== "none" ? draftRepeat : "none",
+    repeatEnabled && draftRepeat !== "none" ? draftRepeat : "none",
     timeEnabled,
   );
   const effectiveRepeat =
-    timeEnabled && draftRepeat !== "none" ? draftRepeat : "none";
+    repeatEnabled && draftRepeat !== "none" ? draftRepeat : "none";
 
   function buildScheduleSelection(
     date: Date | null,
@@ -739,7 +759,7 @@ export function TaskDatePickerSheet({
     const nextRepeat =
       overrides.dueRepeat !== undefined
         ? overrides.dueRepeat
-        : enabled && draftRepeat !== "none"
+        : repeatEnabled && draftRepeat !== "none"
           ? draftRepeat
           : null;
 
@@ -781,14 +801,9 @@ export function TaskDatePickerSheet({
     setTimeEnabled(nextEnabled);
     if (nextEnabled) {
       setDurationMinutes((current) => current ?? DEFAULT_DURATION_MINUTES);
-      setRepeatEnabled(true);
     } else {
       setReminderEnabled(false);
       setReminderOffsetMinutes(0);
-      if (repeatEnabled) {
-        setRepeatEnabled(false);
-        setDraftRepeat("none");
-      }
     }
 
     commitSchedule(selectedDate, {
@@ -796,7 +811,6 @@ export function TaskDatePickerSheet({
       durationMinutes: nextEnabled ? nextDuration : null,
       reminderEnabled: nextEnabled ? reminderEnabled : false,
       reminderOffsetMinutes: nextEnabled ? undefined : null,
-      dueRepeat: nextEnabled ? undefined : null,
     });
   }
 
@@ -852,33 +866,47 @@ export function TaskDatePickerSheet({
       return;
     }
 
+    closeReminderPicker();
+
+    // Tapping the active option again removes the reminder.
+    if (reminderEnabled && option.offsetMinutes === reminderOffsetMinutes) {
+      setReminderEnabled(false);
+      if (!timeEnabled) return;
+      commitSchedule(selectedDate, {
+        reminderEnabled: false,
+        reminderOffsetMinutes: null,
+      });
+      return;
+    }
+
     setReminderOffsetMinutes(option.offsetMinutes);
     setReminderEnabled(true);
-    closeReminderPicker();
     if (!timeEnabled) return;
     commitSchedule(selectedDate, {
       reminderEnabled: true,
       reminderOffsetMinutes: option.offsetMinutes,
     });
+    void warnIfNotificationsBlocked();
+  }
+
+  async function warnIfNotificationsBlocked() {
+    if (!notificationsSupported()) return;
+    const granted = await ensureNotificationPermissions();
+    if (granted) return;
+    Alert.alert(
+      "Notifications are off",
+      "Allow notifications in Settings to get reminders for your tasks.",
+      [
+        { text: "Not now", style: "cancel" },
+        { text: "Open Settings", onPress: () => void Linking.openSettings() },
+      ],
+    );
   }
 
   function applyRepeatSelection(next: RepeatOption) {
     setDraftRepeat(next);
-    setRepeatEnabled(true);
-
-    if (!timeEnabled) {
-      const nextDuration = durationMinutes ?? DEFAULT_DURATION_MINUTES;
-      setTimeEnabled(true);
-      setDurationMinutes(nextDuration);
-      commitSchedule(selectedDate, {
-        timeEnabled: true,
-        durationMinutes: nextDuration,
-        dueRepeat: next,
-      });
-      return;
-    }
-
-    commitSchedule(selectedDate, { dueRepeat: next });
+    setRepeatEnabled(next !== "none");
+    commitSchedule(selectedDate, { dueRepeat: next === "none" ? null : next });
   }
 
   function handleRepeatToggle(nextEnabled: boolean) {
@@ -895,18 +923,6 @@ export function TaskDatePickerSheet({
       setDraftRepeat(nextRepeat);
     }
 
-    if (!timeEnabled) {
-      const nextDuration = durationMinutes ?? DEFAULT_DURATION_MINUTES;
-      setTimeEnabled(true);
-      setDurationMinutes(nextDuration);
-      commitSchedule(selectedDate, {
-        timeEnabled: true,
-        durationMinutes: nextDuration,
-        dueRepeat: nextRepeat,
-      });
-      return;
-    }
-
     commitSchedule(selectedDate, { dueRepeat: nextRepeat });
   }
 
@@ -917,7 +933,7 @@ export function TaskDatePickerSheet({
 
     if (next === "none") {
       setDraftRepeat("none");
-      setRepeatEnabled(true);
+      setRepeatEnabled(false);
       commitSchedule(selectedDate, { dueRepeat: null });
       return;
     }
@@ -1217,11 +1233,12 @@ export function TaskDatePickerSheet({
           <ScrollView
             style={[
               styles.optionsScroll,
-              timeEnabled && styles.optionsScrollWithTime,
+              (timeEnabled || repeatEnabled) && styles.optionsScrollWithTime,
             ]}
             contentContainerStyle={[
               styles.optionsScrollContent,
-              timeEnabled && styles.optionsScrollContentWithTime,
+              (timeEnabled || repeatEnabled) &&
+                styles.optionsScrollContentWithTime,
             ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -1388,7 +1405,7 @@ export function TaskDatePickerSheet({
 
             <View style={styles.sectionDivider} />
 
-            {timeEnabled ? (
+            {repeatEnabled ? (
               <>
                 <View
                   style={[styles.sectionHeader, styles.repeatSectionHeader]}
@@ -1601,6 +1618,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
+    marginTop: 3,
     backgroundColor: ACCENT,
     alignItems: "center",
     justifyContent: "center",

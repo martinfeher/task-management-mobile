@@ -18,7 +18,7 @@ import {
   StaticTaskSection,
   TaskListShell,
   TaskSectionTitle,
-  useTaskCompleteUndo,
+  useToggleComplete,
   type TaskListPanelProps,
 } from "@/components/task-list-panel-shared";
 import { getAddTaskFabReservedHeight } from "@/constants/tab-bar";
@@ -50,12 +50,7 @@ export function TaskListPanel({
   const [groupBy, setGroupBy] = useState<TaskListGroupBy>("none");
   const [activeSort, setActiveSort] = useState<TaskListSortOption | null>(null);
   const showListName = selectedView?.type !== "list";
-  const {
-    handleToggleComplete,
-    completeUndoVisible,
-    handleUndoComplete,
-    dismissCompleteUndo,
-  } = useTaskCompleteUndo(onTaskCompleted, onTaskUncompleted);
+  const handleToggleComplete = useToggleComplete(onTaskCompleted, onTaskUncompleted);
   const blockingState = getTaskListBlockingState({
     selectedView,
     loading,
@@ -107,18 +102,12 @@ export function TaskListPanel({
     setActiveSort(null);
   }, [selectedView]);
 
-  useEffect(() => {
-    dismissCompleteUndo();
-  }, [dismissCompleteUndo, selectedView]);
-
   return (
     <View style={{ flex: 1 }}>
       <TaskListShell
         title={getPanelTitle(selectedView, taskData)}
         selectedView={selectedView}
         onOpenLists={openListsDrawer}
-        completeUndoVisible={completeUndoVisible}
-        onCompleteUndo={handleUndoComplete}
         headerAction={
           showOrganizeMenu && organizeTaskCount >= 2 ? (
             <TaskListOrganizeMenu

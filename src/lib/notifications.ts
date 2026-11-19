@@ -1,18 +1,29 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
+import {
+  planReminders,
+  type ReminderTaskInput,
+  type ScheduledReminder,
+} from "@/lib/task-reminder-plan";
+
 type NotificationsModule = typeof import("expo-notifications");
+
+const REMINDER_CHANNEL_ID = "task-reminders";
 
 let notificationsModule: NotificationsModule | null | undefined;
 let handlerConfigured = false;
 let permissionRequested = false;
+let channelReady = false;
+let reconcileChain: Promise<void> = Promise.resolve();
 
-function canUseNotifications() {
+/** False where local notifications can't run (Android Expo Go). */
+export function notificationsSupported() {
   return !(Platform.OS === "android" && Constants.appOwnership === "expo");
 }
 
 async function getNotifications(): Promise<NotificationsModule | null> {
-  if (!canUseNotifications()) return null;
+  if (!notificationsSupported()) return null;
 
   if (notificationsModule !== undefined) {
     return notificationsModule;
@@ -55,88 +66,83 @@ export async function ensureNotificationPermissions() {
   return requested.granted;
 }
 
-function getReminderDate(dueDate: string, dueTimeMinutes: number | null) {
-  const date = new Date(`${dueDate.slice(0, 10)}T12:00:00`);
-  if (dueTimeMinutes != null) {
-    date.setHours(Math.floor(dueTimeMinutes / 60), dueTimeMinutes % 60, 0, 0);
-  } else {
-    date.setHours(9, 0, 0, 0);
-  }
-  return date;
-}
-
-export async function scheduleTaskReminder(input: {
-  taskId: string;
-  taskName: string;
-  dueDate: string | null;
-  dueTimeMinutes?: number | null;
-  reminderOffsetMinutes?: number | null;
-}) {
-  const Notifications = await getNotifications();
-  if (!Notifications) return;
-
-  await Notifications.cancelScheduledNotificationAsync(input.taskId).catch(() => undefined);
-
-  if (!input.dueDate) return;
-
-  const granted = await ensureNotificationPermissions();
-  if (!granted) return;
-
-  const triggerDate = getReminderDate(input.dueDate, input.dueTimeMinutes ?? null);
-  if (input.reminderOffsetMinutes) {
-    triggerDate.setMinutes(
-      triggerDate.getMinutes() - input.reminderOffsetMinutes,
-    );
-  }
-  if (triggerDate.getTime() <= Date.now()) return;
-
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("task-reminders", {
-      name: "Task reminders",
-      importance: Notifications.AndroidImportance.DEFAULT,
-    });
-  }
-
-  await Notifications.scheduleNotificationAsync({
-    identifier: input.taskId,
-    content: {
-      title: "Task reminder",
-      body: input.taskName,
-      data: { taskId: input.taskId },
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: triggerDate,
-      channelId: Platform.OS === "android" ? "task-reminders" : undefined,
-    },
+async function ensureReminderChannel(Notifications: NotificationsModule) {
+  if (Platform.OS !== "android" || channelReady) return;
+  await Notifications.setNotificationChannelAsync(REMINDER_CHANNEL_ID, {
+    name: "Task reminders",
+    importance: Notifications.AndroidImportance.DEFAULT,
   });
+  channelReady = true;
 }
 
-export async function applyTaskReminder(input: {
-  taskId: string;
-  taskName: string;
-  dueDate: string | null;
-  dueTimeMinutes?: number | null;
-  reminderEnabled?: boolean;
-  reminderOffsetMinutes?: number | null;
-}) {
-  if (input.reminderEnabled && input.dueDate) {
-    await scheduleTaskReminder({
-      taskId: input.taskId,
-      taskName: input.taskName,
-      dueDate: input.dueDate,
-      dueTimeMinutes: input.dueTimeMinutes,
-      reminderOffsetMinutes: input.reminderOffsetMinutes,
+function readScheduledReminders(
+  requests: Awaited<ReturnType<NotificationsModule["getAllScheduledNotificationsAsync"]>>,
+): ScheduledReminder[] {
+  const reminders: ScheduledReminder[] = [];
+  for (const request of requests) {
+    const data = request.content.data as { taskId?: unknown; fireAt?: unknown } | null;
+    // Only notifications created for tasks are ours to manage.
+    if (!data || typeof data.taskId !== "string") continue;
+    reminders.push({
+      id: request.identifier,
+      fireAt: typeof data.fireAt === "number" ? data.fireAt : null,
+      name: request.content.body ?? null,
     });
-    return;
   }
-
-  await cancelTaskReminder(input.taskId);
+  return reminders;
 }
 
-export async function cancelTaskReminder(taskId: string) {
+async function runReconcile(tasks: ReminderTaskInput[]) {
   const Notifications = await getNotifications();
   if (!Notifications) return;
 
-  await Notifications.cancelScheduledNotificationAsync(taskId).catch(() => undefined);
+  // Never prompt from a background reconcile; the prompt happens at launch and when a
+  // reminder is picked in the date sheet.
+  const permissions = await Notifications.getPermissionsAsync();
+  if (!permissions.granted) return;
+
+  const scheduled = readScheduledReminders(await Notifications.getAllScheduledNotificationsAsync());
+  const plan = planReminders(tasks, scheduled);
+  if (plan.cancel.length === 0 && plan.schedule.length === 0) return;
+
+  await Promise.all(
+    plan.cancel.map((id) => Notifications.cancelScheduledNotificationAsync(id).catch(() => undefined)),
+  );
+
+  if (plan.schedule.length === 0) return;
+  await ensureReminderChannel(Notifications);
+
+  for (const reminder of plan.schedule) {
+    // Scheduling with an existing identifier replaces it, but cancel first to be explicit.
+    await Notifications.cancelScheduledNotificationAsync(reminder.id).catch(() => undefined);
+    await Notifications.scheduleNotificationAsync({
+      identifier: reminder.id,
+      content: {
+        title: "Task reminder",
+        body: reminder.name,
+        data: { taskId: reminder.id, fireAt: reminder.fireAt },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: new Date(reminder.fireAt),
+        channelId: Platform.OS === "android" ? REMINDER_CHANNEL_ID : undefined,
+      },
+    }).catch((error) => {
+      console.warn("Failed to schedule task reminder:", error);
+    });
+  }
+}
+
+/**
+ * Makes the device's scheduled notifications match the reminders stored on tasks:
+ * cancels notifications for tasks that are completed, deleted, rescheduled or had the
+ * reminder removed, and schedules the missing ones. Calls are serialized.
+ */
+export function reconcileAllReminders(tasks: ReminderTaskInput[]) {
+  reconcileChain = reconcileChain
+    .then(() => runReconcile(tasks))
+    .catch((error) => {
+      console.warn("Failed to reconcile task reminders:", error);
+    });
+  return reconcileChain;
 }

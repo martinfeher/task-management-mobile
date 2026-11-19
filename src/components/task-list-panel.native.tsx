@@ -43,7 +43,7 @@ import {
   TaskSectionTitle,
   TASK_LIST_CONTEXT_MENU_DELAY_MS,
   TASK_LIST_DRAG_DELAY_MS,
-  useTaskCompleteUndo,
+  useToggleComplete,
   type TaskListPanelProps,
 } from "@/components/task-list-panel-shared";
 import { ListsDrawerShell } from "@/components/lists-drawer-shell";
@@ -127,12 +127,7 @@ export function TaskListPanel({
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView | null>(null);
   const showListName = selectedView?.type !== "list";
-  const {
-    handleToggleComplete,
-    completeUndoVisible,
-    handleUndoComplete,
-    dismissCompleteUndo,
-  } = useTaskCompleteUndo(onTaskCompleted, onTaskUncompleted);
+  const handleToggleComplete = useToggleComplete(onTaskCompleted, onTaskUncompleted);
   const pinned = taskData?.pinned ?? [];
   const tasks = taskData?.tasks ?? [];
   const pinnedBlocksFromData = useMemo(
@@ -192,9 +187,6 @@ export function TaskListPanel({
     setActiveSort(null);
   }, [selectedView]);
 
-  useEffect(() => {
-    dismissCompleteUndo();
-  }, [dismissCompleteUndo, selectedView]);
   const { subtaskCountByParentId, isSubtasksExpanded, toggleSubtasksExpanded } =
     useTaskListSubtasksExpanded(allListTasks);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -655,8 +647,6 @@ export function TaskListPanel({
           title={getPanelTitle(selectedView, taskData)}
           selectedView={selectedView}
           onOpenLists={openListsDrawer}
-          completeUndoVisible={completeUndoVisible}
-          onCompleteUndo={handleUndoComplete}
           headerAction={
             showOrganizeMenu && organizeTaskCount >= 2 ? (
               <TaskListOrganizeMenu
@@ -772,6 +762,7 @@ export function TaskListPanel({
           dueTimeMinutes={contextTask.dueTimeMinutes ?? null}
           dueDurationMinutes={contextTask.dueDurationMinutes ?? null}
           dueRepeat={contextTask.dueRepeat ?? null}
+          reminderOffsetMinutes={contextTask.reminderOffsetMinutes ?? null}
           onSelect={(selection) => void handleScheduleChange(selection)}
           onClose={closeContextMenu}
         />

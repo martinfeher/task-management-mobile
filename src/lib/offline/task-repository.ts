@@ -234,6 +234,7 @@ export async function createTask(input: {
     dueTimeMinutes: null,
     dueDurationMinutes: null,
     dueRepeat: null,
+    reminderOffsetMinutes: null,
     calendarColor: null,
     pinned: false,
     important: false,
@@ -357,6 +358,8 @@ export async function updateTaskSchedule(
     dueTimeMinutes?: number | null;
     dueDurationMinutes?: number | null;
     dueRepeat?: string | null;
+    /** Minutes before the due time to notify (0 = on time); null clears the reminder. */
+    reminderOffsetMinutes?: number | null;
   },
 ) {
   const patch: Partial<LocalTask> = {};
@@ -377,6 +380,10 @@ export async function updateTaskSchedule(
     patch.dueRepeat = update.dueRepeat as LocalTask["dueRepeat"];
     values.dueRepeat = update.dueRepeat;
   }
+  if (update.reminderOffsetMinutes !== undefined) {
+    patch.reminderOffsetMinutes = update.reminderOffsetMinutes;
+    values.reminderOffsetMinutes = update.reminderOffsetMinutes;
+  }
   const task = await applyFieldUpdate(taskId, patch, values);
   return {
     id: task.id,
@@ -384,6 +391,7 @@ export async function updateTaskSchedule(
     dueTimeMinutes: task.dueTimeMinutes ?? null,
     dueDurationMinutes: task.dueDurationMinutes ?? null,
     dueRepeat: task.dueRepeat ?? null,
+    reminderOffsetMinutes: task.reminderOffsetMinutes ?? null,
     dueTimeZone: task.dueTimeZone ?? "floating",
   };
 }

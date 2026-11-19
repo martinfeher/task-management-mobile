@@ -56,7 +56,7 @@ export function TaskLabelPicker({
   const sheetHeight = fullScreen
     ? windowHeight * sheetHeightRatio
     : windowHeight * sheetHeightRatio + SHEET_BOTTOM_EXTENSION;
-  const sheetBottom = fullScreen ? 0 : bottomInset;
+  const sheetBottom = bottomInset;
   const [draft, setDraft] = useState("");
   const [creating, setCreating] = useState(false);
 

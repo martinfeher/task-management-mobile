@@ -35,6 +35,35 @@ describe("mergeServerTask", () => {
     expect(merged.pinned).toBe(false);
   });
 
+  test("a pulled reminder offset is applied unless a local edit is pending", () => {
+    const pulled = mergeServerTask(
+      task({ id: "t1", reminderOffsetMinutes: null }),
+      server({ id: "t1", reminderOffsetMinutes: 30 }),
+      new Set(),
+      false,
+    );
+    expect(pulled.reminderOffsetMinutes).toBe(30);
+
+    const pending = mergeServerTask(
+      task({ id: "t1", reminderOffsetMinutes: 5 }),
+      server({ id: "t1", reminderOffsetMinutes: 30 }),
+      new Set(["reminderOffsetMinutes"]),
+      false,
+    );
+    expect(pending.reminderOffsetMinutes).toBe(5);
+  });
+
+  test("a server without the reminder field keeps the local value", () => {
+    const { reminderOffsetMinutes: _omitted, ...withoutReminder } = server({ id: "t1" });
+    const merged = mergeServerTask(
+      task({ id: "t1", reminderOffsetMinutes: 60 }),
+      withoutReminder as ServerSyncTask,
+      new Set(),
+      false,
+    );
+    expect(merged.reminderOffsetMinutes).toBe(60);
+  });
+
   test("pending local fields survive a pull", () => {
     const labels = [{ id: "lab", label: "Work" }];
     const merged = mergeServerTask(

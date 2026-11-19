@@ -18,6 +18,7 @@ import { BiChevronDownIcon } from "@/components/bi-chevron-down-icon";
 import { BsCalendar4DateIcon } from "@/components/bs-calendar4-date-icon";
 import { IoMdPricetagIcon } from "@/components/io-md-pricetag-icon";
 import { ListsCreateButton } from "@/components/lists-create-button";
+import { TaskListSyncButton } from "@/components/task-list-sync-button";
 import { LuInboxIcon } from "@/components/lu-inbox-icon";
 import { LuPlusIcon } from "@/components/lu-plus-icon";
 import { LuStarIcon } from "@/components/lu-star-icon";
@@ -122,13 +123,8 @@ export function ListsSidebarShell({
                 Martin Feher
               </Text>
             </View>
-            <View className="flex-row items-center gap-4">
-              <AppSymbol
-                ios="bell"
-                android="notifications"
-                size={20}
-                tintColor={theme.textSecondary}
-              />
+            <View className="flex-row items-center gap-1">
+              <TaskListSyncButton />
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Settings"

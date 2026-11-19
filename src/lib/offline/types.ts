@@ -21,6 +21,7 @@ export type SyncField =
   | "dueTimeMinutes"
   | "dueDurationMinutes"
   | "dueRepeat"
+  | "reminderOffsetMinutes"
   | "listId"
   | "labelIds"
   | "parentId"

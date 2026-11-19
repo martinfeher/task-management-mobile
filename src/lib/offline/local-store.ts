@@ -115,6 +115,7 @@ export function readLocalTaskDetail(id: string): TaskDetail | null {
     dueTimeMinutes: task.dueTimeMinutes ?? null,
     dueDurationMinutes: task.dueDurationMinutes ?? null,
     dueRepeat: task.dueRepeat ?? null,
+    reminderOffsetMinutes: task.reminderOffsetMinutes ?? null,
     dueTimeZone: task.dueTimeZone ?? "floating",
     important: task.important,
     pinned: task.pinned,

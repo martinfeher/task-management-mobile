@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { router } from "expo-router";
+import { router, usePathname } from "expo-router";
 import * as Haptics from "expo-haptics";
 
 import {
@@ -11,7 +11,7 @@ import {
   getSelectedViewKey,
 } from "@/lib/app-data-session";
 import { reorderSidebarTopLevel as reorderSidebarTopLevelRequest } from "@/lib/api";
-import { subscribeLocalStore } from "@/lib/offline/local-store";
+import { getLocalTask, subscribeLocalStore } from "@/lib/offline/local-store";
 import { startSyncEngine, subscribeSyncEvents } from "@/lib/offline/sync-engine";
 import {
   createTask as createTaskRequest,
@@ -29,7 +29,6 @@ import {
   getSidebarTopLevelPositionUpdates,
 } from "@/lib/sidebar-list-layout";
 import { normalizeTaskRepeat } from "@/lib/task-repeat";
-import { cancelTaskReminder, scheduleTaskReminder } from "@/lib/notifications";
 import type {
   SelectedView,
   SidebarData,
@@ -98,6 +97,13 @@ type AppContextValue = {
   handleTaskCompleted: (taskId?: string) => void;
   completeTask: (taskId: string) => Promise<void>;
   uncompleteTask: (taskId: string) => Promise<void>;
+  /** The task whose completion can currently be undone from the bottom toast. */
+  completionUndo: CompletionUndo | null;
+  /** Offers an undo toast for a task that was just completed. */
+  showCompletionUndo: (taskId: string, taskName: string) => void;
+  dismissCompletionUndo: () => void;
+  /** Re-opens the task from the undo toast and refreshes the lists. */
+  undoCompletion: () => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
   createTask: (input: CreateTaskInput) => Promise<string | null>;
   openAddTaskComposer: (draft?: ComposerDraft) => void;
@@ -132,9 +138,17 @@ type AppContextValue = {
   setCalendarTaskColor: (taskId: string, calendarColor: string) => void;
 };
 
+export type CompletionUndo = {
+  taskId: string;
+  taskName: string;
+  /** Changes on every completion so the toast restarts its countdown. */
+  token: number;
+};
+
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [sidebarData, setSidebarData] = useState<SidebarData | null>(null);
   const [sidebarLoading, setSidebarLoading] = useState(true);
   const [sidebarRefreshing, setSidebarRefreshing] = useState(false);
@@ -149,6 +163,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [addTaskStayOnPage, setAddTaskStayOnPage] = useState(false);
   const [composerDraft, setComposerDraft] = useState<ComposerDraft | null>(null);
   const [taskAddedToast, setTaskAddedToast] = useState<string | null>(null);
+  const [completionUndo, setCompletionUndo] = useState<CompletionUndo | null>(null);
+  const completionUndoTokenRef = useRef(0);
   const [addTaskComposerHeight, setAddTaskComposerHeight] = useState(0);
   const [lastTabHref, setLastTabHref] = useState("/");
   const lastTabHrefRef = useRef("/");
@@ -258,6 +274,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setTaskRefreshing(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!pathname || pathname.includes("search")) return;
+    setLastTabHref(pathname);
+  }, [pathname]);
 
   useEffect(() => {
     void loadSidebar();
@@ -407,8 +428,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [loadSidebar, loadTasksForView, selectedView],
   );
 
+  const showCompletionUndo = useCallback((taskId: string, taskName: string) => {
+    completionUndoTokenRef.current += 1;
+    setCompletionUndo({
+      taskId,
+      taskName,
+      token: completionUndoTokenRef.current,
+    });
+  }, []);
+
+  const dismissCompletionUndo = useCallback(() => {
+    setCompletionUndo(null);
+  }, []);
+
   const completeTask = useCallback(
     async (taskId: string) => {
+      const taskName = getLocalTask(taskId)?.name ?? "";
       setTaskData((current) =>
         current
           ? {
@@ -438,6 +473,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         await toggleTaskCompletedRequest(taskId, true);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        showCompletionUndo(taskId, taskName);
         void loadSidebar(true);
       } catch {
         const view = selectedViewRef.current;
@@ -446,11 +482,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [loadSidebar, loadTasksForView],
+    [loadSidebar, loadTasksForView, showCompletionUndo],
   );
 
   const uncompleteTask = useCallback(
     async (taskId: string) => {
+      // Re-opening the task by hand makes the pending undo offer redundant.
+      setCompletionUndo((current) => (current?.taskId === taskId ? null : current));
       try {
         await toggleTaskCompletedRequest(taskId, false);
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -482,7 +520,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       );
 
       try {
-        await cancelTaskReminder(taskId);
         await deleteTaskRequest(taskId);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         handleTaskCompleted(taskId);
@@ -541,14 +578,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         priority: input.priority,
         labelIds: input.labelIds,
       });
-
-      if (dueDate) {
-        await scheduleTaskReminder({
-          taskId: created.id,
-          taskName: trimmed,
-          dueDate,
-        });
-      }
 
       if (currentView) {
         await loadTasksForView(currentView, true);
@@ -901,6 +930,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const undoCompletion = useCallback(async () => {
+    const pending = completionUndo;
+    if (!pending) return;
+    setCompletionUndo(null);
+    await uncompleteTask(pending.taskId);
+    // The calendar keeps its own task list that the list reload above doesn't touch.
+    void loadCalendarTasks(true);
+  }, [completionUndo, loadCalendarTasks, uncompleteTask]);
+
   const value = useMemo<AppContextValue>(
     () => ({
       sidebarData,
@@ -927,6 +965,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       handleTaskCompleted,
       completeTask,
       uncompleteTask,
+      completionUndo,
+      showCompletionUndo,
+      dismissCompletionUndo,
+      undoCompletion,
       deleteTask,
       createTask,
       openAddTaskComposer,
@@ -981,6 +1023,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       handleTaskCompleted,
       completeTask,
       uncompleteTask,
+      completionUndo,
+      showCompletionUndo,
+      dismissCompletionUndo,
+      undoCompletion,
       deleteTask,
       createTask,
       openAddTaskComposer,

@@ -105,7 +105,6 @@ import {
   htmlNeedsFormattingMirror,
 } from "@/lib/html-to-text-runs";
 import { getLabelDotColor } from "@/lib/label-colors";
-import { applyTaskReminder } from "@/lib/notifications";
 import {
   parseTaskDetails,
   type ParsedDetailBlock,
@@ -271,6 +270,7 @@ export function TaskDetailScreen() {
   const navigation = useNavigation();
   const {
     handleTaskCompleted,
+    showCompletionUndo,
     openTask,
     selectView,
     suppressNextSearchOpen,
@@ -347,15 +347,21 @@ export function TaskDetailScreen() {
         normalizeTaskRepeat(detail?.dueRepeat) ??
         normalizeTaskRepeat(calendarTask?.dueRepeat) ??
         routeDueRepeat,
+      reminderOffsetMinutes: detail
+        ? (detail.reminderOffsetMinutes ?? null)
+        : (calendarTask?.reminderOffsetMinutes ?? null),
     }),
     [
       calendarTask?.dueDurationMinutes,
       calendarTask?.dueRepeat,
       calendarTask?.dueTimeMinutes,
+      calendarTask?.reminderOffsetMinutes,
+      detail,
       detail?.dueDate,
       detail?.dueDurationMinutes,
       detail?.dueRepeat,
       detail?.dueTimeMinutes,
+      detail?.reminderOffsetMinutes,
       dueDate,
       routeDueDurationMinutes,
       routeDueRepeat,
@@ -1361,6 +1367,7 @@ export function TaskDetailScreen() {
       await toggleTaskCompleted(detail.id, true);
       handleTaskCompleted();
       close();
+      showCompletionUndo(detail.id, draftNameRef.current || detail.name);
     } catch {
       // ignore
     }
@@ -1409,6 +1416,8 @@ export function TaskDetailScreen() {
             dueTimeMinutes: detail.dueTimeMinutes,
             dueDurationMinutes: detail.dueDurationMinutes,
             dueRepeat: detail.dueRepeat ?? null,
+            reminderEnabled: detail.reminderOffsetMinutes != null,
+            reminderOffsetMinutes: detail.reminderOffsetMinutes ?? null,
           }
         : null;
 
@@ -1419,6 +1428,7 @@ export function TaskDetailScreen() {
         dueTimeMinutes: null,
         dueDurationMinutes: null,
         dueRepeat: null,
+        reminderOffsetMinutes: null,
       });
       requestAnimationFrame(() => {
         showScheduleUndo(previousSchedule);
@@ -1433,6 +1443,7 @@ export function TaskDetailScreen() {
         dueTimeMinutes: result.dueTimeMinutes,
         dueDurationMinutes: result.dueDurationMinutes,
         dueRepeat: selection.dueRepeat ?? null,
+        reminderOffsetMinutes: result.reminderOffsetMinutes,
         dueTimeZone: result.dueTimeZone,
       });
       patchCalendarTask(detail.id, {
@@ -1440,14 +1451,7 @@ export function TaskDetailScreen() {
         dueTimeMinutes: result.dueTimeMinutes,
         dueDurationMinutes: result.dueDurationMinutes,
         dueRepeat: selection.dueRepeat ?? null,
-      });
-      await applyTaskReminder({
-        taskId: detail.id,
-        taskName: detail.name,
-        dueDate: result.dueDate,
-        dueTimeMinutes: result.dueTimeMinutes,
-        reminderEnabled: selection.reminderEnabled,
-        reminderOffsetMinutes: selection.reminderOffsetMinutes,
+        reminderOffsetMinutes: result.reminderOffsetMinutes,
       });
       handleTaskCompleted();
     } catch {
@@ -1513,18 +1517,11 @@ export function TaskDetailScreen() {
               dueTimeMinutes: result.dueTimeMinutes,
               dueDurationMinutes: result.dueDurationMinutes,
               dueRepeat: snapshot.dueRepeat ?? null,
+              reminderOffsetMinutes: result.reminderOffsetMinutes,
               dueTimeZone: result.dueTimeZone,
             }
           : current,
       );
-      await applyTaskReminder({
-        taskId,
-        taskName: draftNameRef.current || "Task",
-        dueDate: result.dueDate,
-        dueTimeMinutes: result.dueTimeMinutes,
-        reminderEnabled: snapshot.reminderEnabled,
-        reminderOffsetMinutes: snapshot.reminderOffsetMinutes,
-      });
       handleTaskCompleted();
     } catch {
       Alert.alert("Couldn't update due date");
@@ -2012,6 +2009,8 @@ export function TaskDetailScreen() {
     TASK_DETAIL_TOOLBAR_BODY_HEIGHT +
     toolbarFooterInset +
     (saveStatusLabel ? 22 : 0);
+  const labelPickerBottomInset =
+    (toolbarPinnedToKeyboard ? keyboardHeight : 0) + toolbarTotalHeight;
   const showDetailToolbar = true;
   const layoutToolbarHeight = toolbarTotalHeight;
   const activeSubtasksDrawerHeight = subtasksSectionOpen
@@ -3280,6 +3279,7 @@ export function TaskDetailScreen() {
             dueTimeMinutes={pickerSchedule.dueTimeMinutes}
             dueDurationMinutes={pickerSchedule.dueDurationMinutes}
             dueRepeat={pickerSchedule.dueRepeat}
+            reminderOffsetMinutes={pickerSchedule.reminderOffsetMinutes}
             onSelect={(selection) => void handleScheduleChange(selection)}
             onClose={() => setDatePickerOpen(false)}
           />
@@ -3309,6 +3309,7 @@ export function TaskDetailScreen() {
           }
           onClose={() => setLabelPickerOpen(false)}
           fullScreen
+          bottomInset={labelPickerBottomInset}
           sheetHeightRatio={TASK_SHEET_MIN_HEIGHT_FRACTION}
         />
       ) : null}

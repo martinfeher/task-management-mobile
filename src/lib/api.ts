@@ -207,6 +207,7 @@ export async function fetchTaskDetail(taskId: string): Promise<TaskDetail> {
   return {
     ...data,
     dueRepeat: normalizeTaskRepeat(data.dueRepeat),
+    reminderOffsetMinutes: data.reminderOffsetMinutes ?? null,
   };
 }
 
@@ -435,6 +436,7 @@ export async function updateTaskSchedule(
     dueTimeMinutes?: number | null;
     dueDurationMinutes?: number | null;
     dueRepeat?: string | null;
+    reminderOffsetMinutes?: number | null;
   },
 ) {
   const response = await apiFetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
@@ -443,7 +445,14 @@ export async function updateTaskSchedule(
       Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(update),
+    // Pick fields explicitly so UI-only selection keys (e.g. `reminderEnabled`) never reach the API.
+    body: JSON.stringify({
+      dueDate: update.dueDate,
+      dueTimeMinutes: update.dueTimeMinutes,
+      dueDurationMinutes: update.dueDurationMinutes,
+      dueRepeat: update.dueRepeat,
+      reminderOffsetMinutes: update.reminderOffsetMinutes,
+    }),
   });
 
   if (!response.ok) {
@@ -456,6 +465,7 @@ export async function updateTaskSchedule(
     dueTimeMinutes: number | null;
     dueDurationMinutes: number | null;
     dueRepeat?: string | null;
+    reminderOffsetMinutes?: number | null;
     dueTimeZone: string;
   }>;
 }

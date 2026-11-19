@@ -14,6 +14,7 @@ const FIELD_KEYS: Record<SyncField, (keyof LocalTask)[]> = {
   dueTimeMinutes: ["dueTimeMinutes"],
   dueDurationMinutes: ["dueDurationMinutes"],
   dueRepeat: ["dueRepeat"],
+  reminderOffsetMinutes: ["reminderOffsetMinutes"],
   listId: ["listId", "listName"],
   labelIds: ["labels"],
   parentId: ["parentId", "depth"],

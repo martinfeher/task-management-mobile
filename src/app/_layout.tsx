@@ -15,10 +15,10 @@ const AddTaskComposer = lazy(() =>
 );
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import { ListsDrawerOverlay } from "@/components/lists-drawer-overlay";
-import { LastTabTracker } from "@/components/main-tabs-config";
 import { DevSessionBanner } from "@/components/dev-session-banner";
 import { SyncStatusPill } from "@/components/sync-status-pill";
 import { TaskAddedBadge } from "@/components/task-added-badge";
+import { TaskCompletedUndoToast } from "@/components/task-completed-undo-toast";
 import {
   TASK_EDIT_SHEET_BACKGROUND,
   TASK_SHEET_MIN_HEIGHT_FRACTION,
@@ -33,6 +33,7 @@ import { HistoryActionsProvider } from "@/contexts/history-actions-toolbar-conte
 import { TextFormatToolbarProvider } from "@/contexts/text-format-toolbar-context";
 import { useDetailFonts } from "@/hooks/use-detail-fonts";
 import { ensureNotificationPermissions } from "@/lib/notifications";
+import { startReminderSync } from "@/lib/reminder-sync";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -42,16 +43,63 @@ export const unstable_settings = {
   anchor: "(tabs)",
 };
 
-function AddTaskComposerHost() {
+/** Keeps scheduled reminder notifications in step with the task store while signed in. */
+function ReminderSync() {
+  useEffect(() => startReminderSync(), []);
+  return null;
+}
+
+/** Signed-in shell: must render only as a descendant of `AppProvider`. */
+function AuthenticatedAppShell() {
   const { addTaskComposerOpen, closeAddTaskComposer } = useApp();
-  if (!addTaskComposerOpen) {
-    return null;
-  }
 
   return (
-    <Suspense fallback={null}>
-      <AddTaskComposer visible onClose={closeAddTaskComposer} />
-    </Suspense>
+    <TextFormatToolbarProvider>
+      <HistoryActionsProvider>
+        <View style={styles.root}>
+          <ReminderSync />
+          <AnimatedSplashOverlay />
+          <Stack screenOptions={{ freezeOnBlur: false }}>
+            <Stack.Screen
+              name="(tabs)"
+              options={{ headerShown: false, freezeOnBlur: false }}
+            />
+            <Stack.Screen
+              name="task/[id]"
+              options={{
+                presentation: "formSheet",
+                headerShown: false,
+                sheetAllowedDetents: [TASK_SHEET_MIN_HEIGHT_FRACTION, 1],
+                sheetInitialDetentIndex: 0,
+                sheetGrabberVisible: false,
+                contentStyle: {
+                  backgroundColor: TASK_EDIT_SHEET_BACKGROUND,
+                },
+              }}
+            />
+            <Stack.Screen
+              name="search-modal"
+              options={{
+                presentation: "transparentModal",
+                headerShown: false,
+                animation: "fade",
+                contentStyle: { backgroundColor: "transparent" },
+              }}
+            />
+          </Stack>
+          {addTaskComposerOpen ? (
+            <Suspense fallback={null}>
+              <AddTaskComposer visible onClose={closeAddTaskComposer} />
+            </Suspense>
+          ) : null}
+          <TaskAddedBadge />
+          <TaskCompletedUndoToast />
+          <ListsDrawerOverlay />
+          <SyncStatusPill />
+          <DevSessionBanner />
+        </View>
+      </HistoryActionsProvider>
+    </TextFormatToolbarProvider>
   );
 }
 
@@ -76,50 +124,7 @@ function AuthenticatedApp() {
   return (
     <AppSettingsProvider>
       <AppProvider>
-        <TextFormatToolbarProvider>
-          <HistoryActionsProvider>
-          <View style={styles.root}>
-            <LastTabTracker />
-            <AnimatedSplashOverlay />
-            <Stack screenOptions={{ freezeOnBlur: false }}>
-              <Stack.Screen
-                name="(tabs)"
-                options={{ headerShown: false, freezeOnBlur: false }}
-              />
-              <Stack.Screen
-                name="task/[id]"
-                options={{
-                  presentation: "formSheet",
-                  headerShown: false,
-                  sheetAllowedDetents: [
-                    TASK_SHEET_MIN_HEIGHT_FRACTION,
-                    1,
-                  ],
-                  sheetInitialDetentIndex: 0,
-                  sheetGrabberVisible: false,
-                  contentStyle: {
-                    backgroundColor: TASK_EDIT_SHEET_BACKGROUND,
-                  },
-                }}
-              />
-              <Stack.Screen
-                name="search-modal"
-                options={{
-                  presentation: "transparentModal",
-                  headerShown: false,
-                  animation: "fade",
-                  contentStyle: { backgroundColor: "transparent" },
-                }}
-              />
-            </Stack>
-            <AddTaskComposerHost />
-            <TaskAddedBadge />
-            <ListsDrawerOverlay />
-            <SyncStatusPill />
-            <DevSessionBanner />
-          </View>
-          </HistoryActionsProvider>
-        </TextFormatToolbarProvider>
+        <AuthenticatedAppShell />
       </AppProvider>
     </AppSettingsProvider>
   );
